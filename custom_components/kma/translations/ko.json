@@ -1,0 +1,141 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "기상청 APIhub 연동 설정",
+        "description": "기상청 APIhub 인증키(authKey)와 관측 기준이 될 지역(Zone)을 입력하십시오.",
+        "data": {
+          "auth_key": "인증키 (authKey)",
+          "zone_id": "기준 지역 (Zone 엔티티)"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "인증키가 유효하지 않습니다. 입력값을 확인해 주세요.",
+      "cannot_connect": "기상청 서버에 연결할 수 없습니다.",
+      "invalid_zone_coords": "선택한 지역의 위/경도 좌표 정보를 읽을 수 없습니다.",
+      "unknown": "알 수 없는 오류가 발생했습니다."
+    },
+    "abort": {
+      "already_configured": "해당 구역은 이미 구성되어 있습니다."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "기상청 연동 설정 옵션",
+        "description": "기상 데이터 및 특보 정보를 갱신할 주기를 지정합니다.",
+        "data": {
+          "scan_interval": "갱신 주기 (분)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "land_forecast_summary": {
+        "name": "육상 예보 요약"
+      },
+      "marine_forecast_summary": {
+        "name": "해상 예보 요약"
+      },
+      "temperature": {
+        "name": "기온"
+      },
+      "humidity": {
+        "name": "습도"
+      },
+      "wind_speed": {
+        "name": "풍속"
+      },
+      "precipitation_probability": {
+        "name": "강수확률"
+      },
+      "precipitation": {
+        "name": "1시간 강수량"
+      },
+      "today_temp_low": {
+        "name": "오늘 최저기온"
+      },
+      "today_temp_high": {
+        "name": "오늘 최고기온"
+      },
+      "rain_snow_expected": {
+        "name": "비/눈 예보 탐색",
+        "state": {
+          "none": "없음",
+          "rain": "비",
+          "rain_snow": "비/눈",
+          "snow": "눈",
+          "shower": "소나기"
+        }
+      },
+      "apparent_temperature": {
+        "name": "체감온도"
+      },
+      "dew_point": {
+        "name": "이슬점"
+      },
+      "discomfort_index": {
+        "name": "불쾌지수",
+        "state_attributes": {
+          "grade": {
+            "name": "단계"
+          }
+        }
+      },
+      "laundry_index": {
+        "name": "빨래 건조 지수",
+        "state_attributes": {
+          "grade": {
+            "name": "단계"
+          },
+          "recommendation": {
+            "name": "주의사항"
+          }
+        }
+      },
+      "car_wash_index": {
+        "name": "세차 지수",
+        "state_attributes": {
+          "grade": {
+            "name": "단계"
+          },
+          "recommendation": {
+            "name": "주의사항"
+          }
+        }
+      },
+      "freeze_risk_index": {
+        "name": "동파 가능 지수",
+        "state_attributes": {
+          "grade": {
+            "name": "단계"
+          },
+          "recommendation": {
+            "name": "주의사항"
+          }
+        }
+      },
+      "food_poisoning_index": {
+        "name": "식중독 지수",
+        "state_attributes": {
+          "grade": {
+            "name": "단계"
+          },
+          "recommendation": {
+            "name": "주의사항"
+          }
+        }
+      },
+      "one_line_summary": {
+        "name": "한 줄 기상 요약"
+      }
+    },
+    "binary_sensor": {
+      "warning": {
+        "name": "기상 특보"
+      }
+    }
+  }
+}

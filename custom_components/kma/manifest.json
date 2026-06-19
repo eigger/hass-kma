@@ -1,0 +1,12 @@
+{
+  "domain": "kma",
+  "name": "기상청 APIhub",
+  "codeowners": ["@eigger"],
+  "config_flow": true,
+  "documentation": "https://github.com/eigger/hass-kma",
+  "issue_tracker": "https://github.com/eigger/hass-kma/issues",
+  "integration_type": "weather",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "1.0.0"
+}

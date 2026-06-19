@@ -1,0 +1,141 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "KMA APIhub Setup",
+        "description": "Enter your KMA APIhub authentication key (authKey) and select a Home Assistant Zone.",
+        "data": {
+          "auth_key": "API Key (authKey)",
+          "zone_id": "Reference Zone"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid API Key. Please verify your input.",
+      "cannot_connect": "Failed to connect to the KMA server.",
+      "invalid_zone_coords": "Failed to read coordinates from the selected zone.",
+      "unknown": "Unknown error occurred."
+    },
+    "abort": {
+      "already_configured": "This zone is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "KMA Integration Options",
+        "description": "Specify the refresh interval for weather data and warnings.",
+        "data": {
+          "scan_interval": "Update Interval (minutes)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "land_forecast_summary": {
+        "name": "Land Forecast Summary"
+      },
+      "marine_forecast_summary": {
+        "name": "Marine Forecast Summary"
+      },
+      "temperature": {
+        "name": "Temperature"
+      },
+      "humidity": {
+        "name": "Humidity"
+      },
+      "wind_speed": {
+        "name": "Wind Speed"
+      },
+      "precipitation_probability": {
+        "name": "Precipitation Probability"
+      },
+      "precipitation": {
+        "name": "Precipitation (1h)"
+      },
+      "today_temp_low": {
+        "name": "Today Low Temperature"
+      },
+      "today_temp_high": {
+        "name": "Today High Temperature"
+      },
+      "rain_snow_expected": {
+        "name": "Rain/Snow Forecast Search",
+        "state": {
+          "none": "None",
+          "rain": "Rain",
+          "rain_snow": "Rain/Snow",
+          "snow": "Snow",
+          "shower": "Shower"
+        }
+      },
+      "apparent_temperature": {
+        "name": "Apparent Temperature"
+      },
+      "dew_point": {
+        "name": "Dew Point"
+      },
+      "discomfort_index": {
+        "name": "Discomfort Index",
+        "state_attributes": {
+          "grade": {
+            "name": "Grade"
+          }
+        }
+      },
+      "laundry_index": {
+        "name": "Laundry Drying Index",
+        "state_attributes": {
+          "grade": {
+            "name": "Grade"
+          },
+          "recommendation": {
+            "name": "Recommendation"
+          }
+        }
+      },
+      "car_wash_index": {
+        "name": "Car Wash Index",
+        "state_attributes": {
+          "grade": {
+            "name": "Grade"
+          },
+          "recommendation": {
+            "name": "Recommendation"
+          }
+        }
+      },
+      "freeze_risk_index": {
+        "name": "Freeze Risk Index",
+        "state_attributes": {
+          "grade": {
+            "name": "Grade"
+          },
+          "recommendation": {
+            "name": "Recommendation"
+          }
+        }
+      },
+      "food_poisoning_index": {
+        "name": "Food Poisoning Index",
+        "state_attributes": {
+          "grade": {
+            "name": "Grade"
+          },
+          "recommendation": {
+            "name": "Recommendation"
+          }
+        }
+      },
+      "one_line_summary": {
+        "name": "One-line Weather Summary"
+      }
+    },
+    "binary_sensor": {
+      "warning": {
+        "name": "Weather Warning"
+      }
+    }
+  }
+}
