@@ -562,13 +562,13 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 return None
 
             if min_temp > -5.0:
-                return 100
-            elif min_temp > -10.0:
-                return 70
-            elif min_temp > -15.0:
-                return 40
-            else:
                 return 10
+            elif min_temp > -10.0:
+                return 40
+            elif min_temp > -15.0:
+                return 70
+            else:
+                return 100
 
         if key == "food_poisoning_index":
             if curr.tmp is not None and curr.reh is not None:
@@ -848,11 +848,11 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 elif key == "freeze_risk_index":
                     val = self.native_value
                     if val is not None:
-                        if val == 100:
+                        if val == 10:
                             grade_key = "low"
-                        elif val == 70:
-                            grade_key = "normal"
                         elif val == 40:
+                            grade_key = "normal"
+                        elif val == 70:
                             grade_key = "high"
                         else:
                             grade_key = "very_high"
