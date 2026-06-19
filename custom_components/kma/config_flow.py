@@ -92,6 +92,7 @@ class KmaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         data={
                             "auth_key": auth_key,
                             "zone_id": zone_id,
+                            "zone_name": title,
                             "latitude": latitude,
                             "longitude": longitude,
                             "nx": nx,

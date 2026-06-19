@@ -478,6 +478,14 @@ class KmaApiClient:
         result_msg = header.get("resultMsg", "")
 
         if result_code != "00":
+            # NODATA(03)/NO_DATA(04): 해당 발표시각 자료가 아직 없음 → 빈 결과로 처리
+            # (코디네이터가 이전 발표시각으로 backoff 재시도하도록 예외를 던지지 않음)
+            if result_code in ("03", "04"):
+                _LOGGER.debug(
+                    "getVilageFcst NODATA: base=%s%s nx=%s ny=%s",
+                    base_date, base_time, nx, ny,
+                )
+                return []
             if "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" in result_msg or "인증" in result_msg:
                 raise KmaAuthError(f"getVilageFcst: {result_msg} ({result_code})")
             raise KmaApiError(f"getVilageFcst: {result_msg} ({result_code})")

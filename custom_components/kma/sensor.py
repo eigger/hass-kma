@@ -301,7 +301,7 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     SensorEntityDescription(
         key="food_poisoning_index",
         translation_key="food_poisoning_index",
-        icon="mdi:food-alert",
+        icon="mdi:food-off-outline",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
     ),

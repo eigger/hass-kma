@@ -49,19 +49,34 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         data: dict[str, Any] = {}
 
         # 1. 동네예보 (getVilageFcst)
-        try:
-            # 기상청 단기예보 발표 시각은 0200, 0500, 0800, 1100, 1400, 1700, 2000, 2300 입니다.
-            # 가장 최근 발표 기준 시각을 실시간 계산
-            now = datetime.datetime.now()
-            base_date, base_time = self._get_latest_forecast_time(now)
-            
-            village_forecasts = await self.client.async_get_village_forecast(
-                self.nx, self.ny, base_date=base_date, base_time=base_time
-            )
-            data["village"] = village_forecasts
-        except KmaApiError as err:
-            _LOGGER.error("기상청 동네예보(getVilageFcst) 업데이트 실패: %s", err)
-            raise UpdateFailed(f"동네예보 업데이트 실패: {err}") from err
+        # 기상청 단기예보 발표 시각은 0200, 0500, 0800, 1100, 1400, 1700, 2000, 2300 입니다.
+        # 가장 최근 발표분이 아직 게시 전(NODATA)일 수 있으므로 이전 발표시각으로 backoff 재시도합니다.
+        now = datetime.datetime.now()
+        village_forecasts: list = []
+        last_err: KmaApiError | None = None
+        for base_date, base_time in self._iter_forecast_base_times(now):
+            try:
+                village_forecasts = await self.client.async_get_village_forecast(
+                    self.nx, self.ny, base_date=base_date, base_time=base_time
+                )
+            except KmaActivationRequiredError:
+                # 활용신청/키 문제는 즉시 표면화 (backoff로 해결되지 않음)
+                raise
+            except KmaApiError as err:
+                last_err = err
+                _LOGGER.debug("동네예보 base_time=%s%s 호출 실패: %s", base_date, base_time, err)
+                continue
+            if village_forecasts:
+                break
+
+        if not village_forecasts and last_err is not None:
+            # 모든 후보 발표시각에서 연결/오류 → 통합 단위 실패로 표면화하여 재시도 유도
+            _LOGGER.error("기상청 동네예보(getVilageFcst) 업데이트 실패: %s", last_err)
+            raise UpdateFailed(f"동네예보 업데이트 실패: {last_err}") from last_err
+
+        if not village_forecasts:
+            _LOGGER.warning("기상청 동네예보 데이터가 비어 있습니다(NODATA). 다음 주기에 재시도합니다.")
+        data["village"] = village_forecasts
 
         # 2. 육상예보 (fct_afs_dl.php)
         try:
@@ -108,6 +123,24 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data["warnings"] = []
 
         return data
+
+    def _iter_forecast_base_times(
+        self, now: datetime.datetime, count: int = 4
+    ) -> list[tuple[str, str]]:
+        """최근 발표시각부터 과거로 count개의 (base_date, base_time) 후보를 반환.
+
+        가장 최근 발표분이 아직 게시되지 않았을 때 이전 발표시각으로
+        backoff 재시도하기 위한 후보 목록.
+        """
+        candidates: list[tuple[str, str]] = []
+        cursor = now
+        for _ in range(count):
+            base_date, base_time = self._get_latest_forecast_time(cursor)
+            candidates.append((base_date, base_time))
+            # 직전 발표시각으로 커서 이동(해당 발표시각 16분 전)
+            dt = datetime.datetime.strptime(base_date + base_time, "%Y%m%d%H%M")
+            cursor = dt - datetime.timedelta(minutes=16)
+        return candidates
 
     def _get_latest_forecast_time(self, now: datetime.datetime) -> tuple[str, str]:
         """기상청 단기예보의 가장 최신 발표 시각을 계산하여 (base_date, base_time)으로 반환."""
