@@ -39,8 +39,8 @@ WARNING_TYPES_KO = {
     "V": "풍랑",
     "T": "태풍",
     "S": "대설",
-    "H": "황사",
-    "Y": "폭염",
+    "H": "폭염",
+    "Y": "황사",
 }
 
 WARNING_TYPES_EN = {
@@ -62,8 +62,8 @@ WARNING_TYPES_EN = {
     "V": "High Waves",
     "T": "Typhoon",
     "S": "Heavy Snow",
-    "H": "Yellow Dust",
-    "Y": "Heat Wave",
+    "H": "Heat Wave",
+    "Y": "Yellow Dust",
 }
 
 WARNING_LEVELS_KO = {

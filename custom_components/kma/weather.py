@@ -232,6 +232,23 @@ def aggregate_daily_forecasts(
     return result
 
 
+def _resolve_zone_name(entry: ConfigEntry) -> str:
+    """설정 엔트리에서 Zone 이름을 추출한다.
+
+    신규 엔트리는 data['zone_name']에 저장되어 있고,
+    구버전 엔트리는 타이틀('기상청 APIhub (<zone>)')에서 추출한다.
+    """
+    zone_name = entry.data.get("zone_name")
+    if zone_name:
+        return zone_name
+
+    title = entry.title or ""
+    prefix = "기상청 APIhub ("
+    if title.startswith(prefix) and title.endswith(")"):
+        return title[len(prefix):-1]
+    return title or "KMA"
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -257,6 +274,12 @@ class KmaWeather(CoordinatorEntity[KmaForecastCoordinator], WeatherEntity):
         super().__init__(coordinator)
         self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_weather"
+
+        # 웨더 엔티티는 Zone 이름을 그대로 표시한다.
+        zone_name = _resolve_zone_name(entry)
+        self._attr_has_entity_name = False
+        self._attr_name = zone_name
+
         device_name = entry.title
         if not device_name.startswith("기상청 APIhub"):
             device_name = f"기상청 APIhub ({device_name})"
