@@ -18,7 +18,7 @@ from .coordinator import KmaForecastCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.WEATHER, Platform.SENSOR, Platform.BINARY_SENSOR]
+PLATFORMS = [Platform.WEATHER, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON]
 
 SUBENTRY_TYPE_ZONE = "zone"
 

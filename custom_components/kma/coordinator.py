@@ -60,23 +60,29 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         now = datetime.datetime.now()
         village_forecasts: list = []
         village_status = "error"
+        last_error = None
         for base_date, base_time in self._iter_forecast_base_times(now):
             try:
                 village_forecasts = await self.client.async_get_village_forecast(
                     self.nx, self.ny, base_date=base_date, base_time=base_time
                 )
-            except KmaActivationRequiredError:
+            except KmaActivationRequiredError as err:
                 village_status = "not_applied"
+                last_error = str(err)
                 _LOGGER.warning("동네예보 API 미신청(403). 활용신청이 필요합니다.")
                 break
             except KmaApiError as err:
+                last_error = str(err)
                 _LOGGER.debug("동네예보 base_time=%s%s 호출 실패: %s", base_date, base_time, err)
                 continue
             # 호출 자체는 성공 (데이터가 비어도 NODATA일 뿐 활성 상태)
             village_status = "ok"
+            last_error = None
             if village_forecasts:
                 break
-        status["village_forecast"] = village_status
+        status["village_forecast"] = (
+            f"error: {last_error}" if village_status == "error" and last_error else village_status
+        )
         data["village"] = village_forecasts
 
         # 2. 육상예보 (fct_afs_dl.php)
@@ -105,9 +111,12 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         data["api_status"] = status
 
-        # 모든 API가 연결 오류(error)면 통합 단위 실패로 표면화하여 재시도 유도.
-        # (미신청/NODATA는 정상 동작 범위로 보고 실패시키지 않는다.)
-        if status and all(v == "error" for v in status.values()):
+        # 핵심 데이터인 동네예보(village)가 연결 오류(error)이거나 모든 API가 연결 오류면
+        # 통합 단위 실패(UpdateFailed)로 처리하여 센서를 '사용 불가(오류)' 상태로 표시하고 재시도를 유도합니다.
+        # (미신청/NODATA는 정상 동작 범위로 보고 실패시키지 않습니다.)
+        if status.get("village_forecast", "").startswith("error"):
+            raise UpdateFailed("동네예보 API 호출이 실패했습니다.")
+        if status and all(isinstance(v, str) and v.startswith("error") for v in status.values()):
             raise UpdateFailed("모든 기상청 API 호출이 실패했습니다.")
 
         return data
@@ -115,16 +124,16 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _fetch_optional(self, label: str, coro: Any) -> tuple[list, str]:
         """선택적 API 호출을 수행하고 (결과, 상태)를 반환한다.
 
-        상태: "ok" | "not_applied"(403) | "error". 실패 시 결과는 빈 리스트.
+        상태: "ok" | "not_applied"(403) | "error: 메시지". 실패 시 결과는 빈 리스트.
         """
         try:
             return await coro, "ok"
-        except KmaActivationRequiredError:
+        except KmaActivationRequiredError as err:
             _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
             return [], "not_applied"
         except KmaApiError as err:
             _LOGGER.warning("%s 업데이트 경고: %s", label, err)
-            return [], "error"
+            return [], f"error: {err}"
 
     @property
     def api_status(self) -> dict[str, str]:
