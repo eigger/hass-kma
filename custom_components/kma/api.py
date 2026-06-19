@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -314,7 +315,7 @@ class KmaApiClient:
                 raw = await resp.read()
                 status = resp.status
                 content_type = resp.content_type or ""
-        except aiohttp.ClientError as err:
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise KmaApiError(f"{endpoint}: 연결 오류: {err}") from err
 
         # 오류 응답은 JSON(UTF-8), 정상 데이터는 EUC-KR 텍스트.

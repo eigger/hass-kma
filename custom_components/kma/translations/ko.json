@@ -182,6 +182,11 @@
       "activation_warning_now": {
         "name": "기상특보 API"
       }
+    },
+    "button": {
+      "refresh": {
+        "name": "수동 갱신"
+      }
     }
   }
 }

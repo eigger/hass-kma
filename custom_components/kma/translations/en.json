@@ -182,6 +182,11 @@
       "activation_warning_now": {
         "name": "Weather Warning API"
       }
+    },
+    "button": {
+      "refresh": {
+        "name": "Manual Refresh"
+      }
     }
   }
 }
