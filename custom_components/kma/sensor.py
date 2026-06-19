@@ -195,7 +195,7 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     SensorEntityDescription(
         key="land_forecast_summary",
         translation_key="land_forecast_summary",
-        icon="mdi:weather-paragraph",
+        icon="mdi:text-box-outline",
     ),
     SensorEntityDescription(
         key="marine_forecast_summary",
@@ -274,30 +274,35 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         key="discomfort_index",
         translation_key="discomfort_index",
         icon="mdi:emoticon-neutral-outline",
+        native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key="laundry_index",
         translation_key="laundry_index",
         icon="mdi:tshirt-crew-outline",
+        native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key="car_wash_index",
         translation_key="car_wash_index",
         icon="mdi:car-wash",
+        native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key="freeze_risk_index",
         translation_key="freeze_risk_index",
         icon="mdi:snowflake-alert",
+        native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key="food_poisoning_index",
         translation_key="food_poisoning_index",
-        icon="mdi:food-poisoning",
+        icon="mdi:food-alert",
+        native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
@@ -557,13 +562,13 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 return None
 
             if min_temp > -5.0:
-                return 100
-            elif min_temp > -10.0:
-                return 70
-            elif min_temp > -15.0:
-                return 40
-            else:
                 return 10
+            elif min_temp > -10.0:
+                return 40
+            elif min_temp > -15.0:
+                return 70
+            else:
+                return 100
 
         if key == "food_poisoning_index":
             if curr.tmp is not None and curr.reh is not None:
@@ -824,11 +829,11 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 elif key == "car_wash_index":
                     val = self.native_value
                     if val is not None:
-                        if val == 90:
+                        if val >= 90:
                             grade_key = "excellent"
-                        elif val == 60:
+                        elif val >= 60:
                             grade_key = "delay"
-                        elif val == 40:
+                        elif val >= 40:
                             grade_key = "caution"
                         else:
                             grade_key = "avoid"
@@ -843,14 +848,14 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 elif key == "freeze_risk_index":
                     val = self.native_value
                     if val is not None:
-                        if val == 100:
-                            grade_key = "low"
-                        elif val == 70:
-                            grade_key = "normal"
-                        elif val == 40:
-                            grade_key = "high"
-                        else:
+                        if val >= 90:
                             grade_key = "very_high"
+                        elif val >= 60:
+                            grade_key = "high"
+                        elif val >= 30:
+                            grade_key = "normal"
+                        else:
+                            grade_key = "low"
 
                         if lang == "ko":
                             attrs["grade"] = FREEZE_RISK_GRADES_KO[grade_key]

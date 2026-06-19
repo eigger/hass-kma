@@ -1,6 +1,5 @@
 {
   "name": "KMA Weather (기상청 APIhub)",
   "country": "KR",
-  "homeassistant": "2023.2.0",
-  "manifest": "custom_components/kma/manifest.json"
+  "homeassistant": "2023.2.0"
 }
