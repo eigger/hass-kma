@@ -195,7 +195,7 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     SensorEntityDescription(
         key="land_forecast_summary",
         translation_key="land_forecast_summary",
-        icon="mdi:weather-paragraph",
+        icon="mdi:text-box-outline",
     ),
     SensorEntityDescription(
         key="marine_forecast_summary",
@@ -297,7 +297,7 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     SensorEntityDescription(
         key="food_poisoning_index",
         translation_key="food_poisoning_index",
-        icon="mdi:food-poisoning",
+        icon="mdi:food-alert",
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
