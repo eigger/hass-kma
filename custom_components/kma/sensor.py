@@ -829,11 +829,11 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 elif key == "car_wash_index":
                     val = self.native_value
                     if val is not None:
-                        if val == 90:
+                        if val >= 90:
                             grade_key = "excellent"
-                        elif val == 60:
+                        elif val >= 60:
                             grade_key = "delay"
-                        elif val == 40:
+                        elif val >= 40:
                             grade_key = "caution"
                         else:
                             grade_key = "avoid"
@@ -848,14 +848,14 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 elif key == "freeze_risk_index":
                     val = self.native_value
                     if val is not None:
-                        if val == 10:
-                            grade_key = "low"
-                        elif val == 40:
-                            grade_key = "normal"
-                        elif val == 70:
-                            grade_key = "high"
-                        else:
+                        if val >= 90:
                             grade_key = "very_high"
+                        elif val >= 60:
+                            grade_key = "high"
+                        elif val >= 30:
+                            grade_key = "normal"
+                        else:
+                            grade_key = "low"
 
                         if lang == "ko":
                             attrs["grade"] = FREEZE_RISK_GRADES_KO[grade_key]
