@@ -345,9 +345,13 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         self._entry = entry
         self.entity_description = description
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        device_name = entry.title
+        if not device_name.startswith("기상청 APIhub"):
+            device_name = f"기상청 APIhub ({device_name})"
+
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
+            name=device_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
         )
