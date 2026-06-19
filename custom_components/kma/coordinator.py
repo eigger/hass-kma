@@ -6,7 +6,7 @@ from datetime import timedelta
 import logging
 from typing import Any
 
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -17,112 +17,119 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """KMA 예·특보 데이터 코디네이터."""
-
-    config_entry: ConfigEntry
+    """KMA 예·특보 데이터 코디네이터 (Zone 서브엔트리 단위)."""
 
     def __init__(
         self,
         hass: HomeAssistant,
         client: KmaApiClient,
         config_entry: ConfigEntry,
+        subentry: ConfigSubentry,
     ) -> None:
         """코디네이터 초기화."""
         self.client = client
-        self.config_entry = config_entry
-        self.nx = config_entry.data["nx"]
-        self.ny = config_entry.data["ny"]
-        self.land_reg = config_entry.data["land_reg"]
-        self.marine_reg = config_entry.data["marine_reg"]
+        self.subentry = subentry
+        self.nx = subentry.data["nx"]
+        self.ny = subentry.data["ny"]
+        self.land_reg = subentry.data["land_reg"]
+        self.marine_reg = subentry.data["marine_reg"]
 
         scan_interval = config_entry.options.get("scan_interval", 10)
 
         super().__init__(
             hass,
             _LOGGER,
-            name=f"{DOMAIN}_forecast_{self.land_reg}",
+            config_entry=config_entry,
+            name=f"{DOMAIN}_{subentry.subentry_id}",
             update_interval=timedelta(minutes=scan_interval),
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """기상청 API로부터 실시간 예보 및 특보 데이터를 가져옵니다."""
+        """기상청 API로부터 실시간 예보 및 특보 데이터를 가져옵니다.
+
+        각 API의 응답 결과(정상/미신청/오류)를 data["api_status"]에 기록하여
+        허브 단위 진단 센서가 활용신청 상태를 표시할 수 있도록 한다.
+        활용신청 미완료(403)는 통합 실패로 처리하지 않고 해당 데이터만 비운다.
+        """
         data: dict[str, Any] = {}
+        status: dict[str, str] = {}
 
         # 1. 동네예보 (getVilageFcst)
-        # 기상청 단기예보 발표 시각은 0200, 0500, 0800, 1100, 1400, 1700, 2000, 2300 입니다.
-        # 가장 최근 발표분이 아직 게시 전(NODATA)일 수 있으므로 이전 발표시각으로 backoff 재시도합니다.
+        # 발표 시각은 0200,0500,0800,1100,1400,1700,2000,2300. 최근 발표분이 아직
+        # 게시 전(NODATA)일 수 있으므로 이전 발표시각으로 backoff 재시도한다.
         now = datetime.datetime.now()
         village_forecasts: list = []
-        last_err: KmaApiError | None = None
+        village_status = "error"
         for base_date, base_time in self._iter_forecast_base_times(now):
             try:
                 village_forecasts = await self.client.async_get_village_forecast(
                     self.nx, self.ny, base_date=base_date, base_time=base_time
                 )
             except KmaActivationRequiredError:
-                # 활용신청/키 문제는 즉시 표면화 (backoff로 해결되지 않음)
-                raise
+                village_status = "not_applied"
+                _LOGGER.warning("동네예보 API 미신청(403). 활용신청이 필요합니다.")
+                break
             except KmaApiError as err:
-                last_err = err
                 _LOGGER.debug("동네예보 base_time=%s%s 호출 실패: %s", base_date, base_time, err)
                 continue
+            # 호출 자체는 성공 (데이터가 비어도 NODATA일 뿐 활성 상태)
+            village_status = "ok"
             if village_forecasts:
                 break
-
-        if not village_forecasts and last_err is not None:
-            # 모든 후보 발표시각에서 연결/오류 → 통합 단위 실패로 표면화하여 재시도 유도
-            _LOGGER.error("기상청 동네예보(getVilageFcst) 업데이트 실패: %s", last_err)
-            raise UpdateFailed(f"동네예보 업데이트 실패: {last_err}") from last_err
-
-        if not village_forecasts:
-            _LOGGER.warning("기상청 동네예보 데이터가 비어 있습니다(NODATA). 다음 주기에 재시도합니다.")
+        status["village_forecast"] = village_status
         data["village"] = village_forecasts
 
         # 2. 육상예보 (fct_afs_dl.php)
-        try:
-            land_forecasts = await self.client.async_get_land_forecast(self.land_reg)
-            data["land"] = land_forecasts
-        except KmaApiError as err:
-            _LOGGER.warning("기상청 육상예보(fct_afs_dl) 업데이트 경고: %s", err)
-            data["land"] = []
+        data["land"], status["land_forecast"] = await self._fetch_optional(
+            "육상예보", self.client.async_get_land_forecast(self.land_reg)
+        )
 
         # 3. 해상예보 (fct_afs_do.php)
-        try:
-            marine_forecasts = await self.client.async_get_marine_forecast(self.marine_reg)
-            data["marine"] = marine_forecasts
-        except KmaApiError as err:
-            _LOGGER.warning("기상청 해상예보(fct_afs_do) 업데이트 경고: %s", err)
-            data["marine"] = []
+        data["marine"], status["marine_forecast"] = await self._fetch_optional(
+            "해상예보", self.client.async_get_marine_forecast(self.marine_reg)
+        )
 
         # 4. 특보현황 (wrn_now_data.php)
-        try:
-            warnings = await self.client.async_get_warning_now()
-            # 내 구역에 대한 특보만 필터링 (광역 매핑)
-            my_warnings = []
-            keywords = PROVINCE_WARNING_KEYWORDS.get(self.land_reg, [])
-            
-            for w in warnings:
-                reg_up_ko = w.get("REG_UP_KO", "")
-                reg_ko = w.get("REG_KO", "")
-                
-                match = False
-                for kw in keywords:
-                    if kw in reg_up_ko or kw in reg_ko:
-                        match = True
-                        break
-                
-                if match:
-                    my_warnings.append(w)
-            data["warnings"] = my_warnings
-        except KmaActivationRequiredError:
-            # 특보 API가 미신청(403) 상태인 경우 경고만 기록하고 우회
-            _LOGGER.warning("기상특보 API가 활성화되지 않았습니다. 활용 신청 후 승인이 필요합니다.")
-            data["warnings"] = []
-        except KmaApiError as err:
-            _LOGGER.warning("기상특보(wrn_now_data) 업데이트 경고: %s", err)
-            data["warnings"] = []
+        warnings, status["warning_now"] = await self._fetch_optional(
+            "기상특보", self.client.async_get_warning_now()
+        )
+        keywords = PROVINCE_WARNING_KEYWORDS.get(self.land_reg, [])
+        data["warnings"] = [
+            w
+            for w in warnings
+            if any(
+                kw in w.get("REG_UP_KO", "") or kw in w.get("REG_KO", "")
+                for kw in keywords
+            )
+        ]
+
+        data["api_status"] = status
+
+        # 모든 API가 연결 오류(error)면 통합 단위 실패로 표면화하여 재시도 유도.
+        # (미신청/NODATA는 정상 동작 범위로 보고 실패시키지 않는다.)
+        if status and all(v == "error" for v in status.values()):
+            raise UpdateFailed("모든 기상청 API 호출이 실패했습니다.")
 
         return data
+
+    async def _fetch_optional(self, label: str, coro: Any) -> tuple[list, str]:
+        """선택적 API 호출을 수행하고 (결과, 상태)를 반환한다.
+
+        상태: "ok" | "not_applied"(403) | "error". 실패 시 결과는 빈 리스트.
+        """
+        try:
+            return await coro, "ok"
+        except KmaActivationRequiredError:
+            _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
+            return [], "not_applied"
+        except KmaApiError as err:
+            _LOGGER.warning("%s 업데이트 경고: %s", label, err)
+            return [], "error"
+
+    @property
+    def api_status(self) -> dict[str, str]:
+        """현재 기록된 API별 접근 상태."""
+        return (self.data or {}).get("api_status", {})
 
     def _iter_forecast_base_times(
         self, now: datetime.datetime, count: int = 4

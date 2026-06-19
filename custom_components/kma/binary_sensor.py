@@ -8,8 +8,10 @@ from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
 )
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -18,6 +20,15 @@ from .const import DOMAIN
 from .coordinator import KmaForecastCoordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+# 허브(부모 엔트리) 단위로 활용신청 상태를 표시할 API 목록.
+# 키는 coordinator.data["api_status"] 및 translation_key(activation_*)와 일치.
+API_STATUS_KEYS = [
+    "village_forecast",
+    "land_forecast",
+    "marine_forecast",
+    "warning_now",
+]
 
 # 특보 종류 및 등급 매핑 (다국어 지원)
 WARNING_TYPES_KO = {
@@ -88,9 +99,27 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """기상청 바이너리 센서 엔티티 추가."""
-    coordinator: KmaForecastCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([KmaWarningBinarySensor(coordinator, entry)])
+    """Zone 서브엔트리별 특보 센서 + 허브 단위 활용신청 상태 센서 추가."""
+    store = hass.data[DOMAIN][entry.entry_id]
+    coordinators: dict[str, KmaForecastCoordinator] = store["coordinators"]
+
+    for subentry_id, coordinator in coordinators.items():
+        subentry = entry.subentries[subentry_id]
+        async_add_entities(
+            [KmaWarningBinarySensor(coordinator, subentry)],
+            config_subentry_id=subentry_id,
+        )
+
+    # 허브(통합) 기기: API별 활용신청 상태 진단 센서.
+    # Zone 호출 피드백을 그대로 사용하므로, 임의의(첫) Zone 코디네이터에 연결한다.
+    if coordinators:
+        rep_coordinator = next(iter(coordinators.values()))
+        async_add_entities(
+            [
+                KmaApiStatusBinarySensor(rep_coordinator, entry, key)
+                for key in API_STATUS_KEYS
+            ]
+        )
 
 
 class KmaWarningBinarySensor(CoordinatorEntity[KmaForecastCoordinator], BinarySensorEntity):
@@ -99,21 +128,21 @@ class KmaWarningBinarySensor(CoordinatorEntity[KmaForecastCoordinator], BinarySe
     _attr_has_entity_name = True
     _attr_device_class = BinarySensorDeviceClass.SAFETY
 
-    def __init__(self, coordinator: KmaForecastCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator: KmaForecastCoordinator, subentry: ConfigSubentry
+    ) -> None:
         """바이너리 센서 구성원 초기화."""
         super().__init__(coordinator)
-        self._entry = entry
         self._attr_translation_key = "warning"
-        self._attr_unique_id = f"{entry.entry_id}_warning"
-        device_name = entry.title
-        if not device_name.startswith("기상청 APIhub"):
-            device_name = f"기상청 APIhub ({device_name})"
+        self._attr_unique_id = f"{subentry.subentry_id}_warning"
 
+        zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=device_name,
+            identifiers={(DOMAIN, subentry.subentry_id)},
+            name=zone_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
+            via_device=(DOMAIN, coordinator.config_entry.entry_id),
         )
 
     @property
@@ -160,3 +189,45 @@ class KmaWarningBinarySensor(CoordinatorEntity[KmaForecastCoordinator], BinarySe
             "warnings_count": len(warnings),
             "active_warnings": warnings_detail,
         }
+
+
+class KmaApiStatusBinarySensor(
+    CoordinatorEntity[KmaForecastCoordinator], BinarySensorEntity
+):
+    """허브 단위 API 활용신청/접근 상태 진단 센서.
+
+    on  = 정상 응답(활용신청 완료)
+    off = 미신청(403)/오류 — status 속성으로 상세 구분
+    """
+
+    _attr_has_entity_name = True
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: KmaForecastCoordinator,
+        entry: ConfigEntry,
+        api_key: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._api_key = api_key
+        self._attr_translation_key = f"activation_{api_key}"
+        self._attr_unique_id = f"{entry.entry_id}_activation_{api_key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="기상청 APIhub",
+            manufacturer="Korea Meteorological Administration",
+            model="API Hub",
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+    @property
+    def is_on(self) -> bool:
+        """해당 API가 정상 응답하면 True."""
+        return self.coordinator.api_status.get(self._api_key) == "ok"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """상세 상태(ok/not_applied/error/unknown)."""
+        return {"status": self.coordinator.api_status.get(self._api_key, "unknown")}

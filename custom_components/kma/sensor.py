@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import (
     PERCENTAGE,
     UnitOfTemperature,
@@ -318,15 +318,14 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """기상청 센서 엔티티 추가."""
-    coordinator: KmaForecastCoordinator = hass.data[DOMAIN][entry.entry_id]
-    
-    entities = [
-        KmaSensor(coordinator, entry, desc)
-        for desc in SENSOR_DESCRIPTIONS
-    ]
-    
-    async_add_entities(entities)
+    """Zone 서브엔트리별 센서 엔티티 추가."""
+    store = hass.data[DOMAIN][entry.entry_id]
+    for subentry_id, coordinator in store["coordinators"].items():
+        subentry = entry.subentries[subentry_id]
+        async_add_entities(
+            [KmaSensor(coordinator, subentry, desc) for desc in SENSOR_DESCRIPTIONS],
+            config_subentry_id=subentry_id,
+        )
 
 
 class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
@@ -337,23 +336,21 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
     def __init__(
         self,
         coordinator: KmaForecastCoordinator,
-        entry: ConfigEntry,
+        subentry: ConfigSubentry,
         description: SensorEntityDescription,
     ) -> None:
         """센서 구성원 초기화."""
         super().__init__(coordinator)
-        self._entry = entry
         self.entity_description = description
-        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
-        device_name = entry.title
-        if not device_name.startswith("기상청 APIhub"):
-            device_name = f"기상청 APIhub ({device_name})"
+        self._attr_unique_id = f"{subentry.subentry_id}_{description.key}"
 
+        zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=device_name,
+            identifiers={(DOMAIN, subentry.subentry_id)},
+            name=zone_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
+            via_device=(DOMAIN, coordinator.config_entry.entry_id),
         )
 
     def _get_current_forecast(self) -> VillageForecast | None:

@@ -1,6 +1,10 @@
-"""기상청(KMA) 통합 구성요소 초기화."""
+"""기상청(KMA) 통합 구성요소 초기화.
+
+부모 엔트리는 API 클라이언트를 공유하고, Zone 서브엔트리마다 코디네이터를 둔다.
+"""
 from __future__ import annotations
 
+from datetime import timedelta
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -16,42 +20,43 @@ _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS = [Platform.WEATHER, Platform.SENSOR, Platform.BINARY_SENSOR]
 
+SUBENTRY_TYPE_ZONE = "zone"
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """설정 엔트리 초기화."""
+    """부모 엔트리 셋업: 키 검증 후 Zone 서브엔트리별 코디네이터 생성."""
     session = async_get_clientsession(hass)
     client = KmaApiClient(session, entry.data["auth_key"])
 
-    coordinator = KmaForecastCoordinator(hass, client, entry)
-
-    # 최초 데이터 강제 동기화 (오류 발생 시 통합 구성요소 셋업 실패 처리)
-    await coordinator.async_config_entry_first_refresh()
+    coordinators: dict[str, KmaForecastCoordinator] = {}
+    for subentry_id, subentry in entry.subentries.items():
+        if subentry.subentry_type != SUBENTRY_TYPE_ZONE:
+            continue
+        coordinator = KmaForecastCoordinator(hass, client, entry, subentry)
+        await coordinator.async_config_entry_first_refresh()
+        coordinators[subentry_id] = coordinator
 
     hass.data.setdefault(DOMAIN, {})
-    hass.data[DOMAIN][entry.entry_id] = coordinator
+    hass.data[DOMAIN][entry.entry_id] = {
+        "client": client,
+        "coordinators": coordinators,
+    }
 
-    # 옵션 업데이트 리스너 등록
-    entry.async_on_unload(entry.add_update_listener(update_listener))
+    # 옵션/서브엔트리 변경 시 리로드
+    entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
-    # 하위 플랫폼(Weather, Sensor, Binary Sensor) 등록
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-
     return True
 
 
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """옵션 변경 시 코디네이터의 업데이트 주기를 갱신합니다."""
-    coordinator: KmaForecastCoordinator = hass.data[DOMAIN][entry.entry_id]
-    scan_interval = entry.options.get("scan_interval", 10)
-    from datetime import timedelta
-    coordinator.update_interval = timedelta(minutes=scan_interval)
-    _LOGGER.info("KMA 통합구성요소 갱신 주기가 %d분으로 변경되었습니다.", scan_interval)
+async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """옵션 변경 또는 Zone 서브엔트리 추가/삭제 시 통합을 다시 로드한다."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """설정 엔트리 제거/언로드."""
+    """부모 엔트리 언로드."""
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)
-
     return unload_ok

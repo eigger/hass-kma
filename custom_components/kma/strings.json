@@ -3,21 +3,55 @@
     "step": {
       "user": {
         "title": "KMA APIhub Setup",
-        "description": "Enter your KMA APIhub authentication key (authKey) and select a Home Assistant Zone.",
+        "description": "Enter your KMA APIhub authentication key (authKey).\n\nGet a key at [apihub.kma.go.kr]({apihub_url}) — sign up, then issue an authKey under My Page.\n\n**Important:** You must also apply for usage (활용신청) of the forecast/warning (예·특보) APIs on the portal; otherwise data will not load (HTTP 403).\n\nAfter setup, add one or more zones from the integration page.",
         "data": {
-          "auth_key": "API Key (authKey)",
-          "zone_id": "Reference Zone"
+          "auth_key": "API Key (authKey)"
         }
       }
     },
     "error": {
       "invalid_auth": "Invalid API Key. Please verify your input.",
       "cannot_connect": "Failed to connect to the KMA server.",
-      "invalid_zone_coords": "Failed to read coordinates from the selected zone.",
       "unknown": "Unknown error occurred."
     },
     "abort": {
-      "already_configured": "This zone is already configured."
+      "already_configured": "This API key is already configured."
+    },
+    "create_entry": {
+      "default": "Setup complete. Now open the integration and click **Add Zone** to add a location to receive weather and warnings for."
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "title": "Add Zone",
+      "step": {
+        "user": {
+          "title": "Add a Zone",
+          "description": "Select a Home Assistant Zone to track weather and warnings for.",
+          "data": {
+            "zone_id": "Zone"
+          }
+        },
+        "reconfigure": {
+          "title": "Reconfigure Zone",
+          "description": "Select a different Home Assistant Zone.",
+          "data": {
+            "zone_id": "Zone"
+          }
+        }
+      },
+      "error": {
+        "invalid_zone_coords": "Failed to read coordinates from the selected zone."
+      },
+      "abort": {
+        "already_configured": "This zone is already configured.",
+        "no_zones_available": "No selectable zones are available. Create a zone first."
+      },
+      "initiate_flow": {
+        "user": "Add zone",
+        "reconfigure": "Reconfigure zone"
+      },
+      "entry_type": "Zone"
     }
   },
   "options": {
@@ -135,6 +169,18 @@
     "binary_sensor": {
       "warning": {
         "name": "Weather Warning"
+      },
+      "activation_village_forecast": {
+        "name": "Village Forecast API"
+      },
+      "activation_land_forecast": {
+        "name": "Land Forecast API"
+      },
+      "activation_marine_forecast": {
+        "name": "Marine Forecast API"
+      },
+      "activation_warning_now": {
+        "name": "Weather Warning API"
       }
     }
   }
