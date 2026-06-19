@@ -18,7 +18,7 @@ from homeassistant.components.weather import (
     ATTR_CONDITION_SNOWY_RAINY,
     ATTR_CONDITION_SUNNY,
 )
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import Platform, UnitOfTemperature, UnitOfSpeed
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
@@ -232,63 +232,48 @@ def aggregate_daily_forecasts(
     return result
 
 
-def _resolve_zone_name(entry: ConfigEntry) -> str:
-    """설정 엔트리에서 Zone 이름을 추출한다.
-
-    신규 엔트리는 data['zone_name']에 저장되어 있고,
-    구버전 엔트리는 타이틀('기상청 APIhub (<zone>)')에서 추출한다.
-    """
-    zone_name = entry.data.get("zone_name")
-    if zone_name:
-        return zone_name
-
-    title = entry.title or ""
-    prefix = "기상청 APIhub ("
-    if title.startswith(prefix) and title.endswith(")"):
-        return title[len(prefix):-1]
-    return title or "KMA"
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """기상청 날씨 엔티티 추가."""
-    coordinator: KmaForecastCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities([KmaWeather(coordinator, entry)])
+    """Zone 서브엔트리별 날씨 엔티티 추가."""
+    store = hass.data[DOMAIN][entry.entry_id]
+    for subentry_id, coordinator in store["coordinators"].items():
+        subentry = entry.subentries[subentry_id]
+        async_add_entities(
+            [KmaWeather(coordinator, subentry)],
+            config_subentry_id=subentry_id,
+        )
 
 
 class KmaWeather(CoordinatorEntity[KmaForecastCoordinator], WeatherEntity):
     """기상청 날씨 엔티티."""
 
-    _attr_has_entity_name = True
+    _attr_has_entity_name = False
     _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_native_wind_speed_unit = UnitOfSpeed.METERS_PER_SECOND
     _attr_supported_features = (
         WeatherEntityFeature.FORECAST_DAILY | WeatherEntityFeature.FORECAST_HOURLY
     )
 
-    def __init__(self, coordinator: KmaForecastCoordinator, entry: ConfigEntry) -> None:
+    def __init__(
+        self, coordinator: KmaForecastCoordinator, subentry: ConfigSubentry
+    ) -> None:
         """날씨 구성원 초기화."""
         super().__init__(coordinator)
-        self._entry = entry
-        self._attr_unique_id = f"{entry.entry_id}_weather"
+        self._attr_unique_id = f"{subentry.subentry_id}_weather"
 
         # 웨더 엔티티는 Zone 이름을 그대로 표시한다.
-        zone_name = _resolve_zone_name(entry)
-        self._attr_has_entity_name = False
+        zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
         self._attr_name = zone_name
 
-        device_name = entry.title
-        if not device_name.startswith("기상청 APIhub"):
-            device_name = f"기상청 APIhub ({device_name})"
-
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=device_name,
+            identifiers={(DOMAIN, subentry.subentry_id)},
+            name=zone_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
+            via_device=(DOMAIN, coordinator.config_entry.entry_id),
         )
 
     def _get_current_forecast(self) -> VillageForecast | None:
