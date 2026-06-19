@@ -83,31 +83,50 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         status["village_forecast"] = (
             f"error: {last_error}" if village_status == "error" and last_error else village_status
         )
-        data["village"] = village_forecasts
+        if not village_forecasts and self.data and "village" in self.data:
+            data["village"] = self.data["village"]
+            _LOGGER.debug("동네예보 데이터가 비어 있어 이전 값을 유지합니다.")
+        else:
+            data["village"] = village_forecasts
 
         # 2. 육상예보 (fct_afs_dl.php)
-        data["land"], status["land_forecast"] = await self._fetch_optional(
+        land, status["land_forecast"] = await self._fetch_optional(
             "육상예보", self.client.async_get_land_forecast(self.land_reg)
         )
+        if not land and self.data and "land" in self.data:
+            data["land"] = self.data["land"]
+            _LOGGER.debug("육상예보 데이터가 비어 있어 이전 값을 유지합니다.")
+        else:
+            data["land"] = land
 
         # 3. 해상예보 (fct_afs_do.php)
-        data["marine"], status["marine_forecast"] = await self._fetch_optional(
+        marine, status["marine_forecast"] = await self._fetch_optional(
             "해상예보", self.client.async_get_marine_forecast(self.marine_reg)
         )
+        if not marine and self.data and "marine" in self.data:
+            data["marine"] = self.data["marine"]
+            _LOGGER.debug("해상예보 데이터가 비어 있어 이전 값을 유지합니다.")
+        else:
+            data["marine"] = marine
 
         # 4. 특보현황 (wrn_now_data.php)
         warnings, status["warning_now"] = await self._fetch_optional(
             "기상특보", self.client.async_get_warning_now()
         )
-        keywords = PROVINCE_WARNING_KEYWORDS.get(self.land_reg, [])
-        data["warnings"] = [
-            w
-            for w in warnings
-            if any(
-                kw in w.get("REG_UP_KO", "") or kw in w.get("REG_KO", "")
-                for kw in keywords
-            )
-        ]
+        # 특보 호출 실패 시에는 이전 특보 데이터를 유지하고, 성공했으나 내용이 없는 경우는 빈 목록으로 업데이트합니다.
+        if status["warning_now"].startswith("error") and self.data and "warnings" in self.data:
+            data["warnings"] = self.data["warnings"]
+            _LOGGER.debug("기상특보 호출이 실패하여 이전 특보 데이터를 유지합니다.")
+        else:
+            keywords = PROVINCE_WARNING_KEYWORDS.get(self.land_reg, [])
+            data["warnings"] = [
+                w
+                for w in warnings
+                if any(
+                    kw in w.get("REG_UP_KO", "") or kw in w.get("REG_KO", "")
+                    for kw in keywords
+                )
+            ]
 
         data["api_status"] = status
 
