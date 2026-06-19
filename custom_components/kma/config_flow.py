@@ -109,7 +109,7 @@ class KmaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: ConfigEntry,
     ) -> KmaOptionsFlowHandler:
         """옵션 흐름(갱신 주기)."""
-        return KmaOptionsFlowHandler(config_entry)
+        return KmaOptionsFlowHandler()
 
 
 class ZoneSubentryFlowHandler(ConfigSubentryFlow):
