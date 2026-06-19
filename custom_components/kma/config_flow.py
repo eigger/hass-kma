@@ -88,7 +88,7 @@ class KmaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
                     # 데이터 저장 및 생성
                     return self.async_create_entry(
-                        title=title,
+                        title=f"기상청 APIhub ({title})",
                         data={
                             "auth_key": auth_key,
                             "zone_id": zone_id,
