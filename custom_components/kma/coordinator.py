@@ -19,7 +19,7 @@ from .api import (
     KmaActivationRequiredError,
     VillageForecast,
 )
-from .helpers import parse_pcp
+from .helpers import parse_pcp, parse_sno
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -35,6 +35,7 @@ class CurrentWeather:
     pty: str | None       # 강수형태
     sky: str | None       # 하늘상태
     pcp: float | None     # 1시간 강수량 (mm)
+    sno: float | None     # 1시간 신적설 (cm, 예보값 — 실황엔 없음)
     pop: float | None     # 강수확률 (%, 예보값)
     source: str           # "ncst"(실황) | "village"(단기예보) | "none"
 
@@ -52,6 +53,7 @@ class ForecastPoint:
     vec: float | None
     pop: float | None        # 강수확률 (%)
     pcp: float | None        # 1시간 강수량 (mm)
+    sno: float | None        # 1시간 신적설 (cm)
 
 
 class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -242,20 +244,23 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         vf = self._nearest_village()
         pop = vf.pop if vf else None
 
+        # 적설(SNO)은 실황에 없으므로 단기예보(가장 가까운 시각)에서 가져온다.
+        sno = parse_sno(vf.sno) if vf else None
+
         if ncst is not None:
             sky = ultra[0].sky if ultra else (vf.sky if vf else None)
             pty = ncst.pty if ncst.pty is not None else (ultra[0].pty if ultra else None)
             return CurrentWeather(
                 tmp=ncst.t1h, reh=ncst.reh, wsd=ncst.wsd, vec=ncst.vec,
-                pty=pty, sky=sky, pcp=ncst.rn1, pop=pop, source="ncst",
+                pty=pty, sky=sky, pcp=ncst.rn1, sno=sno, pop=pop, source="ncst",
             )
         if vf is not None:
             return CurrentWeather(
                 tmp=vf.tmp, reh=vf.reh, wsd=vf.wsd, vec=vf.vec,
-                pty=vf.pty, sky=vf.sky, pcp=parse_pcp(vf.pcp), pop=vf.pop,
-                source="village",
+                pty=vf.pty, sky=vf.sky, pcp=parse_pcp(vf.pcp), sno=sno,
+                pop=vf.pop, source="village",
             )
-        return CurrentWeather(None, None, None, None, None, None, None, None, "none")
+        return CurrentWeather(None, None, None, None, None, None, None, None, None, "none")
 
     def forecast_points(self) -> list[ForecastPoint]:
         """시간별 예보를 초단기예보(앞 6시간) + 단기예보로 병합해 시간순 반환.
@@ -284,6 +289,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     dt=dt, tmp=u.t1h, sky=u.sky, pty=u.pty, reh=u.reh,
                     wsd=u.wsd, vec=u.vec,
                     pop=(v.pop if v else None), pcp=parse_pcp(u.rn1),
+                    sno=(parse_sno(v.sno) if v else None),
                 )
             )
 
@@ -300,6 +306,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ForecastPoint(
                     dt=dt, tmp=v.tmp, sky=v.sky, pty=v.pty, reh=v.reh,
                     wsd=v.wsd, vec=v.vec, pop=v.pop, pcp=parse_pcp(v.pcp),
+                    sno=parse_sno(v.sno),
                 )
             )
 

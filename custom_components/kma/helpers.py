@@ -30,6 +30,29 @@ def parse_pcp(val: str | float | None) -> float | None:
         return None
 
 
+def parse_sno(val: str | float | None) -> float | None:
+    """1시간 신적설 문자열을 cm(float)로 파싱.
+
+    예: "적설없음"→0.0, "1.0cm 미만"→0.5, "1.0~3.0cm"→2.0, "5.0cm 이상"→5.0
+    """
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    if not val or "적설없음" in val or val in ("0", "0.0"):
+        return 0.0
+    try:
+        clean = val.replace("cm", "").replace("미만", "").replace("이상", "").strip()
+        if "~" in clean:
+            a, b = clean.split("~")
+            return (float(a) + float(b)) / 2.0
+        if "미만" in val:
+            return float(clean) * 0.5
+        return float(clean)
+    except ValueError:
+        return None
+
+
 def latlon_to_grid(lat: float, lon: float) -> tuple[int, int]:
     """기상청 Lambert Conformal Conic (LCC) 격자좌표 변환.
 

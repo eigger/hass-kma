@@ -256,6 +256,7 @@ class KmaPrecipitationBinarySensor(
             "type_code": nxt.pty,
             "precipitation_probability": nxt.pop,
             "precipitation_amount": nxt.pcp,
+            "snow_amount": nxt.sno,
             "hours_until": round(hours, 1),
         }
 

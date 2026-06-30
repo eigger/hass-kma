@@ -88,6 +88,9 @@
       "precipitation": {
         "name": "1시간 강수량"
       },
+      "snowfall": {
+        "name": "1시간 신적설(예보)"
+      },
       "today_temp_low": {
         "name": "오늘 최저기온"
       },

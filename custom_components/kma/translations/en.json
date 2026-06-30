@@ -88,6 +88,9 @@
       "precipitation": {
         "name": "Precipitation (1h)"
       },
+      "snowfall": {
+        "name": "Snowfall (1h, forecast)"
+      },
       "today_temp_low": {
         "name": "Today Low Temperature"
       },

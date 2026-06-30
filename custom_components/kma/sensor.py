@@ -240,6 +240,14 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
+        key="snowfall",
+        translation_key="snowfall",
+        icon="mdi:weather-snowy",
+        native_unit_of_measurement=UnitOfLength.CENTIMETERS,
+        device_class=SensorDeviceClass.PRECIPITATION,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
         key="today_temp_low",
         translation_key="today_temp_low",
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -450,6 +458,8 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             return curr.pop
         if key == "precipitation":
             return curr.pcp
+        if key == "snowfall":
+            return curr.sno
 
         if key == "apparent_temperature":
             import math
@@ -722,6 +732,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 "type_code": nxt.pty,
                 "precipitation_probability": nxt.pop,
                 "precipitation_amount": nxt.pcp,
+                "snow_amount": nxt.sno,
                 "hours_until": hours,
             }
 
@@ -794,6 +805,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             "wind_speed",
             "precipitation_probability",
             "precipitation",
+            "snowfall",
             "today_temp_low",
             "today_temp_high",
             "apparent_temperature",
