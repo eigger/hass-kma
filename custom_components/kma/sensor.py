@@ -26,7 +26,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import KmaForecastCoordinator
 from .api import VillageForecast
-from .weather import parse_pcp, get_ha_condition
+from .weather import get_ha_condition
+from .helpers import parse_pcp
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -425,10 +426,8 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                     continue
             return rain_type
 
-        # 동네예보 기반 실시간 센서
-        curr = self._get_current_forecast()
-        if not curr:
-            return None
+        # 현재값 센서: 초단기실황(실측) 우선, 없으면 단기예보 폴백
+        curr = self.coordinator.get_current()
 
         if key == "temperature":
             return curr.tmp
@@ -439,7 +438,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         if key == "precipitation_probability":
             return curr.pop
         if key == "precipitation":
-            return parse_pcp(curr.pcp)
+            return curr.pcp
 
         if key == "apparent_temperature":
             import math
@@ -777,6 +776,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         ):
             curr = self._get_current_forecast()
             if curr:
+                obs = self.coordinator.get_current()
                 attrs = {
                     "fcst_date": curr.fcst_date,
                     "fcst_time": curr.fcst_time,
@@ -787,10 +787,10 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 if self.hass and hasattr(self.hass, "config") and self.hass.config.language == "ko":
                     lang = "ko"
 
-                if key == "discomfort_index" and curr.tmp is not None and curr.reh is not None:
+                if key == "discomfort_index" and obs.tmp is not None and obs.reh is not None:
                     try:
-                        temp = float(curr.tmp)
-                        rh = float(curr.reh)
+                        temp = float(obs.tmp)
+                        rh = float(obs.reh)
                         di = 1.8 * temp - 0.55 * (1.0 - rh / 100.0) * (1.8 * temp - 26.0) + 32.0
                         if di < 68:
                             grade_key = "low"

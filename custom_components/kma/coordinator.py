@@ -6,14 +6,37 @@ from datetime import timedelta
 import logging
 from typing import Any
 
+from dataclasses import dataclass
+
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, PROVINCE_WARNING_KEYWORDS
-from .api import KmaApiClient, KmaApiError, KmaActivationRequiredError
+from .api import (
+    KmaApiClient,
+    KmaApiError,
+    KmaActivationRequiredError,
+    VillageForecast,
+)
+from .helpers import parse_pcp
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CurrentWeather:
+    """현재 날씨(실황 우선, 없으면 단기예보 폴백)를 표현하는 통합 값."""
+
+    tmp: float | None     # 기온 (℃)
+    reh: float | None     # 습도 (%)
+    wsd: float | None     # 풍속 (m/s)
+    vec: float | None     # 풍향 (deg)
+    pty: str | None       # 강수형태
+    sky: str | None       # 하늘상태
+    pcp: float | None     # 1시간 강수량 (mm)
+    pop: float | None     # 강수확률 (%, 예보값)
+    source: str           # "ncst"(실황) | "village"(단기예보) | "none"
 
 
 class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -89,6 +112,22 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             data["village"] = village_forecasts
 
+        # 1-2. 초단기실황/초단기예보 — 현재 날씨를 실측 기반으로 표시.
+        # 실패하면 이전 값을 유지하고, 그래도 없으면 단기예보로 폴백한다(get_current).
+        try:
+            ncst = await self.client.async_get_ultra_ncst(self.nx, self.ny)
+        except KmaApiError as err:
+            _LOGGER.debug("초단기실황(getUltraSrtNcst) 실패: %s", err)
+            ncst = None
+        data["ncst"] = ncst or (self.data or {}).get("ncst")
+
+        try:
+            ultra = await self.client.async_get_ultra_fcst(self.nx, self.ny)
+        except KmaApiError as err:
+            _LOGGER.debug("초단기예보(getUltraSrtFcst) 실패: %s", err)
+            ultra = []
+        data["ultra"] = ultra or (self.data or {}).get("ultra", [])
+
         # 2. 육상예보 (fct_afs_dl.php)
         land, status["land_forecast"] = await self._fetch_optional(
             "육상예보", self.client.async_get_land_forecast(self.land_reg)
@@ -158,6 +197,50 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def api_status(self) -> dict[str, str]:
         """현재 기록된 API별 접근 상태."""
         return (self.data or {}).get("api_status", {})
+
+    def _nearest_village(self) -> VillageForecast | None:
+        """현재 시각에 가장 가까운 동네예보 레코드(폴백/POP용)."""
+        village: list[VillageForecast] = (self.data or {}).get("village", [])
+        if not village:
+            return None
+        now = datetime.datetime.now()
+        best, best_diff = None, None
+        for vf in village:
+            try:
+                vdt = datetime.datetime.strptime(f"{vf.fcst_date}{vf.fcst_time}", "%Y%m%d%H%M")
+            except ValueError:
+                continue
+            diff = abs((vdt - now).total_seconds())
+            if best_diff is None or diff < best_diff:
+                best, best_diff = vf, diff
+        return best or village[0]
+
+    def get_current(self) -> CurrentWeather:
+        """현재 날씨를 실황(getUltraSrtNcst) 우선으로 반환.
+
+        실황에 없는 하늘상태(SKY)는 초단기예보(getUltraSrtFcst)로 보완하고,
+        강수확률(POP)은 단기예보에서 가져온다. 실황이 없으면 단기예보로 폴백.
+        """
+        data = self.data or {}
+        ncst = data.get("ncst")
+        ultra: list = data.get("ultra") or []
+        vf = self._nearest_village()
+        pop = vf.pop if vf else None
+
+        if ncst is not None:
+            sky = ultra[0].sky if ultra else (vf.sky if vf else None)
+            pty = ncst.pty if ncst.pty is not None else (ultra[0].pty if ultra else None)
+            return CurrentWeather(
+                tmp=ncst.t1h, reh=ncst.reh, wsd=ncst.wsd, vec=ncst.vec,
+                pty=pty, sky=sky, pcp=ncst.rn1, pop=pop, source="ncst",
+            )
+        if vf is not None:
+            return CurrentWeather(
+                tmp=vf.tmp, reh=vf.reh, wsd=vf.wsd, vec=vf.vec,
+                pty=vf.pty, sky=vf.sky, pcp=parse_pcp(vf.pcp), pop=vf.pop,
+                source="village",
+            )
+        return CurrentWeather(None, None, None, None, None, None, None, None, "none")
 
     def _iter_forecast_base_times(
         self, now: datetime.datetime, count: int = 4

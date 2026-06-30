@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import logging
 from dataclasses import dataclass
@@ -148,6 +149,36 @@ class VillageForecast:
     reh: float | None    # 습도 (%)
 
 
+@dataclass(frozen=True)
+class UltraNcst:
+    """초단기실황 (getUltraSrtNcst) — 실제 관측값."""
+
+    base_date: str
+    base_time: str
+    t1h: float | None    # 기온 (℃)
+    rn1: float | None    # 1시간 강수량 (mm)
+    reh: float | None    # 습도 (%)
+    pty: str | None      # 강수형태 (0:없음,1:비,2:비/눈,3:눈,5:빗방울,6:빗방울눈날림,7:눈날림)
+    wsd: float | None    # 풍속 (m/s)
+    vec: float | None    # 풍향 (deg)
+    uuu: float | None    # 동서풍속
+    vvv: float | None    # 남북풍속
+
+
+@dataclass(frozen=True)
+class UltraFcst:
+    """초단기예보 (getUltraSrtFcst) — 6시간 이내 단기 예보 (SKY 포함)."""
+
+    fcst_date: str
+    fcst_time: str
+    t1h: float | None    # 기온 (℃)
+    sky: str | None      # 하늘상태 (1:맑음,3:구름많음,4:흐림)
+    pty: str | None      # 강수형태
+    reh: float | None    # 습도 (%)
+    wsd: float | None    # 풍속 (m/s)
+    vec: float | None    # 풍향 (deg)
+
+
 # 하늘상태코드
 SKY_CODES: dict[str, str] = {
     "DB01": "맑음",
@@ -267,6 +298,39 @@ def _raise_for_error_payload(status: int, body: str, endpoint: str) -> None:
         # 잘못된 키 / 유효하지 않은 API 등
         raise KmaAuthError(f"{endpoint}: {message or code}")
     raise KmaApiError(f"{endpoint}: status={code} {message}")
+
+
+def _now_kst() -> datetime.datetime:
+    """KST(UTC+9, DST 없음) 현재시각. 프로세스 타임존과 무관하게 안전."""
+    return datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+
+
+def _parse_typ02_items(text: str, name: str) -> list[dict[str, Any]]:
+    """typ02 openApi(JSON) 응답에서 item 리스트를 추출.
+
+    NODATA(03/04)는 빈 리스트, 인증/기타 오류는 예외.
+    """
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as err:
+        raise KmaApiError(f"{name}: JSON 디코딩 실패: {err}") from err
+
+    response = payload.get("response", {})
+    header = response.get("header", {})
+    code = header.get("resultCode")
+    msg = header.get("resultMsg", "")
+    if code != "00":
+        if code in ("03", "04"):
+            return []
+        if "SERVICE_KEY" in msg or "인증" in msg:
+            raise KmaAuthError(f"{name}: {msg} ({code})")
+        raise KmaApiError(f"{name}: {msg} ({code})")
+
+    items = response.get("body", {}).get("items", {})
+    if not items or "item" not in items:
+        return []
+    item = items["item"]
+    return item if isinstance(item, list) else [item]
 
 
 # ---------------------------------------------------------------------------
@@ -544,6 +608,78 @@ class KmaApiClient:
                     pcp=pcp,
                     sno=sno,
                     reh=reh,
+                )
+            )
+        return out
+
+    async def async_get_ultra_ncst(
+        self, nx: int, ny: int, *, now: datetime.datetime | None = None
+    ) -> UltraNcst | None:
+        """초단기실황 조회 (getUltraSrtNcst). [검증됨]
+
+        실황은 매시각 정시(HH00) 발표, 약 40분 후 제공 → 40분 전 기준 정시를 사용.
+        """
+        now = now or _now_kst()
+        t = now - datetime.timedelta(minutes=40)
+        base_date, base_time = t.strftime("%Y%m%d"), f"{t.hour:02d}00"
+
+        text = await self._request(
+            "api/typ02/openApi/VilageFcstInfoService_2.0/getUltraSrtNcst",
+            {
+                "base_date": base_date, "base_time": base_time,
+                "nx": nx, "ny": ny, "dataType": "JSON",
+                "numOfRows": 60, "pageNo": 1,
+            },
+            is_json_api=True,
+        )
+        items = _parse_typ02_items(text, "getUltraSrtNcst")
+        if not items:
+            return None
+        obs = {it.get("category"): it.get("obsrValue") for it in items}
+        return UltraNcst(
+            base_date=base_date, base_time=base_time,
+            t1h=_to_float(obs.get("T1H")), rn1=_to_float(obs.get("RN1")),
+            reh=_to_float(obs.get("REH")), pty=obs.get("PTY"),
+            wsd=_to_float(obs.get("WSD")), vec=_to_float(obs.get("VEC")),
+            uuu=_to_float(obs.get("UUU")), vvv=_to_float(obs.get("VVV")),
+        )
+
+    async def async_get_ultra_fcst(
+        self, nx: int, ny: int, *, now: datetime.datetime | None = None
+    ) -> list[UltraFcst]:
+        """초단기예보 조회 (getUltraSrtFcst). [검증됨]
+
+        매시각 HH30 발표, 약 45분 후 제공 → 45분 전 기준 HH30을 사용.
+        실황에 없는 하늘상태(SKY)를 보완하는 용도.
+        """
+        now = now or _now_kst()
+        t = now - datetime.timedelta(minutes=45)
+        base_date, base_time = t.strftime("%Y%m%d"), f"{t.hour:02d}30"
+
+        text = await self._request(
+            "api/typ02/openApi/VilageFcstInfoService_2.0/getUltraSrtFcst",
+            {
+                "base_date": base_date, "base_time": base_time,
+                "nx": nx, "ny": ny, "dataType": "JSON",
+                "numOfRows": 300, "pageNo": 1,
+            },
+            is_json_api=True,
+        )
+        items = _parse_typ02_items(text, "getUltraSrtFcst")
+        grouped: dict[str, dict[str, Any]] = {}
+        for it in items:
+            key = f"{it.get('fcstDate')}{it.get('fcstTime')}"
+            grouped.setdefault(key, {"fcstDate": it.get("fcstDate"), "fcstTime": it.get("fcstTime")})
+            grouped[key][it.get("category")] = it.get("fcstValue")
+
+        out: list[UltraFcst] = []
+        for _key, d in sorted(grouped.items()):
+            out.append(
+                UltraFcst(
+                    fcst_date=d["fcstDate"], fcst_time=d["fcstTime"],
+                    t1h=_to_float(d.get("T1H")), sky=d.get("SKY"), pty=d.get("PTY"),
+                    reh=_to_float(d.get("REH")), wsd=_to_float(d.get("WSD")),
+                    vec=_to_float(d.get("VEC")),
                 )
             )
         return out

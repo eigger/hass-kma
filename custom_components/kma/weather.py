@@ -29,14 +29,17 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 from .coordinator import KmaForecastCoordinator
 from .api import VillageForecast, LandForecast
+from .helpers import parse_pcp
 
 _LOGGER = logging.getLogger(__name__)
 
 
 # 하늘상태 및 강수형태 기반 날씨 상태 매핑 함수
 def get_ha_condition(sky: str | None, pty: str | None, is_night: bool) -> str:
-    """기상청 하늘상태 및 강수형태를 홈어시스턴트 날씨 상태로 변환."""
-    # pty: 강수형태 (0:없음, 1:비, 2:비/눈, 3:눈, 4:소나기)
+    """기상청 하늘상태 및 강수형태를 홈어시스턴트 날씨 상태로 변환.
+
+    pty 단기예보(0없음,1비,2비/눈,3눈,4소나기) + 초단기(5빗방울,6빗방울눈날림,7눈날림)
+    """
     if pty == "1":
         return ATTR_CONDITION_RAINY
     elif pty == "2":
@@ -45,6 +48,12 @@ def get_ha_condition(sky: str | None, pty: str | None, is_night: bool) -> str:
         return ATTR_CONDITION_SNOWY
     elif pty == "4":
         return ATTR_CONDITION_POURING
+    elif pty == "5":  # 빗방울
+        return ATTR_CONDITION_RAINY
+    elif pty == "6":  # 빗방울/눈날림
+        return ATTR_CONDITION_SNOWY_RAINY
+    elif pty == "7":  # 눈날림
+        return ATTR_CONDITION_SNOWY
 
     # pty == "0" 또는 없음인 경우 하늘상태(sky)로 매핑
     # sky: 하늘상태 (1:맑음, 3:구름많음, 4:흐림)
@@ -56,23 +65,6 @@ def get_ha_condition(sky: str | None, pty: str | None, is_night: bool) -> str:
         return ATTR_CONDITION_CLOUDY
 
     return ATTR_CONDITION_CLOUDY  # 기본 폴백
-
-
-def parse_pcp(val: str | None) -> float | None:
-    """1시간 강수량 문자열 파싱."""
-    if not val or "강수없음" in val or val == "0" or val == "0.0":
-        return 0.0
-    try:
-        # 예: "1.0mm 미만" -> 0.5, "1.0mm" -> 1.0, "30.0~50.0mm" -> 40.0, "50.0mm 이상" -> 50.0
-        val_clean = val.replace("mm", "").replace("미만", "").replace("이상", "").strip()
-        if "~" in val_clean:
-            parts = val_clean.split("~")
-            return (float(parts[0]) + float(parts[1])) / 2.0
-        if "미만" in val:
-            return float(val_clean) * 0.5
-        return float(val_clean)
-    except ValueError:
-        return None
 
 
 def aggregate_daily_forecasts(
@@ -276,28 +268,6 @@ class KmaWeather(CoordinatorEntity[KmaForecastCoordinator], WeatherEntity):
             via_device=(DOMAIN, coordinator.config_entry.entry_id),
         )
 
-    def _get_current_forecast(self) -> VillageForecast | None:
-        """현재 시각에 가장 인접한 동네예보 레코드를 반환."""
-        village: list[VillageForecast] = self.coordinator.data.get("village", [])
-        if not village:
-            return None
-
-        now = datetime.datetime.now()
-        closest = None
-        min_diff = None
-
-        for f in village:
-            try:
-                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
-                diff = abs((f_dt - now).total_seconds())
-                if min_diff is None or diff < min_diff:
-                    min_diff = diff
-                    closest = f
-            except ValueError:
-                continue
-
-        return closest or village[0]
-
     def _is_night(self) -> bool:
         """낮/밤 판단."""
         sun_state = self.hass.states.get("sun.sun")
@@ -314,35 +284,31 @@ class KmaWeather(CoordinatorEntity[KmaForecastCoordinator], WeatherEntity):
 
     @property
     def condition(self) -> str | None:
-        """현재 기상 상태."""
-        curr = self._get_current_forecast()
-        if not curr:
+        """현재 기상 상태 (실황 기반)."""
+        cur = self.coordinator.get_current()
+        if cur.tmp is None and cur.sky is None and cur.pty is None:
             return None
-        return get_ha_condition(curr.sky, curr.pty, self._is_night())
+        return get_ha_condition(cur.sky, cur.pty, self._is_night())
 
     @property
     def native_temperature(self) -> float | None:
-        """현재 온도."""
-        curr = self._get_current_forecast()
-        return curr.tmp if curr else None
+        """현재 온도 (실황)."""
+        return self.coordinator.get_current().tmp
 
     @property
     def humidity(self) -> float | None:
-        """현재 습도."""
-        curr = self._get_current_forecast()
-        return curr.reh if curr else None
+        """현재 습도 (실황)."""
+        return self.coordinator.get_current().reh
 
     @property
     def native_wind_speed(self) -> float | None:
-        """현재 풍속."""
-        curr = self._get_current_forecast()
-        return curr.wsd if curr else None
+        """현재 풍속 (실황)."""
+        return self.coordinator.get_current().wsd
 
     @property
     def wind_bearing(self) -> float | None:
-        """현재 풍향."""
-        curr = self._get_current_forecast()
-        return curr.vec if curr else None
+        """현재 풍향 (실황)."""
+        return self.coordinator.get_current().vec
 
     def _get_hourly_forecasts(self) -> list[Forecast] | None:
         """시간별 예보 생성."""
