@@ -1,8 +1,11 @@
 """기상청(KMA) 바이너리 센서(Binary Sensor) 플랫폼 구현."""
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import Any
+
+from homeassistant.util import dt as dt_util
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -106,7 +109,10 @@ async def async_setup_entry(
     for subentry_id, coordinator in coordinators.items():
         subentry = entry.subentries[subentry_id]
         async_add_entities(
-            [KmaWarningBinarySensor(coordinator, subentry)],
+            [
+                KmaWarningBinarySensor(coordinator, subentry),
+                KmaPrecipitationBinarySensor(coordinator, subentry),
+            ],
             config_subentry_id=subentry_id,
         )
 
@@ -188,6 +194,69 @@ class KmaWarningBinarySensor(CoordinatorEntity[KmaForecastCoordinator], BinarySe
         return {
             "warnings_count": len(warnings),
             "active_warnings": warnings_detail,
+        }
+
+
+PRECIP_WINDOW_HOURS = 6
+
+PTY_NAMES_KO = {
+    "1": "비", "2": "비/눈", "3": "눈", "4": "소나기",
+    "5": "빗방울", "6": "빗방울/눈날림", "7": "눈날림",
+}
+
+
+class KmaPrecipitationBinarySensor(
+    CoordinatorEntity[KmaForecastCoordinator], BinarySensorEntity
+):
+    """향후 일정 시간 내 강수(비/눈) 예보 여부. 자동화 트리거용.
+
+    on  = 향후 PRECIP_WINDOW_HOURS 시간 내 강수 예보 있음
+    속성 = 유형/시작시각/강수확률/예상량/남은시간
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self, coordinator: KmaForecastCoordinator, subentry: ConfigSubentry
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_translation_key = "precipitation_expected"
+        self._attr_unique_id = f"{subentry.subentry_id}_precipitation_expected"
+        zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, subentry.subentry_id)},
+            name=zone_name,
+            manufacturer="Korea Meteorological Administration",
+            model="KMA APIhub Forecast",
+            via_device=(DOMAIN, coordinator.config_entry.entry_id),
+        )
+
+    def _next(self):
+        nxt = self.coordinator.next_precipitation()
+        if nxt is None:
+            return None
+        hours = (nxt.dt - datetime.datetime.now()).total_seconds() / 3600.0
+        return nxt, hours
+
+    @property
+    def is_on(self) -> bool:
+        result = self._next()
+        return result is not None and result[1] <= PRECIP_WINDOW_HOURS
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        result = self._next()
+        if result is None:
+            return {"window_hours": PRECIP_WINDOW_HOURS}
+        nxt, hours = result
+        return {
+            "window_hours": PRECIP_WINDOW_HOURS,
+            "start_time": dt_util.as_local(nxt.dt).isoformat(),
+            "type": PTY_NAMES_KO.get(nxt.pty, "강수"),
+            "type_code": nxt.pty,
+            "precipitation_probability": nxt.pop,
+            "precipitation_amount": nxt.pcp,
+            "hours_until": round(hours, 1),
         }
 
 

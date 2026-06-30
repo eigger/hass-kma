@@ -311,33 +311,27 @@ class KmaWeather(CoordinatorEntity[KmaForecastCoordinator], WeatherEntity):
         return self.coordinator.get_current().vec
 
     def _get_hourly_forecasts(self) -> list[Forecast] | None:
-        """시간별 예보 생성."""
-        village: list[VillageForecast] = self.coordinator.data.get("village", [])
-        if not village:
+        """시간별 예보 생성.
+
+        근시간(앞 6시간)은 초단기예보, 이후는 단기예보를 병합(coordinator.forecast_points).
+        """
+        points = self.coordinator.forecast_points()
+        if not points:
             return None
 
         out: list[Forecast] = []
-        for vf in village:
-            try:
-                dt = datetime.datetime.strptime(f"{vf.fcst_date}{vf.fcst_time}", "%Y%m%d%H%M")
-                dt_localized = dt_util.as_utc(dt_util.as_local(dt))
-                datetime_str = dt_localized.isoformat()
-            except ValueError:
-                continue
-
-            cond = get_ha_condition(vf.sky, vf.pty, self._is_night_at_hour(dt.hour))
-            precip = parse_pcp(vf.pcp)
-
+        for p in points:
+            dt_localized = dt_util.as_utc(dt_util.as_local(p.dt))
             out.append(
                 Forecast(
-                    datetime=datetime_str,
-                    condition=cond,
-                    native_temperature=vf.tmp,
-                    humidity=vf.reh,
-                    native_wind_speed=vf.wsd,
-                    wind_bearing=int(vf.vec) if vf.vec is not None else None,
-                    native_precipitation=precip,
-                    precipitation_probability=int(vf.pop) if vf.pop is not None else None,
+                    datetime=dt_localized.isoformat(),
+                    condition=get_ha_condition(p.sky, p.pty, self._is_night_at_hour(p.dt.hour)),
+                    native_temperature=p.tmp,
+                    humidity=p.reh,
+                    native_wind_speed=p.wsd,
+                    wind_bearing=int(p.vec) if p.vec is not None else None,
+                    native_precipitation=p.pcp,
+                    precipitation_probability=int(p.pop) if p.pop is not None else None,
                 )
             )
         return out

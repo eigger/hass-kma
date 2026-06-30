@@ -164,11 +164,17 @@
       },
       "one_line_summary": {
         "name": "한 줄 기상 요약"
+      },
+      "precipitation_start": {
+        "name": "강수 시작 시각"
       }
     },
     "binary_sensor": {
       "warning": {
         "name": "기상 특보"
+      },
+      "precipitation_expected": {
+        "name": "곧 강수 예보"
       },
       "activation_village_forecast": {
         "name": "동네예보 API"

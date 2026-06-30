@@ -177,6 +177,7 @@ class UltraFcst:
     reh: float | None    # 습도 (%)
     wsd: float | None    # 풍속 (m/s)
     vec: float | None    # 풍향 (deg)
+    rn1: str | None      # 1시간 강수량 (범주 문자열, 예 "강수없음"/"1.0mm")
 
 
 # 하늘상태코드
@@ -300,9 +301,12 @@ def _raise_for_error_payload(status: int, body: str, endpoint: str) -> None:
     raise KmaApiError(f"{endpoint}: status={code} {message}")
 
 
+_KST = datetime.timezone(datetime.timedelta(hours=9))
+
+
 def _now_kst() -> datetime.datetime:
-    """KST(UTC+9, DST 없음) 현재시각. 프로세스 타임존과 무관하게 안전."""
-    return datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+    """KST(UTC+9, DST 없음) 현재시각(naive). 프로세스 타임존과 무관하게 안전."""
+    return datetime.datetime.now(_KST).replace(tzinfo=None)
 
 
 def _parse_typ02_items(text: str, name: str) -> list[dict[str, Any]]:
@@ -679,7 +683,7 @@ class KmaApiClient:
                     fcst_date=d["fcstDate"], fcst_time=d["fcstTime"],
                     t1h=_to_float(d.get("T1H")), sky=d.get("SKY"), pty=d.get("PTY"),
                     reh=_to_float(d.get("REH")), wsd=_to_float(d.get("WSD")),
-                    vec=_to_float(d.get("VEC")),
+                    vec=_to_float(d.get("VEC")), rn1=d.get("RN1"),
                 )
             )
         return out

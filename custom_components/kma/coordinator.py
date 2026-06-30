@@ -39,6 +39,21 @@ class CurrentWeather:
     source: str           # "ncst"(실황) | "village"(단기예보) | "none"
 
 
+@dataclass(frozen=True)
+class ForecastPoint:
+    """시간별 예보 1포인트 (초단기예보 6시간 + 단기예보 병합)."""
+
+    dt: "datetime.datetime"  # 예보 시각 (KST naive)
+    tmp: float | None
+    sky: str | None
+    pty: str | None
+    reh: float | None
+    wsd: float | None
+    vec: float | None
+    pop: float | None        # 강수확률 (%)
+    pcp: float | None        # 1시간 강수량 (mm)
+
+
 class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """KMA 예·특보 데이터 코디네이터 (Zone 서브엔트리 단위)."""
 
@@ -241,6 +256,65 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 source="village",
             )
         return CurrentWeather(None, None, None, None, None, None, None, None, "none")
+
+    def forecast_points(self) -> list[ForecastPoint]:
+        """시간별 예보를 초단기예보(앞 6시간) + 단기예보로 병합해 시간순 반환.
+
+        근시간은 더 정확한 초단기예보로 덮고, 그 이후는 단기예보로 채운다.
+        강수확률(POP)은 초단기예보에 없으므로 같은 시각의 단기예보에서 보완.
+        """
+        data = self.data or {}
+        ultra = data.get("ultra") or []
+        village = data.get("village") or []
+        vmap = {f"{v.fcst_date}{v.fcst_time}": v for v in village}
+
+        points: list[ForecastPoint] = []
+        seen: set[str] = set()
+
+        for u in ultra:
+            key = f"{u.fcst_date}{u.fcst_time}"
+            try:
+                dt = datetime.datetime.strptime(key, "%Y%m%d%H%M")
+            except ValueError:
+                continue
+            seen.add(key)
+            v = vmap.get(key)
+            points.append(
+                ForecastPoint(
+                    dt=dt, tmp=u.t1h, sky=u.sky, pty=u.pty, reh=u.reh,
+                    wsd=u.wsd, vec=u.vec,
+                    pop=(v.pop if v else None), pcp=parse_pcp(u.rn1),
+                )
+            )
+
+        last_ultra_key = max(seen) if seen else ""
+        for v in village:
+            key = f"{v.fcst_date}{v.fcst_time}"
+            if key <= last_ultra_key:
+                continue
+            try:
+                dt = datetime.datetime.strptime(key, "%Y%m%d%H%M")
+            except ValueError:
+                continue
+            points.append(
+                ForecastPoint(
+                    dt=dt, tmp=v.tmp, sky=v.sky, pty=v.pty, reh=v.reh,
+                    wsd=v.wsd, vec=v.vec, pop=v.pop, pcp=parse_pcp(v.pcp),
+                )
+            )
+
+        points.sort(key=lambda p: p.dt)
+        return points
+
+    def next_precipitation(self) -> ForecastPoint | None:
+        """앞으로 강수가 시작되는 가장 가까운 예보 포인트. 없으면 None."""
+        now = datetime.datetime.now()
+        for p in self.forecast_points():
+            if p.dt < now - datetime.timedelta(hours=1):
+                continue
+            if p.pty and p.pty != "0":
+                return p
+        return None
 
     def _iter_forecast_base_times(
         self, now: datetime.datetime, count: int = 4

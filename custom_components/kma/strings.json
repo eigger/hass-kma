@@ -164,11 +164,17 @@
       },
       "one_line_summary": {
         "name": "One-line Weather Summary"
+      },
+      "precipitation_start": {
+        "name": "Precipitation Start Time"
       }
     },
     "binary_sensor": {
       "warning": {
         "name": "Weather Warning"
+      },
+      "precipitation_expected": {
+        "name": "Precipitation Expected"
       },
       "activation_village_forecast": {
         "name": "Village Forecast API"

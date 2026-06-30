@@ -19,6 +19,7 @@ from homeassistant.const import (
     UnitOfLength,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -258,6 +259,12 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         icon="mdi:weather-snowy-rainy",
     ),
     SensorEntityDescription(
+        key="precipitation_start",
+        translation_key="precipitation_start",
+        icon="mdi:weather-pouring",
+        device_class=SensorDeviceClass.TIMESTAMP,
+    ),
+    SensorEntityDescription(
         key="apparent_temperature",
         translation_key="apparent_temperature",
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -390,6 +397,10 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         if key == "marine_forecast_summary":
             marine = data.get("marine", [])
             return marine[0].wf if marine else None
+
+        if key == "precipitation_start":
+            nxt = self.coordinator.next_precipitation()
+            return dt_util.as_local(nxt.dt) if nxt is not None else None
 
         # 오늘 최고/최저 기온 및 비/눈 탐색용 데이터
         village = data.get("village", [])
@@ -693,6 +704,26 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                     "wave_height_min": marine[0].wh_min,
                     "wave_height_max": marine[0].wh_max,
                 }
+
+        if key == "precipitation_start":
+            nxt = self.coordinator.next_precipitation()
+            if nxt is None:
+                return {"expected": False}
+            hours = round(
+                (nxt.dt - datetime.datetime.now()).total_seconds() / 3600.0, 1
+            )
+            pty_names = {
+                "1": "비", "2": "비/눈", "3": "눈", "4": "소나기",
+                "5": "빗방울", "6": "빗방울/눈날림", "7": "눈날림",
+            }
+            return {
+                "expected": True,
+                "type": pty_names.get(nxt.pty, "강수"),
+                "type_code": nxt.pty,
+                "precipitation_probability": nxt.pop,
+                "precipitation_amount": nxt.pcp,
+                "hours_until": hours,
+            }
 
         # 비/눈 예보 상세 속성
         if key == "rain_snow_expected":
