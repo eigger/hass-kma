@@ -19,7 +19,7 @@ from homeassistant.components.weather import (
     ATTR_CONDITION_SUNNY,
 )
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
-from homeassistant.const import Platform, UnitOfTemperature, UnitOfSpeed
+from homeassistant.const import UnitOfTemperature, UnitOfSpeed
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback

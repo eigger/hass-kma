@@ -219,7 +219,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         try:
             return await coro, "ok"
-        except KmaActivationRequiredError as err:
+        except KmaActivationRequiredError:
             _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
             return [], "not_applied"
         except KmaApiError as err:

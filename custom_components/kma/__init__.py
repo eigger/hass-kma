@@ -4,7 +4,6 @@
 """
 from __future__ import annotations
 
-from datetime import timedelta
 import logging
 
 from homeassistant.config_entries import ConfigEntry
