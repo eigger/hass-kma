@@ -170,6 +170,18 @@
       },
       "precipitation_start": {
         "name": "Precipitation Start Time"
+      },
+      "error_count_village_forecast": {
+        "name": "Village Forecast API Error Count"
+      },
+      "error_count_land_forecast": {
+        "name": "Land Forecast API Error Count"
+      },
+      "error_count_marine_forecast": {
+        "name": "Marine Forecast API Error Count"
+      },
+      "error_count_warning_now": {
+        "name": "Weather Warning API Error Count"
       }
     },
     "binary_sensor": {

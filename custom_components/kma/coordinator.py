@@ -56,6 +56,9 @@ class ForecastPoint:
     sno: float | None        # 1시간 신적설 (cm)
 
 
+_API_STATUS_KEYS = ["village_forecast", "land_forecast", "marine_forecast", "warning_now"]
+
+
 class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """KMA 예·특보 데이터 코디네이터 (Zone 서브엔트리 단위)."""
 
@@ -73,6 +76,12 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.ny = subentry.data["ny"]
         self.land_reg = subentry.data["land_reg"]
         self.marine_reg = subentry.data["marine_reg"]
+
+        # API별 누적 에러 카운트 / 마지막 에러 시각 (HA 재시작 전까지 유지)
+        self._api_error_counts: dict[str, int] = {k: 0 for k in _API_STATUS_KEYS}
+        self._api_last_error_time: dict[str, datetime.datetime | None] = {
+            k: None for k in _API_STATUS_KEYS
+        }
 
         scan_interval = config_entry.options.get("scan_interval", 10)
 
@@ -186,6 +195,13 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         data["api_status"] = status
 
+        # API별 에러 카운트 / 마지막 에러 시각 업데이트 (UpdateFailed 이전에 기록해야 함)
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        for api_key, api_stat in status.items():
+            if isinstance(api_stat, str) and api_stat.startswith("error"):
+                self._api_error_counts[api_key] = self._api_error_counts.get(api_key, 0) + 1
+                self._api_last_error_time[api_key] = now_utc
+
         # 핵심 데이터인 동네예보(village)가 연결 오류(error)이거나 모든 API가 연결 오류면
         # 통합 단위 실패(UpdateFailed)로 처리하여 센서를 '사용 불가(오류)' 상태로 표시하고 재시도를 유도합니다.
         # (미신청/NODATA는 정상 동작 범위로 보고 실패시키지 않습니다.)
@@ -214,6 +230,16 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def api_status(self) -> dict[str, str]:
         """현재 기록된 API별 접근 상태."""
         return (self.data or {}).get("api_status", {})
+
+    @property
+    def api_error_counts(self) -> dict[str, int]:
+        """API별 누적 에러 카운트 (세션 기준)."""
+        return dict(self._api_error_counts)
+
+    @property
+    def api_last_error_times(self) -> dict[str, datetime.datetime | None]:
+        """API별 마지막 에러 발생 시각 (UTC aware). 에러 없으면 None."""
+        return dict(self._api_last_error_time)
 
     def _nearest_village(self) -> VillageForecast | None:
         """현재 시각에 가장 가까운 동네예보 레코드(폴백/POP용)."""

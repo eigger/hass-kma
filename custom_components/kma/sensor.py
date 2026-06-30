@@ -14,12 +14,14 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import (
     PERCENTAGE,
+    EntityCategory,
     UnitOfTemperature,
     UnitOfSpeed,
     UnitOfLength,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -329,18 +331,34 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
 ]
 
 
+_API_STATUS_KEYS = ["village_forecast", "land_forecast", "marine_forecast", "warning_now"]
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Zone 서브엔트리별 센서 엔티티 추가."""
+    """Zone 서브엔트리별 센서 + 허브 단위 API 에러 카운트 센서 추가."""
     store = hass.data[DOMAIN][entry.entry_id]
-    for subentry_id, coordinator in store["coordinators"].items():
+    coordinators = store["coordinators"]
+
+    for subentry_id, coordinator in coordinators.items():
         subentry = entry.subentries[subentry_id]
         async_add_entities(
             [KmaSensor(coordinator, subentry, desc) for desc in SENSOR_DESCRIPTIONS],
             config_subentry_id=subentry_id,
+        )
+
+    # 허브(통합) 기기: API별 에러 카운트 진단 센서.
+    # Zone 코디네이터 중 첫 번째를 대표로 사용하고, 에러 카운트는 인스턴스 변수로 추적.
+    if coordinators:
+        rep_coordinator = next(iter(coordinators.values()))
+        async_add_entities(
+            [
+                KmaApiErrorCountSensor(rep_coordinator, entry, key)
+                for key in _API_STATUS_KEYS
+            ]
         )
 
 
@@ -930,3 +948,52 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 return attrs
 
         return None
+
+
+class KmaApiErrorCountSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
+    """허브 단위 API별 누적 에러 카운트 진단 센서.
+
+    UpdateFailed 상태에서도 카운터를 표시해야 하므로 available 를 항상 True로 유지.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:alert-circle-outline"
+
+    def __init__(
+        self,
+        coordinator: KmaForecastCoordinator,
+        entry: ConfigEntry,
+        api_key: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._api_key = api_key
+        self._attr_translation_key = f"error_count_{api_key}"
+        self._attr_unique_id = f"{entry.entry_id}_error_count_{api_key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="기상청 APIhub",
+            manufacturer="Korea Meteorological Administration",
+            model="API Hub",
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+    @property
+    def available(self) -> bool:
+        """에러 카운터는 코디네이터 상태와 무관하게 항상 표시."""
+        return True
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.api_error_counts.get(self._api_key, 0)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        last_time = self.coordinator.api_last_error_times.get(self._api_key)
+        return {
+            "last_error_time": (
+                dt_util.as_local(last_time).isoformat() if last_time is not None else None
+            ),
+            "current_status": self.coordinator.api_status.get(self._api_key, "unknown"),
+        }
