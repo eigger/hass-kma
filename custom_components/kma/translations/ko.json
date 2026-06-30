@@ -88,6 +88,9 @@
       "precipitation": {
         "name": "1시간 강수량"
       },
+      "snowfall": {
+        "name": "1시간 신적설(예보)"
+      },
       "today_temp_low": {
         "name": "오늘 최저기온"
       },
@@ -164,11 +167,29 @@
       },
       "one_line_summary": {
         "name": "한 줄 기상 요약"
+      },
+      "precipitation_start": {
+        "name": "강수 시작 시각"
+      },
+      "error_count_village_forecast": {
+        "name": "동네예보 API 오류 수"
+      },
+      "error_count_land_forecast": {
+        "name": "육상예보 API 오류 수"
+      },
+      "error_count_marine_forecast": {
+        "name": "해상예보 API 오류 수"
+      },
+      "error_count_warning_now": {
+        "name": "기상특보 API 오류 수"
       }
     },
     "binary_sensor": {
       "warning": {
         "name": "기상 특보"
+      },
+      "precipitation_expected": {
+        "name": "곧 강수 예보"
       },
       "activation_village_forecast": {
         "name": "동네예보 API"

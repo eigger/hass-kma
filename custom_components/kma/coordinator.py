@@ -6,14 +6,57 @@ from datetime import timedelta
 import logging
 from typing import Any
 
+from dataclasses import dataclass
+
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import DOMAIN, PROVINCE_WARNING_KEYWORDS
-from .api import KmaApiClient, KmaApiError, KmaActivationRequiredError
+from .api import (
+    KmaApiClient,
+    KmaApiError,
+    KmaActivationRequiredError,
+    VillageForecast,
+)
+from .helpers import parse_pcp, parse_sno
 
 _LOGGER = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CurrentWeather:
+    """현재 날씨(실황 우선, 없으면 단기예보 폴백)를 표현하는 통합 값."""
+
+    tmp: float | None     # 기온 (℃)
+    reh: float | None     # 습도 (%)
+    wsd: float | None     # 풍속 (m/s)
+    vec: float | None     # 풍향 (deg)
+    pty: str | None       # 강수형태
+    sky: str | None       # 하늘상태
+    pcp: float | None     # 1시간 강수량 (mm)
+    sno: float | None     # 1시간 신적설 (cm, 예보값 — 실황엔 없음)
+    pop: float | None     # 강수확률 (%, 예보값)
+    source: str           # "ncst"(실황) | "village"(단기예보) | "none"
+
+
+@dataclass(frozen=True)
+class ForecastPoint:
+    """시간별 예보 1포인트 (초단기예보 6시간 + 단기예보 병합)."""
+
+    dt: "datetime.datetime"  # 예보 시각 (KST naive)
+    tmp: float | None
+    sky: str | None
+    pty: str | None
+    reh: float | None
+    wsd: float | None
+    vec: float | None
+    pop: float | None        # 강수확률 (%)
+    pcp: float | None        # 1시간 강수량 (mm)
+    sno: float | None        # 1시간 신적설 (cm)
+
+
+_API_STATUS_KEYS = ["village_forecast", "land_forecast", "marine_forecast", "warning_now"]
 
 
 class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -33,6 +76,12 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.ny = subentry.data["ny"]
         self.land_reg = subentry.data["land_reg"]
         self.marine_reg = subentry.data["marine_reg"]
+
+        # API별 누적 에러 카운트 / 마지막 에러 시각 (HA 재시작 전까지 유지)
+        self._api_error_counts: dict[str, int] = {k: 0 for k in _API_STATUS_KEYS}
+        self._api_last_error_time: dict[str, datetime.datetime | None] = {
+            k: None for k in _API_STATUS_KEYS
+        }
 
         scan_interval = config_entry.options.get("scan_interval", 10)
 
@@ -89,6 +138,22 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             data["village"] = village_forecasts
 
+        # 1-2. 초단기실황/초단기예보 — 현재 날씨를 실측 기반으로 표시.
+        # 실패하면 이전 값을 유지하고, 그래도 없으면 단기예보로 폴백한다(get_current).
+        try:
+            ncst = await self.client.async_get_ultra_ncst(self.nx, self.ny)
+        except KmaApiError as err:
+            _LOGGER.debug("초단기실황(getUltraSrtNcst) 실패: %s", err)
+            ncst = None
+        data["ncst"] = ncst or (self.data or {}).get("ncst")
+
+        try:
+            ultra = await self.client.async_get_ultra_fcst(self.nx, self.ny)
+        except KmaApiError as err:
+            _LOGGER.debug("초단기예보(getUltraSrtFcst) 실패: %s", err)
+            ultra = []
+        data["ultra"] = ultra or (self.data or {}).get("ultra", [])
+
         # 2. 육상예보 (fct_afs_dl.php)
         land, status["land_forecast"] = await self._fetch_optional(
             "육상예보", self.client.async_get_land_forecast(self.land_reg)
@@ -130,6 +195,13 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         data["api_status"] = status
 
+        # API별 에러 카운트 / 마지막 에러 시각 업데이트 (UpdateFailed 이전에 기록해야 함)
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        for api_key, api_stat in status.items():
+            if isinstance(api_stat, str) and api_stat.startswith("error"):
+                self._api_error_counts[api_key] = self._api_error_counts.get(api_key, 0) + 1
+                self._api_last_error_time[api_key] = now_utc
+
         # 핵심 데이터인 동네예보(village)가 연결 오류(error)이거나 모든 API가 연결 오류면
         # 통합 단위 실패(UpdateFailed)로 처리하여 센서를 '사용 불가(오류)' 상태로 표시하고 재시도를 유도합니다.
         # (미신청/NODATA는 정상 동작 범위로 보고 실패시키지 않습니다.)
@@ -147,7 +219,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         try:
             return await coro, "ok"
-        except KmaActivationRequiredError as err:
+        except KmaActivationRequiredError:
             _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
             return [], "not_applied"
         except KmaApiError as err:
@@ -158,6 +230,124 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def api_status(self) -> dict[str, str]:
         """현재 기록된 API별 접근 상태."""
         return (self.data or {}).get("api_status", {})
+
+    @property
+    def api_error_counts(self) -> dict[str, int]:
+        """API별 누적 에러 카운트 (세션 기준)."""
+        return dict(self._api_error_counts)
+
+    @property
+    def api_last_error_times(self) -> dict[str, datetime.datetime | None]:
+        """API별 마지막 에러 발생 시각 (UTC aware). 에러 없으면 None."""
+        return dict(self._api_last_error_time)
+
+    def _nearest_village(self) -> VillageForecast | None:
+        """현재 시각에 가장 가까운 동네예보 레코드(폴백/POP용)."""
+        village: list[VillageForecast] = (self.data or {}).get("village", [])
+        if not village:
+            return None
+        now = datetime.datetime.now()
+        best, best_diff = None, None
+        for vf in village:
+            try:
+                vdt = datetime.datetime.strptime(f"{vf.fcst_date}{vf.fcst_time}", "%Y%m%d%H%M")
+            except ValueError:
+                continue
+            diff = abs((vdt - now).total_seconds())
+            if best_diff is None or diff < best_diff:
+                best, best_diff = vf, diff
+        return best or village[0]
+
+    def get_current(self) -> CurrentWeather:
+        """현재 날씨를 실황(getUltraSrtNcst) 우선으로 반환.
+
+        실황에 없는 하늘상태(SKY)는 초단기예보(getUltraSrtFcst)로 보완하고,
+        강수확률(POP)은 단기예보에서 가져온다. 실황이 없으면 단기예보로 폴백.
+        """
+        data = self.data or {}
+        ncst = data.get("ncst")
+        ultra: list = data.get("ultra") or []
+        vf = self._nearest_village()
+        pop = vf.pop if vf else None
+
+        # 적설(SNO)은 실황에 없으므로 단기예보(가장 가까운 시각)에서 가져온다.
+        sno = parse_sno(vf.sno) if vf else None
+
+        if ncst is not None:
+            sky = ultra[0].sky if ultra else (vf.sky if vf else None)
+            pty = ncst.pty if ncst.pty is not None else (ultra[0].pty if ultra else None)
+            return CurrentWeather(
+                tmp=ncst.t1h, reh=ncst.reh, wsd=ncst.wsd, vec=ncst.vec,
+                pty=pty, sky=sky, pcp=ncst.rn1, sno=sno, pop=pop, source="ncst",
+            )
+        if vf is not None:
+            return CurrentWeather(
+                tmp=vf.tmp, reh=vf.reh, wsd=vf.wsd, vec=vf.vec,
+                pty=vf.pty, sky=vf.sky, pcp=parse_pcp(vf.pcp), sno=sno,
+                pop=vf.pop, source="village",
+            )
+        return CurrentWeather(None, None, None, None, None, None, None, None, None, "none")
+
+    def forecast_points(self) -> list[ForecastPoint]:
+        """시간별 예보를 초단기예보(앞 6시간) + 단기예보로 병합해 시간순 반환.
+
+        근시간은 더 정확한 초단기예보로 덮고, 그 이후는 단기예보로 채운다.
+        강수확률(POP)은 초단기예보에 없으므로 같은 시각의 단기예보에서 보완.
+        """
+        data = self.data or {}
+        ultra = data.get("ultra") or []
+        village = data.get("village") or []
+        vmap = {f"{v.fcst_date}{v.fcst_time}": v for v in village}
+
+        points: list[ForecastPoint] = []
+        seen: set[str] = set()
+
+        for u in ultra:
+            key = f"{u.fcst_date}{u.fcst_time}"
+            try:
+                dt = datetime.datetime.strptime(key, "%Y%m%d%H%M")
+            except ValueError:
+                continue
+            seen.add(key)
+            v = vmap.get(key)
+            points.append(
+                ForecastPoint(
+                    dt=dt, tmp=u.t1h, sky=u.sky, pty=u.pty, reh=u.reh,
+                    wsd=u.wsd, vec=u.vec,
+                    pop=(v.pop if v else None), pcp=parse_pcp(u.rn1),
+                    sno=(parse_sno(v.sno) if v else None),
+                )
+            )
+
+        last_ultra_key = max(seen) if seen else ""
+        for v in village:
+            key = f"{v.fcst_date}{v.fcst_time}"
+            if key <= last_ultra_key:
+                continue
+            try:
+                dt = datetime.datetime.strptime(key, "%Y%m%d%H%M")
+            except ValueError:
+                continue
+            points.append(
+                ForecastPoint(
+                    dt=dt, tmp=v.tmp, sky=v.sky, pty=v.pty, reh=v.reh,
+                    wsd=v.wsd, vec=v.vec, pop=v.pop, pcp=parse_pcp(v.pcp),
+                    sno=parse_sno(v.sno),
+                )
+            )
+
+        points.sort(key=lambda p: p.dt)
+        return points
+
+    def next_precipitation(self) -> ForecastPoint | None:
+        """앞으로 강수가 시작되는 가장 가까운 예보 포인트. 없으면 None."""
+        now = datetime.datetime.now()
+        for p in self.forecast_points():
+            if p.dt < now - datetime.timedelta(hours=1):
+                continue
+            if p.pty and p.pty != "0":
+                return p
+        return None
 
     def _iter_forecast_base_times(
         self, now: datetime.datetime, count: int = 4

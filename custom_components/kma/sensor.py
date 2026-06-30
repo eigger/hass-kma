@@ -14,11 +14,14 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import (
     PERCENTAGE,
+    EntityCategory,
     UnitOfTemperature,
     UnitOfSpeed,
     UnitOfLength,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
+from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -26,7 +29,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import KmaForecastCoordinator
 from .api import VillageForecast
-from .weather import parse_pcp, get_ha_condition
+from .weather import get_ha_condition
+from .helpers import parse_pcp
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -238,6 +242,14 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
+        key="snowfall",
+        translation_key="snowfall",
+        icon="mdi:weather-snowy",
+        native_unit_of_measurement=UnitOfLength.CENTIMETERS,
+        device_class=SensorDeviceClass.PRECIPITATION,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
         key="today_temp_low",
         translation_key="today_temp_low",
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -255,6 +267,12 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         key="rain_snow_expected",
         translation_key="rain_snow_expected",
         icon="mdi:weather-snowy-rainy",
+    ),
+    SensorEntityDescription(
+        key="precipitation_start",
+        translation_key="precipitation_start",
+        icon="mdi:weather-pouring",
+        device_class=SensorDeviceClass.TIMESTAMP,
     ),
     SensorEntityDescription(
         key="apparent_temperature",
@@ -313,18 +331,34 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
 ]
 
 
+_API_STATUS_KEYS = ["village_forecast", "land_forecast", "marine_forecast", "warning_now"]
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Zone 서브엔트리별 센서 엔티티 추가."""
+    """Zone 서브엔트리별 센서 + 허브 단위 API 에러 카운트 센서 추가."""
     store = hass.data[DOMAIN][entry.entry_id]
-    for subentry_id, coordinator in store["coordinators"].items():
+    coordinators = store["coordinators"]
+
+    for subentry_id, coordinator in coordinators.items():
         subentry = entry.subentries[subentry_id]
         async_add_entities(
             [KmaSensor(coordinator, subentry, desc) for desc in SENSOR_DESCRIPTIONS],
             config_subentry_id=subentry_id,
+        )
+
+    # 허브(통합) 기기: API별 에러 카운트 진단 센서.
+    # Zone 코디네이터 중 첫 번째를 대표로 사용하고, 에러 카운트는 인스턴스 변수로 추적.
+    if coordinators:
+        rep_coordinator = next(iter(coordinators.values()))
+        async_add_entities(
+            [
+                KmaApiErrorCountSensor(rep_coordinator, entry, key)
+                for key in _API_STATUS_KEYS
+            ]
         )
 
 
@@ -390,6 +424,10 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             marine = data.get("marine", [])
             return marine[0].wf if marine else None
 
+        if key == "precipitation_start":
+            nxt = self.coordinator.next_precipitation()
+            return dt_util.as_local(nxt.dt) if nxt is not None else None
+
         # 오늘 최고/최저 기온 및 비/눈 탐색용 데이터
         village = data.get("village", [])
         now = datetime.datetime.now()
@@ -425,10 +463,8 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                     continue
             return rain_type
 
-        # 동네예보 기반 실시간 센서
-        curr = self._get_current_forecast()
-        if not curr:
-            return None
+        # 현재값 센서: 초단기실황(실측) 우선, 없으면 단기예보 폴백
+        curr = self.coordinator.get_current()
 
         if key == "temperature":
             return curr.tmp
@@ -439,7 +475,9 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         if key == "precipitation_probability":
             return curr.pop
         if key == "precipitation":
-            return parse_pcp(curr.pcp)
+            return curr.pcp
+        if key == "snowfall":
+            return curr.sno
 
         if key == "apparent_temperature":
             import math
@@ -695,6 +733,27 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                     "wave_height_max": marine[0].wh_max,
                 }
 
+        if key == "precipitation_start":
+            nxt = self.coordinator.next_precipitation()
+            if nxt is None:
+                return {"expected": False}
+            hours = round(
+                (nxt.dt - datetime.datetime.now()).total_seconds() / 3600.0, 1
+            )
+            pty_names = {
+                "1": "비", "2": "비/눈", "3": "눈", "4": "소나기",
+                "5": "빗방울", "6": "빗방울/눈날림", "7": "눈날림",
+            }
+            return {
+                "expected": True,
+                "type": pty_names.get(nxt.pty, "강수"),
+                "type_code": nxt.pty,
+                "precipitation_probability": nxt.pop,
+                "precipitation_amount": nxt.pcp,
+                "snow_amount": nxt.sno,
+                "hours_until": hours,
+            }
+
         # 비/눈 예보 상세 속성
         if key == "rain_snow_expected":
             village = data.get("village", [])
@@ -764,6 +823,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             "wind_speed",
             "precipitation_probability",
             "precipitation",
+            "snowfall",
             "today_temp_low",
             "today_temp_high",
             "apparent_temperature",
@@ -777,6 +837,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         ):
             curr = self._get_current_forecast()
             if curr:
+                obs = self.coordinator.get_current()
                 attrs = {
                     "fcst_date": curr.fcst_date,
                     "fcst_time": curr.fcst_time,
@@ -787,10 +848,10 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 if self.hass and hasattr(self.hass, "config") and self.hass.config.language == "ko":
                     lang = "ko"
 
-                if key == "discomfort_index" and curr.tmp is not None and curr.reh is not None:
+                if key == "discomfort_index" and obs.tmp is not None and obs.reh is not None:
                     try:
-                        temp = float(curr.tmp)
-                        rh = float(curr.reh)
+                        temp = float(obs.tmp)
+                        rh = float(obs.reh)
                         di = 1.8 * temp - 0.55 * (1.0 - rh / 100.0) * (1.8 * temp - 26.0) + 32.0
                         if di < 68:
                             grade_key = "low"
@@ -887,3 +948,52 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 return attrs
 
         return None
+
+
+class KmaApiErrorCountSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
+    """허브 단위 API별 누적 에러 카운트 진단 센서.
+
+    UpdateFailed 상태에서도 카운터를 표시해야 하므로 available 를 항상 True로 유지.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_icon = "mdi:alert-circle-outline"
+
+    def __init__(
+        self,
+        coordinator: KmaForecastCoordinator,
+        entry: ConfigEntry,
+        api_key: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._api_key = api_key
+        self._attr_translation_key = f"error_count_{api_key}"
+        self._attr_unique_id = f"{entry.entry_id}_error_count_{api_key}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name="기상청 APIhub",
+            manufacturer="Korea Meteorological Administration",
+            model="API Hub",
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+    @property
+    def available(self) -> bool:
+        """에러 카운터는 코디네이터 상태와 무관하게 항상 표시."""
+        return True
+
+    @property
+    def native_value(self) -> int:
+        return self.coordinator.api_error_counts.get(self._api_key, 0)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        last_time = self.coordinator.api_last_error_times.get(self._api_key)
+        return {
+            "last_error_time": (
+                dt_util.as_local(last_time).isoformat() if last_time is not None else None
+            ),
+            "current_status": self.coordinator.api_status.get(self._api_key, "unknown"),
+        }

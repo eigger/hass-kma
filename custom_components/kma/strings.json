@@ -88,6 +88,9 @@
       "precipitation": {
         "name": "Precipitation (1h)"
       },
+      "snowfall": {
+        "name": "Snowfall (1h, forecast)"
+      },
       "today_temp_low": {
         "name": "Today Low Temperature"
       },
@@ -164,11 +167,29 @@
       },
       "one_line_summary": {
         "name": "One-line Weather Summary"
+      },
+      "precipitation_start": {
+        "name": "Precipitation Start Time"
+      },
+      "error_count_village_forecast": {
+        "name": "Village Forecast API Error Count"
+      },
+      "error_count_land_forecast": {
+        "name": "Land Forecast API Error Count"
+      },
+      "error_count_marine_forecast": {
+        "name": "Marine Forecast API Error Count"
+      },
+      "error_count_warning_now": {
+        "name": "Weather Warning API Error Count"
       }
     },
     "binary_sensor": {
       "warning": {
         "name": "Weather Warning"
+      },
+      "precipitation_expected": {
+        "name": "Precipitation Expected"
       },
       "activation_village_forecast": {
         "name": "Village Forecast API"
