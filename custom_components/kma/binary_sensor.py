@@ -30,6 +30,13 @@ API_STATUS_KEYS = [
     "land_forecast",
     "marine_forecast",
     "warning_now",
+    "pm10",
+    "uv_index",
+    "air_stagnation",
+    "oak_pollen",
+    "pine_pollen",
+    "weed_pollen",
+    "radar_precipitation",
 ]
 
 # 특보 종류 및 등급 매핑 (다국어 지원)

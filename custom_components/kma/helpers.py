@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 import math
-from .const import REPRESENTATIVE_LAND_ZONES, REPRESENTATIVE_MARINE_ZONES
+from .const import (
+    AIR_STAGNATION_GRADE_MAP,
+    PM10_GRADE_THRESHOLDS,
+    PM10_GRADE_VERY_UNHEALTHY,
+    POLLEN_RISK_GRADE_MAP,
+    REPRESENTATIVE_LAND_ZONES,
+    REPRESENTATIVE_MARINE_ZONES,
+    UV_INDEX_GRADE_THRESHOLDS,
+    UV_INDEX_GRADE_EXTREME,
+)
 
 
 def parse_pcp(val: str | float | None) -> float | None:
@@ -120,6 +129,113 @@ def get_nearest_land_zone(lat: float, lon: float) -> str:
             nearest_code = code
 
     return nearest_code
+
+
+def get_pm10_grade(pm10: float | None) -> str | None:
+    """PM10 농도(㎍/㎥)를 환경부 기준 등급으로 분류.
+
+    좋음(good) 0~30, 보통(moderate) 31~80, 나쁨(unhealthy) 81~150,
+    매우나쁨(very_unhealthy) 151 이상. 입력이 None이면 None 반환.
+    """
+    if pm10 is None:
+        return None
+    for upper, grade in PM10_GRADE_THRESHOLDS:
+        if pm10 <= upper:
+            return grade
+    return PM10_GRADE_VERY_UNHEALTHY
+
+
+def get_uv_index_grade(value: float | None) -> str | None:
+    """자외선지수를 WHO/기상청 표준 등급으로 분류.
+
+    낮음(low) 0~2, 보통(moderate) 3~5, 높음(high) 6~7, 매우높음(very_high) 8~10,
+    위험(extreme) 11 이상. 입력이 None이면 None 반환.
+    """
+    if value is None:
+        return None
+    for upper, grade in UV_INDEX_GRADE_THRESHOLDS:
+        if value <= upper:
+            return grade
+    return UV_INDEX_GRADE_EXTREME
+
+
+def get_air_stagnation_grade(value: float | None) -> str | None:
+    """대기정체지수(25/50/75/100)를 등급으로 분류. 그 외 값은 None."""
+    if value is None:
+        return None
+    return AIR_STAGNATION_GRADE_MAP.get(int(value))
+
+
+def get_pollen_risk_grade(value: float | None) -> str | None:
+    """꽃가루농도위험지수(0~3)를 등급으로 분류. 그 외 값은 None."""
+    if value is None:
+        return None
+    return POLLEN_RISK_GRADE_MAP.get(int(value))
+
+
+def get_discomfort_grade(di: float | None) -> str | None:
+    """불쾌지수를 등급으로 분류. low(<68)/normal(<75)/high(<80)/very_high."""
+    if di is None:
+        return None
+    if di < 68:
+        return "low"
+    if di < 75:
+        return "normal"
+    if di < 80:
+        return "high"
+    return "very_high"
+
+
+def get_laundry_grade(score: float | None) -> str | None:
+    """빨래 건조 지수를 등급으로 분류. excellent(>=90)/good(>=70)/normal(>=40)/avoid."""
+    if score is None:
+        return None
+    if score >= 90:
+        return "excellent"
+    if score >= 70:
+        return "good"
+    if score >= 40:
+        return "normal"
+    return "avoid"
+
+
+def get_car_wash_grade(score: float | None) -> str | None:
+    """세차 지수를 등급으로 분류. excellent(>=90)/delay(>=60)/caution(>=40)/avoid."""
+    if score is None:
+        return None
+    if score >= 90:
+        return "excellent"
+    if score >= 60:
+        return "delay"
+    if score >= 40:
+        return "caution"
+    return "avoid"
+
+
+def get_freeze_risk_grade(score: float | None) -> str | None:
+    """동파 가능 지수를 등급으로 분류. low(<30)/normal(<60)/high(<90)/very_high."""
+    if score is None:
+        return None
+    if score >= 90:
+        return "very_high"
+    if score >= 60:
+        return "high"
+    if score >= 30:
+        return "normal"
+    return "low"
+
+
+def get_food_poisoning_grade(score: float | None) -> str | None:
+    """식중독 지수를 등급으로 분류. safe(<55)/caution(<71)/warning(<86)/danger."""
+    if score is None:
+        return None
+    if score < 55:
+        return "safe"
+    if score < 71:
+        return "caution"
+    if score < 86:
+        return "warning"
+    return "danger"
 
 
 def get_nearest_marine_zone(lat: float, lon: float) -> str:

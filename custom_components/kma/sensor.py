@@ -13,6 +13,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import (
+    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     PERCENTAGE,
     EntityCategory,
     UnitOfTemperature,
@@ -27,41 +28,27 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import KmaForecastCoordinator
+from .coordinator import KmaForecastCoordinator, CurrentWeather
 from .api import VillageForecast
 from .weather import get_ha_condition
-from .helpers import parse_pcp
+from .helpers import (
+    parse_pcp,
+    get_pm10_grade,
+    get_discomfort_grade,
+    get_laundry_grade,
+    get_car_wash_grade,
+    get_freeze_risk_grade,
+    get_food_poisoning_grade,
+    get_uv_index_grade,
+    get_air_stagnation_grade,
+    get_pollen_risk_grade,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-# 불쾌지수 단계 번역 사전
-DI_GRADES_KO = {
-    "low": "낮음",
-    "normal": "보통",
-    "high": "높음",
-    "very_high": "매우높음",
-}
-
-DI_GRADES_EN = {
-    "low": "Low",
-    "normal": "Normal",
-    "high": "High",
-    "very_high": "Very High",
-}
-
-# 빨래 지수 단계 및 추천 문구 번역 사전
-LAUNDRY_GRADES_KO = {
-    "excellent": "매우 좋음",
-    "good": "좋음",
-    "normal": "보통",
-    "avoid": "비추천",
-}
-LAUNDRY_GRADES_EN = {
-    "excellent": "Excellent",
-    "good": "Good",
-    "normal": "Normal",
-    "avoid": "Avoid",
-}
+# 빨래/세차/동파/식중독 지수의 등급(good/normal/...)은 helpers.get_*_grade()로 분류하고
+# HA의 SensorDeviceClass.ENUM 상태 번역(translations/*.json의 state.*)으로 표시한다.
+# 아래 사전들은 등급별 "추천 문구"(자유 텍스트, ENUM 상태로 표현 불가)만 보관한다.
 LAUNDRY_RECS_KO = {
     "excellent": "야외 건조를 강력히 추천합니다.",
     "good": "빨래를 야외에 널기 좋습니다.",
@@ -75,49 +62,19 @@ LAUNDRY_RECS_EN = {
     "avoid": "Laundry will dry very slowly. Using a dryer is highly recommended.",
 }
 
-# 세차 지수 단계 및 추천 문구 번역 사전
-CAR_WASH_GRADES_KO = {
-    "excellent": "매우 좋음",
-    "good": "좋음",
-    "delay": "보류 권장",
-    "caution": "세차 비추",
-    "avoid": "세차 금지",
-}
-CAR_WASH_GRADES_EN = {
-    "excellent": "Excellent",
-    "good": "Good",
-    "delay": "Delay",
-    "caution": "Caution",
-    "avoid": "Avoid",
-}
 CAR_WASH_RECS_KO = {
     "excellent": "향후 3일간 비 예보가 없어 세차하기 아주 좋은 날입니다!",
-    "good": "당분간 비 소식은 없으나 모레 하늘이 흐려질 수 있습니다.",
     "delay": "모레 비 소식이 있어 세차를 보류하는 것을 권장합니다.",
     "caution": "내일 비 소식이 있습니다. 오늘 세차는 피하세요.",
     "avoid": "24시간 이내 비 예보가 있어 세차를 금지합니다.",
 }
 CAR_WASH_RECS_EN = {
     "excellent": "No rain forecast for the next 3 days. Perfect time to wash your car!",
-    "good": "No rain expected for now, but it might get cloudy in 2 days.",
     "delay": "Rain is expected in 2 days. It is recommended to delay washing.",
     "caution": "Rain is expected tomorrow. Avoid washing today.",
     "avoid": "Rain is expected within 24 hours. Do not wash your car.",
 }
 
-# 동파 가능 지수 단계 및 추천 문구 번역 사전
-FREEZE_RISK_GRADES_KO = {
-    "low": "낮음",
-    "normal": "보통",
-    "high": "높음",
-    "very_high": "매우 높음",
-}
-FREEZE_RISK_GRADES_EN = {
-    "low": "Low",
-    "normal": "Normal",
-    "high": "High",
-    "very_high": "Very High",
-}
 FREEZE_RISK_RECS_KO = {
     "low": "동파 위험이 없습니다.",
     "normal": "동파 가능성이 있습니다. 노출된 계량기 등을 보온해 주세요.",
@@ -131,19 +88,6 @@ FREEZE_RISK_RECS_EN = {
     "very_high": "Freeze risk is very high. Active pipe and meter protection is required.",
 }
 
-# 식중독 지수 단계 및 추천 문구 번역 사전
-FOOD_POISON_GRADES_KO = {
-    "safe": "관심",
-    "caution": "주의",
-    "warning": "경고",
-    "danger": "위험",
-}
-FOOD_POISON_GRADES_EN = {
-    "safe": "Safe",
-    "caution": "Caution",
-    "warning": "Warning",
-    "danger": "Danger",
-}
 FOOD_POISON_RECS_KO = {
     "safe": "식중독 지수가 낮습니다. 일상적인 위생 관리를 유지해 주세요.",
     "caution": "식중독균이 발생하기 쉽습니다. 조리 음식을 실온에 오래 두지 마세요.",
@@ -296,11 +240,25 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
+        key="discomfort_grade",
+        translation_key="discomfort_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["low", "normal", "high", "very_high"],
+        icon="mdi:emoticon-neutral-outline",
+    ),
+    SensorEntityDescription(
         key="laundry_index",
         translation_key="laundry_index",
         icon="mdi:tshirt-crew-outline",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="laundry_grade",
+        translation_key="laundry_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["excellent", "good", "normal", "avoid"],
+        icon="mdi:tshirt-crew-outline",
     ),
     SensorEntityDescription(
         key="car_wash_index",
@@ -310,11 +268,25 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
+        key="car_wash_grade",
+        translation_key="car_wash_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["excellent", "delay", "caution", "avoid"],
+        icon="mdi:car-wash",
+    ),
+    SensorEntityDescription(
         key="freeze_risk_index",
         translation_key="freeze_risk_index",
         icon="mdi:snowflake-alert",
         native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="freeze_risk_grade",
+        translation_key="freeze_risk_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["low", "normal", "high", "very_high"],
+        icon="mdi:snowflake-alert",
     ),
     SensorEntityDescription(
         key="food_poisoning_index",
@@ -324,14 +296,111 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
+        key="food_poisoning_grade",
+        translation_key="food_poisoning_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["safe", "caution", "warning", "danger"],
+        icon="mdi:food-off-outline",
+    ),
+    SensorEntityDescription(
         key="one_line_summary",
         translation_key="one_line_summary",
         icon="mdi:card-text-outline",
     ),
+    SensorEntityDescription(
+        key="pm10",
+        translation_key="pm10",
+        device_class=SensorDeviceClass.PM10,
+        native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="pm10_grade",
+        translation_key="pm10_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["good", "moderate", "unhealthy", "very_unhealthy"],
+        icon="mdi:blur",
+    ),
+    SensorEntityDescription(
+        key="uv_index",
+        translation_key="uv_index",
+        icon="mdi:weather-sunny-alert",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="uv_index_grade",
+        translation_key="uv_index_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["low", "moderate", "high", "very_high", "extreme"],
+        icon="mdi:weather-sunny-alert",
+    ),
+    SensorEntityDescription(
+        key="air_stagnation_index",
+        translation_key="air_stagnation_index",
+        icon="mdi:weather-windy",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="air_stagnation_grade",
+        translation_key="air_stagnation_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["low", "moderate", "high", "very_high"],
+        icon="mdi:weather-windy",
+    ),
+    SensorEntityDescription(
+        key="oak_pollen_risk",
+        translation_key="oak_pollen_risk",
+        icon="mdi:flower-pollen",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="oak_pollen_risk_grade",
+        translation_key="oak_pollen_risk_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["low", "moderate", "high", "very_high"],
+        icon="mdi:flower-pollen",
+    ),
+    SensorEntityDescription(
+        key="pine_pollen_risk",
+        translation_key="pine_pollen_risk",
+        icon="mdi:flower-pollen",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="pine_pollen_risk_grade",
+        translation_key="pine_pollen_risk_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["low", "moderate", "high", "very_high"],
+        icon="mdi:flower-pollen",
+    ),
+    SensorEntityDescription(
+        key="weed_pollen_risk",
+        translation_key="weed_pollen_risk",
+        icon="mdi:flower-pollen-outline",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="weed_pollen_risk_grade",
+        translation_key="weed_pollen_risk_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["low", "moderate", "high", "very_high"],
+        icon="mdi:flower-pollen-outline",
+    ),
+    SensorEntityDescription(
+        key="radar_precipitation",
+        translation_key="radar_precipitation",
+        icon="mdi:radar",
+        native_unit_of_measurement="dBZ",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
 ]
 
 
-_API_STATUS_KEYS = ["village_forecast", "land_forecast", "marine_forecast", "warning_now"]
+_API_STATUS_KEYS = [
+    "village_forecast", "land_forecast", "marine_forecast", "warning_now", "pm10",
+    "uv_index", "air_stagnation", "oak_pollen", "pine_pollen", "weed_pollen",
+    "radar_precipitation",
+]
 
 
 async def async_setup_entry(
@@ -412,6 +481,125 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
 
         return closest or village[0]
 
+    def _compute_discomfort_index(self, curr: CurrentWeather) -> float | None:
+        """불쾌지수 계산. `discomfort_index`/`discomfort_grade` 둘 다에서 재사용."""
+        if curr.tmp is None or curr.reh is None:
+            return None
+        try:
+            temp = float(curr.tmp)
+            rh = float(curr.reh)
+            di = 1.8 * temp - 0.55 * (1.0 - rh / 100.0) * (1.8 * temp - 26.0) + 32.0
+            return round(di, 1)
+        except (ValueError, TypeError):
+            return None
+
+    def _compute_laundry_index(
+        self, curr: CurrentWeather, village: list[VillageForecast], now: datetime.datetime
+    ) -> int | None:
+        """빨래 건조 지수 계산. `laundry_index`/`laundry_grade` 둘 다에서 재사용."""
+        if curr.tmp is None or curr.reh is None or curr.wsd is None:
+            return None
+        try:
+            temp = float(curr.tmp)
+            rh = float(curr.reh)
+            ws = float(curr.wsd)
+            sky = int(curr.sky) if curr.sky else 1
+
+            # Scan next 12 hours for rain
+            rain_expected = False
+            for f in village:
+                try:
+                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                    if f_dt < now - datetime.timedelta(hours=1):
+                        continue
+                    diff_hours = (f_dt - now).total_seconds() / 3600.0
+                    if 0.0 <= diff_hours <= 12.0:
+                        if f.pty and f.pty != "0":
+                            rain_expected = True
+                            break
+                except ValueError:
+                    continue
+
+            if rain_expected:
+                return 10
+
+            # Score calculation
+            h_fact = 100.0 - rh
+            w_fact = min(ws * 5.0, 20.0)
+            s_fact = 30.0 if sky == 1 else 20.0 if sky == 3 else 10.0
+            t_fact = max(0.0, temp * 0.5)
+            score = min(100.0, h_fact + w_fact + s_fact + t_fact)
+            return int(round(score))
+        except (ValueError, TypeError):
+            return None
+
+    def _compute_car_wash_index(
+        self, village: list[VillageForecast], now: datetime.datetime
+    ) -> int:
+        """세차 지수 계산. `car_wash_index`/`car_wash_grade` 둘 다에서 재사용."""
+        rain_hours = None
+        for f in village:
+            try:
+                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                if f_dt < now - datetime.timedelta(hours=1):
+                    continue
+                diff_hours = (f_dt - now).total_seconds() / 3600.0
+                if 0.0 <= diff_hours <= 72.0:
+                    if f.pty and f.pty != "0":
+                        rain_hours = diff_hours
+                        break
+            except ValueError:
+                continue
+
+        if rain_hours is not None:
+            if rain_hours <= 24.0:
+                return 10
+            if rain_hours <= 48.0:
+                return 40
+            return 60
+        return 90
+
+    def _compute_freeze_risk_index(
+        self, village: list[VillageForecast], now: datetime.datetime
+    ) -> int | None:
+        """동파 가능 지수 계산. `freeze_risk_index`/`freeze_risk_grade` 둘 다에서 재사용."""
+        min_temp = None
+        for f in village:
+            try:
+                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                if f_dt < now - datetime.timedelta(hours=1):
+                    continue
+                diff_hours = (f_dt - now).total_seconds() / 3600.0
+                if 0.0 <= diff_hours <= 48.0 and f.tmp is not None:
+                    val = float(f.tmp)
+                    if min_temp is None or val < min_temp:
+                        min_temp = val
+            except ValueError:
+                continue
+
+        if min_temp is None:
+            return None
+        if min_temp > -5.0:
+            return 10
+        if min_temp > -10.0:
+            return 40
+        if min_temp > -15.0:
+            return 70
+        return 100
+
+    def _compute_food_poisoning_index(self, curr: CurrentWeather) -> int | None:
+        """식중독 지수 계산. `food_poisoning_index`/`food_poisoning_grade` 둘 다에서 재사용."""
+        if curr.tmp is None or curr.reh is None:
+            return None
+        try:
+            temp = float(curr.tmp)
+            rh = float(curr.reh)
+            fpi = 0.000189 * temp * rh + 0.215 * temp + 0.161 * rh - 2.85
+            score = max(0.0, min(100.0, fpi))
+            return int(round(score))
+        except (ValueError, TypeError):
+            return None
+
     @property
     def native_value(self) -> Any:
         """센서의 상태값."""
@@ -426,6 +614,47 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         if key == "marine_forecast_summary":
             marine = data.get("marine", [])
             return marine[0].wf if marine else None
+
+        if key == "pm10":
+            pm10 = data.get("pm10")
+            return pm10.pm10 if pm10 is not None else None
+
+        if key == "pm10_grade":
+            pm10 = data.get("pm10")
+            return get_pm10_grade(pm10.pm10) if pm10 is not None else None
+
+        if key == "uv_index":
+            uv = data.get("uv_index")
+            return uv.current if uv is not None else None
+
+        if key == "uv_index_grade":
+            uv = data.get("uv_index")
+            return get_uv_index_grade(uv.current) if uv is not None else None
+
+        if key == "air_stagnation_index":
+            air = data.get("air_stagnation")
+            return air.current if air is not None else None
+
+        if key == "air_stagnation_grade":
+            air = data.get("air_stagnation")
+            return get_air_stagnation_grade(air.current) if air is not None else None
+
+        if key in (
+            "oak_pollen_risk", "oak_pollen_risk_grade",
+            "pine_pollen_risk", "pine_pollen_risk_grade",
+            "weed_pollen_risk", "weed_pollen_risk_grade",
+        ):
+            data_key = key.replace("_risk_grade", "").replace("_risk", "")
+            pollen = data.get(data_key)
+            if pollen is None:
+                return None
+            return (
+                get_pollen_risk_grade(pollen.today) if key.endswith("_grade") else pollen.today
+            )
+
+        if key == "radar_precipitation":
+            radar = data.get("radar_precipitation")
+            return radar.value if radar is not None else None
 
         if key == "precipitation_start":
             nxt = self.coordinator.next_precipitation()
@@ -512,118 +741,35 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             return None
 
         if key == "discomfort_index":
-            if curr.tmp is not None and curr.reh is not None:
-                try:
-                    temp = float(curr.tmp)
-                    rh = float(curr.reh)
-                    di = 1.8 * temp - 0.55 * (1.0 - rh / 100.0) * (1.8 * temp - 26.0) + 32.0
-                    return round(di, 1)
-                except (ValueError, TypeError):
-                    return None
-            return None
+            return self._compute_discomfort_index(curr)
+        if key == "discomfort_grade":
+            return get_discomfort_grade(self._compute_discomfort_index(curr))
 
         if key == "laundry_index":
-            if curr.tmp is not None and curr.reh is not None and curr.wsd is not None:
-                try:
-                    temp = float(curr.tmp)
-                    rh = float(curr.reh)
-                    ws = float(curr.wsd)
-                    sky = int(curr.sky) if curr.sky else 1
-
-                    # Scan next 12 hours for rain
-                    rain_expected = False
-                    for f in data.get("village", []):
-                        try:
-                            f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
-                            if f_dt < now - datetime.timedelta(hours=1):
-                                continue
-                            diff_hours = (f_dt - now).total_seconds() / 3600.0
-                            if 0.0 <= diff_hours <= 12.0:
-                                if f.pty and f.pty != "0":
-                                    rain_expected = True
-                                    break
-                        except ValueError:
-                            continue
-
-                    if rain_expected:
-                        return 10
-                    
-                    # Score calculation
-                    h_fact = 100.0 - rh
-                    w_fact = min(ws * 5.0, 20.0)
-                    s_fact = 30.0 if sky == 1 else 20.0 if sky == 3 else 10.0
-                    t_fact = max(0.0, temp * 0.5)
-                    score = min(100.0, h_fact + w_fact + s_fact + t_fact)
-                    return int(round(score))
-                except (ValueError, TypeError):
-                    return None
-            return None
+            return self._compute_laundry_index(curr, data.get("village", []), now)
+        if key == "laundry_grade":
+            return get_laundry_grade(
+                self._compute_laundry_index(curr, data.get("village", []), now)
+            )
 
         if key == "car_wash_index":
-            # Scan village forecast for next 3 days (72 hours)
-            rain_hours = None
-            for f in data.get("village", []):
-                try:
-                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
-                    if f_dt < now - datetime.timedelta(hours=1):
-                        continue
-                    diff_hours = (f_dt - now).total_seconds() / 3600.0
-                    if 0.0 <= diff_hours <= 72.0:
-                        if f.pty and f.pty != "0":
-                            rain_hours = diff_hours
-                            break
-                except ValueError:
-                    continue
-
-            if rain_hours is not None:
-                if rain_hours <= 24.0:
-                    return 10
-                elif rain_hours <= 48.0:
-                    return 40
-                else:
-                    return 60
-            return 90
+            return self._compute_car_wash_index(data.get("village", []), now)
+        if key == "car_wash_grade":
+            return get_car_wash_grade(
+                self._compute_car_wash_index(data.get("village", []), now)
+            )
 
         if key == "freeze_risk_index":
-            # Find min temp in the next 48 hours
-            min_temp = None
-            for f in data.get("village", []):
-                try:
-                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
-                    if f_dt < now - datetime.timedelta(hours=1):
-                        continue
-                    diff_hours = (f_dt - now).total_seconds() / 3600.0
-                    if 0.0 <= diff_hours <= 48.0 and f.tmp is not None:
-                        val = float(f.tmp)
-                        if min_temp is None or val < min_temp:
-                            min_temp = val
-                except ValueError:
-                    continue
-
-            if min_temp is None:
-                return None
-
-            if min_temp > -5.0:
-                return 10
-            elif min_temp > -10.0:
-                return 40
-            elif min_temp > -15.0:
-                return 70
-            else:
-                return 100
+            return self._compute_freeze_risk_index(data.get("village", []), now)
+        if key == "freeze_risk_grade":
+            return get_freeze_risk_grade(
+                self._compute_freeze_risk_index(data.get("village", []), now)
+            )
 
         if key == "food_poisoning_index":
-            if curr.tmp is not None and curr.reh is not None:
-                try:
-                    temp = float(curr.tmp)
-                    rh = float(curr.reh)
-                    # 식중독 지수 공식
-                    fpi = 0.000189 * temp * rh + 0.215 * temp + 0.161 * rh - 2.85
-                    score = max(0.0, min(100.0, fpi))
-                    return int(round(score))
-                except (ValueError, TypeError):
-                    return None
-            return None
+            return self._compute_food_poisoning_index(curr)
+        if key == "food_poisoning_grade":
+            return get_food_poisoning_grade(self._compute_food_poisoning_index(curr))
 
         if key == "one_line_summary":
             if curr.tmp is not None:
@@ -736,6 +882,55 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                     "wave_height_max": marine[0].wh_max,
                 }
 
+        if key in ("pm10", "pm10_grade"):
+            pm10 = data.get("pm10")
+            if pm10 is not None:
+                return {
+                    "station_id": pm10.stn,
+                    "observed_time": pm10.tm,
+                    "raw": pm10.raw,
+                }
+            return None
+
+        if key in ("uv_index", "uv_index_grade"):
+            uv = data.get("uv_index")
+            if uv is not None:
+                return {"area_no": uv.area_no, "announced": uv.date, "hourly": uv.hourly}
+            return None
+
+        if key in ("air_stagnation_index", "air_stagnation_grade"):
+            air = data.get("air_stagnation")
+            if air is not None:
+                return {"area_no": air.area_no, "announced": air.date, "hourly": air.hourly}
+            return None
+
+        if key in (
+            "oak_pollen_risk", "oak_pollen_risk_grade",
+            "pine_pollen_risk", "pine_pollen_risk_grade",
+            "weed_pollen_risk", "weed_pollen_risk_grade",
+        ):
+            data_key = key.replace("_risk_grade", "").replace("_risk", "")
+            pollen = data.get(data_key)
+            if pollen is not None:
+                return {
+                    "area_no": pollen.area_no,
+                    "announced": pollen.date,
+                    "tomorrow": pollen.tomorrow,
+                    "day_after_tomorrow": pollen.day_after_tomorrow,
+                }
+            return None
+
+        if key == "radar_precipitation":
+            radar = data.get("radar_precipitation")
+            if radar is not None:
+                return {
+                    "dong_code": radar.dong_code,
+                    "observed_time": radar.date_time,
+                    "lon": radar.lon,
+                    "lat": radar.lat,
+                }
+            return None
+
         if key == "precipitation_start":
             nxt = self.coordinator.next_precipitation()
             if nxt is None:
@@ -832,15 +1027,19 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             "apparent_temperature",
             "dew_point",
             "discomfort_index",
+            "discomfort_grade",
             "laundry_index",
+            "laundry_grade",
             "car_wash_index",
+            "car_wash_grade",
             "freeze_risk_index",
+            "freeze_risk_grade",
             "food_poisoning_index",
+            "food_poisoning_grade",
             "one_line_summary",
         ):
             curr = self._get_current_forecast()
             if curr:
-                obs = self.coordinator.get_current()
                 attrs = {
                     "fcst_date": curr.fcst_date,
                     "fcst_time": curr.fcst_time,
@@ -851,102 +1050,35 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 if self.hass and hasattr(self.hass, "config") and self.hass.config.language == "ko":
                     lang = "ko"
 
-                if key == "discomfort_index" and obs.tmp is not None and obs.reh is not None:
-                    try:
-                        temp = float(obs.tmp)
-                        rh = float(obs.reh)
-                        di = 1.8 * temp - 0.55 * (1.0 - rh / 100.0) * (1.8 * temp - 26.0) + 32.0
-                        if di < 68:
-                            grade_key = "low"
-                        elif di < 75:
-                            grade_key = "normal"
-                        elif di < 80:
-                            grade_key = "high"
-                        else:
-                            grade_key = "very_high"
-
-                        if lang == "ko":
-                            attrs["grade"] = DI_GRADES_KO[grade_key]
-                        else:
-                            attrs["grade"] = DI_GRADES_EN[grade_key]
-                    except (ValueError, TypeError):
-                        pass
-
-                elif key == "laundry_index":
-                    val = self.native_value
-                    if val is not None:
-                        if val >= 90:
-                            grade_key = "excellent"
-                        elif val >= 70:
-                            grade_key = "good"
-                        elif val >= 40:
-                            grade_key = "normal"
-                        else:
-                            grade_key = "avoid"
-
-                        if lang == "ko":
-                            attrs["grade"] = LAUNDRY_GRADES_KO[grade_key]
-                            attrs["recommendation"] = LAUNDRY_RECS_KO[grade_key]
-                        else:
-                            attrs["grade"] = LAUNDRY_GRADES_EN[grade_key]
-                            attrs["recommendation"] = LAUNDRY_RECS_EN[grade_key]
+                # 등급(grade) 표시는 각각의 전용 _grade ENUM 센서(HA 상태 번역)가 담당하므로
+                # 여기서는 ENUM으로 표현할 수 없는 자유 텍스트 "recommendation"만 채운다.
+                if key == "laundry_index":
+                    grade_key = get_laundry_grade(self.native_value)
+                    if grade_key is not None:
+                        attrs["recommendation"] = (
+                            LAUNDRY_RECS_KO[grade_key] if lang == "ko" else LAUNDRY_RECS_EN[grade_key]
+                        )
 
                 elif key == "car_wash_index":
-                    val = self.native_value
-                    if val is not None:
-                        if val >= 90:
-                            grade_key = "excellent"
-                        elif val >= 60:
-                            grade_key = "delay"
-                        elif val >= 40:
-                            grade_key = "caution"
-                        else:
-                            grade_key = "avoid"
-
-                        if lang == "ko":
-                            attrs["grade"] = CAR_WASH_GRADES_KO[grade_key]
-                            attrs["recommendation"] = CAR_WASH_RECS_KO[grade_key]
-                        else:
-                            attrs["grade"] = CAR_WASH_GRADES_EN[grade_key]
-                            attrs["recommendation"] = CAR_WASH_RECS_EN[grade_key]
+                    grade_key = get_car_wash_grade(self.native_value)
+                    if grade_key is not None:
+                        attrs["recommendation"] = (
+                            CAR_WASH_RECS_KO[grade_key] if lang == "ko" else CAR_WASH_RECS_EN[grade_key]
+                        )
 
                 elif key == "freeze_risk_index":
-                    val = self.native_value
-                    if val is not None:
-                        if val >= 90:
-                            grade_key = "very_high"
-                        elif val >= 60:
-                            grade_key = "high"
-                        elif val >= 30:
-                            grade_key = "normal"
-                        else:
-                            grade_key = "low"
-
-                        if lang == "ko":
-                            attrs["grade"] = FREEZE_RISK_GRADES_KO[grade_key]
-                            attrs["recommendation"] = FREEZE_RISK_RECS_KO[grade_key]
-                        else:
-                            attrs["grade"] = FREEZE_RISK_GRADES_EN[grade_key]
-                            attrs["recommendation"] = FREEZE_RISK_RECS_EN[grade_key]
+                    grade_key = get_freeze_risk_grade(self.native_value)
+                    if grade_key is not None:
+                        attrs["recommendation"] = (
+                            FREEZE_RISK_RECS_KO[grade_key] if lang == "ko" else FREEZE_RISK_RECS_EN[grade_key]
+                        )
 
                 elif key == "food_poisoning_index":
-                    val = self.native_value
-                    if val is not None:
-                        if val < 55:
-                            grade_key = "safe"
-                        elif val < 71:
-                            grade_key = "caution"
-                        elif val < 86:
-                            grade_key = "warning"
-                        else:
-                            grade_key = "danger"
-
-                        if lang == "ko":
-                            attrs["grade"] = FOOD_POISON_GRADES_KO[grade_key]
-                            attrs["recommendation"] = FOOD_POISON_RECS_KO[grade_key]
-                        else:
-                            attrs["grade"] = FOOD_POISON_GRADES_EN[grade_key]
-                            attrs["recommendation"] = FOOD_POISON_RECS_EN[grade_key]
+                    grade_key = get_food_poisoning_grade(self.native_value)
+                    if grade_key is not None:
+                        attrs["recommendation"] = (
+                            FOOD_POISON_RECS_KO[grade_key] if lang == "ko" else FOOD_POISON_RECS_EN[grade_key]
+                        )
 
                 return attrs
 

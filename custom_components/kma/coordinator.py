@@ -12,8 +12,14 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .const import DOMAIN, PROVINCE_WARNING_KEYWORDS
+from .const import (
+    DOMAIN,
+    LAND_ZONE_TO_AREA_NO,
+    LAND_ZONE_TO_PM10_STN,
+    PROVINCE_WARNING_KEYWORDS,
+)
 from .api import (
+    ImageBinary,
     KmaApiClient,
     KmaApiError,
     KmaActivationRequiredError,
@@ -56,7 +62,11 @@ class ForecastPoint:
     sno: float | None        # 1시간 신적설 (cm)
 
 
-_API_STATUS_KEYS = ["village_forecast", "land_forecast", "marine_forecast", "warning_now"]
+_API_STATUS_KEYS = [
+    "village_forecast", "land_forecast", "marine_forecast", "warning_now", "pm10",
+    "uv_index", "air_stagnation", "oak_pollen", "pine_pollen", "weed_pollen",
+    "radar_precipitation",
+]
 
 
 class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -76,6 +86,8 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.ny = subentry.data["ny"]
         self.land_reg = subentry.data["land_reg"]
         self.marine_reg = subentry.data["marine_reg"]
+        self.stn = LAND_ZONE_TO_PM10_STN.get(self.land_reg, 108)  # PM10 관측지점(기본값 서울)
+        self.area_no = LAND_ZONE_TO_AREA_NO.get(self.land_reg, "1100000000")  # 생활/보건기상지수 지역코드
 
         # API별 누적 에러 카운트 / 마지막 에러 시각 (HA 재시작 전까지 유지)
         self._api_error_counts: dict[str, int] = {k: 0 for k in _API_STATUS_KEYS}
@@ -89,6 +101,13 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "warnings_stale": False,
             "ncst_stale": False,
             "ultra_stale": False,
+            "pm10_stale": False,
+            "uv_index_stale": False,
+            "air_stagnation_stale": False,
+            "oak_pollen_stale": False,
+            "pine_pollen_stale": False,
+            "weed_pollen_stale": False,
+            "radar_precipitation_stale": False,
         }
 
         scan_interval = config_entry.options.get("scan_interval", 10)
@@ -170,7 +189,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # 2. 육상예보 (fct_afs_dl.php)
         land, status["land_forecast"] = await self._fetch_optional(
-            "육상예보", self.client.async_get_land_forecast(self.land_reg)
+            "육상예보", self.client.async_get_land_forecast(self.land_reg), default=[]
         )
         if not land and self.data and "land" in self.data:
             data["land"] = self.data["land"]
@@ -181,7 +200,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # 3. 해상예보 (fct_afs_do.php)
         marine, status["marine_forecast"] = await self._fetch_optional(
-            "해상예보", self.client.async_get_marine_forecast(self.marine_reg)
+            "해상예보", self.client.async_get_marine_forecast(self.marine_reg), default=[]
         )
         if not marine and self.data and "marine" in self.data:
             data["marine"] = self.data["marine"]
@@ -190,9 +209,71 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         else:
             data["marine"] = marine
 
+        # 3-2. PM10(미세먼지) 관측 (kma_pm10.php) [실측 검증 2026-07-01]
+        pm10_obs, status["pm10"] = await self._fetch_optional(
+            "미세먼지(PM10)", self.client.async_get_pm10_now(stn=self.stn), default=None
+        )
+        if pm10_obs is None and self.data and "pm10" in self.data:
+            data["pm10"] = self.data["pm10"]
+            refresh_meta["pm10_stale"] = True
+            _LOGGER.debug("PM10 데이터가 없어 이전 값을 유지합니다.")
+        else:
+            data["pm10"] = pm10_obs
+
+        # 3-3. 자외선지수/대기정체지수 (연중 제공 — 실패 시 이전 값 유지)
+        uv_obs, status["uv_index"] = await self._fetch_optional(
+            "자외선지수", self.client.async_get_uv_index(area_no=self.area_no), default=None
+        )
+        if uv_obs is None and self.data and "uv_index" in self.data:
+            data["uv_index"] = self.data["uv_index"]
+            refresh_meta["uv_index_stale"] = True
+        else:
+            data["uv_index"] = uv_obs
+
+        air_obs, status["air_stagnation"] = await self._fetch_optional(
+            "대기정체지수", self.client.async_get_air_stagnation_index(area_no=self.area_no), default=None
+        )
+        if air_obs is None and self.data and "air_stagnation" in self.data:
+            data["air_stagnation"] = self.data["air_stagnation"]
+            refresh_meta["air_stagnation_stale"] = True
+        else:
+            data["air_stagnation"] = air_obs
+
+        # 3-4. 꽃가루농도위험지수 3종 (계절 서비스 — 비시즌 None은 정상 상태이므로
+        # 이전 값을 이어붙이지 않는다. 이어붙이면 시즌 종료 후에도 옛 값이 남아 오해를 준다).
+        oak_obs, status["oak_pollen"] = await self._fetch_optional(
+            "꽃가루(참나무)", self.client.async_get_oak_pollen_risk(area_no=self.area_no), default=None
+        )
+        data["oak_pollen"] = oak_obs
+
+        pine_obs, status["pine_pollen"] = await self._fetch_optional(
+            "꽃가루(소나무)", self.client.async_get_pine_pollen_risk(area_no=self.area_no), default=None
+        )
+        data["pine_pollen"] = pine_obs
+
+        weed_obs, status["weed_pollen"] = await self._fetch_optional(
+            "꽃가루(잡초류)", self.client.async_get_weed_pollen_risk(area_no=self.area_no), default=None
+        )
+        data["weed_pollen"] = weed_obs
+
+        # 3-5. 행정구역별 레이더 강수강도 (WthrRadarInfoService/getCompCappiQcdArea)
+        # 실측 결과 특정 지역(광주, 구코드 2900000000 — 통합특별시 개편으로 대체된
+        # 레거시 코드)에서 간헐적으로 오류가 발생함이 확인되어(2026-07-01), 실패 시
+        # 이전 값을 유지한다.
+        radar_obs, status["radar_precipitation"] = await self._fetch_optional(
+            "레이더 강수강도",
+            self.client.async_get_radar_precipitation(dong_code=self.area_no),
+            default=None,
+        )
+        if radar_obs is None and self.data and "radar_precipitation" in self.data:
+            data["radar_precipitation"] = self.data["radar_precipitation"]
+            refresh_meta["radar_precipitation_stale"] = True
+        else:
+            data["radar_precipitation"] = radar_obs
+
         # 4. 특보현황 (wrn_now_data.php)
         warnings, status["warning_now"] = await self._fetch_optional(
-            "기상특보", self.client.async_get_warning_now()
+            "기상특보", self.client.async_get_warning_now(), default=[]
         )
         # 특보 호출 실패 시에는 이전 특보 데이터를 유지하고, 성공했으나 내용이 없는 경우는 빈 목록으로 업데이트합니다.
         if status["warning_now"].startswith("error") and self.data and "warnings" in self.data:
@@ -230,19 +311,21 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._refresh_meta = refresh_meta
         return data
 
-    async def _fetch_optional(self, label: str, coro: Any) -> tuple[list, str]:
+    async def _fetch_optional(
+        self, label: str, coro: Any, *, default: Any = None
+    ) -> tuple[Any, str]:
         """선택적 API 호출을 수행하고 (결과, 상태)를 반환한다.
 
-        상태: "ok" | "not_applied"(403) | "error: 메시지". 실패 시 결과는 빈 리스트.
+        상태: "ok" | "not_applied"(403) | "error: 메시지". 실패 시 결과는 default.
         """
         try:
             return await coro, "ok"
         except KmaActivationRequiredError:
             _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
-            return [], "not_applied"
+            return default, "not_applied"
         except KmaApiError as err:
             _LOGGER.warning("%s 업데이트 경고: %s", label, err)
-            return [], f"error: {err}"
+            return default, f"error: {err}"
 
     @property
     def api_status(self) -> dict[str, str]:
@@ -411,3 +494,39 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         base_date = target_date.strftime("%Y%m%d")
         base_time = f"{target_hour:02d}00"
         return base_date, base_time
+
+
+class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """위성 이미지 코디네이터 (허브 단위, Zone과 무관한 전국 이미지 1세트).
+
+    레이더는 원시 반사도 격자(수백만 셀)만 제공되어 이미지로 쓸 수 없음이 확인되어
+    (2026-07-01) 행정구역별 강수강도 숫자 센서(radar_precipitation, Zone별
+    코디네이터)로 대체되었다 — 여기서는 위성만 다룬다.
+
+    ImageEntity는 `image_last_updated`를 코디네이터 갱신 시점에만 바꿔야 하므로
+    (async_image 내부에서 바꾸면 순환 트리거가 됨), 바이트 페칭은 여기서 수행하고
+    엔티티는 캐시된 바이트만 반환한다.
+    """
+
+    def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
+        self.client = client
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=config_entry,
+            name=f"{DOMAIN}_image",
+            update_interval=timedelta(minutes=10),
+        )
+
+    async def _async_update_data(self) -> dict[str, ImageBinary | None]:
+        """위성 최신 이미지를 조회. 실패 시 이전 값을 유지(전체 통합 실패로 처리하지 않음)."""
+        data: dict[str, ImageBinary | None] = dict(self.data or {"satellite": None})
+
+        try:
+            data["satellite"] = await self.client.async_get_satellite_image()
+        except KmaActivationRequiredError:
+            _LOGGER.warning("위성 이미지 API 미신청(403). 활용신청이 필요합니다.")
+        except KmaApiError as err:
+            _LOGGER.debug("위성 이미지 갱신 실패: %s", err)
+
+        return data

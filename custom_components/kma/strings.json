@@ -114,55 +114,83 @@
         "name": "Dew Point"
       },
       "discomfort_index": {
-        "name": "Discomfort Index",
-        "state_attributes": {
-          "grade": {
-            "name": "Grade"
-          }
+        "name": "Discomfort Index"
+      },
+      "discomfort_grade": {
+        "name": "Discomfort Index Grade",
+        "state": {
+          "low": "Low",
+          "normal": "Normal",
+          "high": "High",
+          "very_high": "Very High"
         }
       },
       "laundry_index": {
         "name": "Laundry Drying Index",
         "state_attributes": {
-          "grade": {
-            "name": "Grade"
-          },
           "recommendation": {
             "name": "Recommendation"
           }
+        }
+      },
+      "laundry_grade": {
+        "name": "Laundry Drying Index Grade",
+        "state": {
+          "excellent": "Excellent",
+          "good": "Good",
+          "normal": "Normal",
+          "avoid": "Avoid"
         }
       },
       "car_wash_index": {
         "name": "Car Wash Index",
         "state_attributes": {
-          "grade": {
-            "name": "Grade"
-          },
           "recommendation": {
             "name": "Recommendation"
           }
+        }
+      },
+      "car_wash_grade": {
+        "name": "Car Wash Index Grade",
+        "state": {
+          "excellent": "Excellent",
+          "delay": "Delay",
+          "caution": "Caution",
+          "avoid": "Avoid"
         }
       },
       "freeze_risk_index": {
         "name": "Freeze Risk Index",
         "state_attributes": {
-          "grade": {
-            "name": "Grade"
-          },
           "recommendation": {
             "name": "Recommendation"
           }
         }
       },
+      "freeze_risk_grade": {
+        "name": "Freeze Risk Index Grade",
+        "state": {
+          "low": "Low",
+          "normal": "Normal",
+          "high": "High",
+          "very_high": "Very High"
+        }
+      },
       "food_poisoning_index": {
         "name": "Food Poisoning Index",
         "state_attributes": {
-          "grade": {
-            "name": "Grade"
-          },
           "recommendation": {
             "name": "Recommendation"
           }
+        }
+      },
+      "food_poisoning_grade": {
+        "name": "Food Poisoning Index Grade",
+        "state": {
+          "safe": "Safe",
+          "caution": "Caution",
+          "warning": "Warning",
+          "danger": "Danger"
         }
       },
       "one_line_summary": {
@@ -179,6 +207,82 @@
           "none": "No data"
         }
       },
+      "pm10": {
+        "name": "PM10 (Fine Dust)"
+      },
+      "pm10_grade": {
+        "name": "PM10 Grade",
+        "state": {
+          "good": "Good",
+          "moderate": "Moderate",
+          "unhealthy": "Unhealthy",
+          "very_unhealthy": "Very Unhealthy"
+        }
+      },
+      "uv_index": {
+        "name": "UV Index"
+      },
+      "uv_index_grade": {
+        "name": "UV Index Grade",
+        "state": {
+          "low": "Low",
+          "moderate": "Moderate",
+          "high": "High",
+          "very_high": "Very High",
+          "extreme": "Extreme"
+        }
+      },
+      "air_stagnation_index": {
+        "name": "Atmospheric Stagnation Index"
+      },
+      "air_stagnation_grade": {
+        "name": "Atmospheric Stagnation Grade",
+        "state": {
+          "low": "Low",
+          "moderate": "Moderate",
+          "high": "High",
+          "very_high": "Very High"
+        }
+      },
+      "oak_pollen_risk": {
+        "name": "Oak Pollen Risk Index"
+      },
+      "oak_pollen_risk_grade": {
+        "name": "Oak Pollen Risk Grade",
+        "state": {
+          "low": "Low",
+          "moderate": "Moderate",
+          "high": "High",
+          "very_high": "Very High"
+        }
+      },
+      "pine_pollen_risk": {
+        "name": "Pine Pollen Risk Index"
+      },
+      "pine_pollen_risk_grade": {
+        "name": "Pine Pollen Risk Grade",
+        "state": {
+          "low": "Low",
+          "moderate": "Moderate",
+          "high": "High",
+          "very_high": "Very High"
+        }
+      },
+      "weed_pollen_risk": {
+        "name": "Weed Pollen Risk Index"
+      },
+      "weed_pollen_risk_grade": {
+        "name": "Weed Pollen Risk Grade",
+        "state": {
+          "low": "Low",
+          "moderate": "Moderate",
+          "high": "High",
+          "very_high": "Very High"
+        }
+      },
+      "radar_precipitation": {
+        "name": "Radar Precipitation Intensity"
+      },
       "error_count_village_forecast": {
         "name": "Village Forecast API Error Count"
       },
@@ -190,6 +294,27 @@
       },
       "error_count_warning_now": {
         "name": "Weather Warning API Error Count"
+      },
+      "error_count_pm10": {
+        "name": "PM10 API Error Count"
+      },
+      "error_count_uv_index": {
+        "name": "UV Index API Error Count"
+      },
+      "error_count_air_stagnation": {
+        "name": "Atmospheric Stagnation API Error Count"
+      },
+      "error_count_oak_pollen": {
+        "name": "Oak Pollen API Error Count"
+      },
+      "error_count_pine_pollen": {
+        "name": "Pine Pollen API Error Count"
+      },
+      "error_count_weed_pollen": {
+        "name": "Weed Pollen API Error Count"
+      },
+      "error_count_radar_precipitation": {
+        "name": "Radar Precipitation API Error Count"
       }
     },
     "binary_sensor": {
@@ -210,6 +335,32 @@
       },
       "activation_warning_now": {
         "name": "Weather Warning API"
+      },
+      "activation_pm10": {
+        "name": "PM10 API"
+      },
+      "activation_uv_index": {
+        "name": "UV Index API"
+      },
+      "activation_air_stagnation": {
+        "name": "Atmospheric Stagnation API"
+      },
+      "activation_oak_pollen": {
+        "name": "Oak Pollen API"
+      },
+      "activation_pine_pollen": {
+        "name": "Pine Pollen API"
+      },
+      "activation_weed_pollen": {
+        "name": "Weed Pollen API"
+      },
+      "activation_radar_precipitation": {
+        "name": "Radar Precipitation API"
+      }
+    },
+    "image": {
+      "satellite_image": {
+        "name": "Satellite Image"
       }
     }
   }
