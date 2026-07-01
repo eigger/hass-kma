@@ -82,6 +82,14 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._api_last_error_time: dict[str, datetime.datetime | None] = {
             k: None for k in _API_STATUS_KEYS
         }
+        self._refresh_meta: dict[str, bool] = {
+            "village_stale": False,
+            "land_stale": False,
+            "marine_stale": False,
+            "warnings_stale": False,
+            "ncst_stale": False,
+            "ultra_stale": False,
+        }
 
         scan_interval = config_entry.options.get("scan_interval", 10)
 
@@ -102,6 +110,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         data: dict[str, Any] = {}
         status: dict[str, str] = {}
+        refresh_meta = {key: False for key in self._refresh_meta}
 
         # 1. 동네예보 (getVilageFcst)
         # 발표 시각은 0200,0500,0800,1100,1400,1700,2000,2300. 최근 발표분이 아직
@@ -134,6 +143,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         if not village_forecasts and self.data and "village" in self.data:
             data["village"] = self.data["village"]
+            refresh_meta["village_stale"] = True
             _LOGGER.debug("동네예보 데이터가 비어 있어 이전 값을 유지합니다.")
         else:
             data["village"] = village_forecasts
@@ -145,6 +155,8 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except KmaApiError as err:
             _LOGGER.debug("초단기실황(getUltraSrtNcst) 실패: %s", err)
             ncst = None
+        if ncst is None and (self.data or {}).get("ncst") is not None:
+            refresh_meta["ncst_stale"] = True
         data["ncst"] = ncst or (self.data or {}).get("ncst")
 
         try:
@@ -152,6 +164,8 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except KmaApiError as err:
             _LOGGER.debug("초단기예보(getUltraSrtFcst) 실패: %s", err)
             ultra = []
+        if not ultra and (self.data or {}).get("ultra"):
+            refresh_meta["ultra_stale"] = True
         data["ultra"] = ultra or (self.data or {}).get("ultra", [])
 
         # 2. 육상예보 (fct_afs_dl.php)
@@ -160,6 +174,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         if not land and self.data and "land" in self.data:
             data["land"] = self.data["land"]
+            refresh_meta["land_stale"] = True
             _LOGGER.debug("육상예보 데이터가 비어 있어 이전 값을 유지합니다.")
         else:
             data["land"] = land
@@ -170,6 +185,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
         if not marine and self.data and "marine" in self.data:
             data["marine"] = self.data["marine"]
+            refresh_meta["marine_stale"] = True
             _LOGGER.debug("해상예보 데이터가 비어 있어 이전 값을 유지합니다.")
         else:
             data["marine"] = marine
@@ -181,6 +197,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # 특보 호출 실패 시에는 이전 특보 데이터를 유지하고, 성공했으나 내용이 없는 경우는 빈 목록으로 업데이트합니다.
         if status["warning_now"].startswith("error") and self.data and "warnings" in self.data:
             data["warnings"] = self.data["warnings"]
+            refresh_meta["warnings_stale"] = True
             _LOGGER.debug("기상특보 호출이 실패하여 이전 특보 데이터를 유지합니다.")
         else:
             keywords = PROVINCE_WARNING_KEYWORDS.get(self.land_reg, [])
@@ -210,6 +227,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if status and all(isinstance(v, str) and v.startswith("error") for v in status.values()):
             raise UpdateFailed("모든 기상청 API 호출이 실패했습니다.")
 
+        self._refresh_meta = refresh_meta
         return data
 
     async def _fetch_optional(self, label: str, coro: Any) -> tuple[list, str]:
@@ -240,6 +258,11 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     def api_last_error_times(self) -> dict[str, datetime.datetime | None]:
         """API별 마지막 에러 발생 시각 (UTC aware). 에러 없으면 None."""
         return dict(self._api_last_error_time)
+
+    @property
+    def refresh_meta(self) -> dict[str, bool]:
+        """마지막 갱신에서 이전 값을 유지한 데이터 항목 여부."""
+        return dict(self._refresh_meta)
 
     def _nearest_village(self) -> VillageForecast | None:
         """현재 시각에 가장 가까운 동네예보 레코드(폴백/POP용)."""

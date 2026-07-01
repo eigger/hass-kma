@@ -171,6 +171,14 @@
       "precipitation_start": {
         "name": "강수 시작 시각"
       },
+      "current_data_source": {
+        "name": "현재값 데이터 소스",
+        "state": {
+          "ncst": "초단기실황",
+          "village": "동네예보(폴백)",
+          "none": "데이터 없음"
+        }
+      },
       "error_count_village_forecast": {
         "name": "동네예보 API 오류 수"
       },

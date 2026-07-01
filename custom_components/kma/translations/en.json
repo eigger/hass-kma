@@ -171,6 +171,14 @@
       "precipitation_start": {
         "name": "Precipitation Start Time"
       },
+      "current_data_source": {
+        "name": "Current Data Source",
+        "state": {
+          "ncst": "Ultra-short observation",
+          "village": "Village forecast (fallback)",
+          "none": "No data"
+        }
+      },
       "error_count_village_forecast": {
         "name": "Village Forecast API Error Count"
       },
