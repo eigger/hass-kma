@@ -114,55 +114,83 @@
         "name": "이슬점"
       },
       "discomfort_index": {
-        "name": "불쾌지수",
-        "state_attributes": {
-          "grade": {
-            "name": "단계"
-          }
+        "name": "불쾌지수"
+      },
+      "discomfort_grade": {
+        "name": "불쾌지수 등급",
+        "state": {
+          "low": "낮음",
+          "normal": "보통",
+          "high": "높음",
+          "very_high": "매우높음"
         }
       },
       "laundry_index": {
         "name": "빨래 건조 지수",
         "state_attributes": {
-          "grade": {
-            "name": "단계"
-          },
           "recommendation": {
             "name": "주의사항"
           }
+        }
+      },
+      "laundry_grade": {
+        "name": "빨래 건조 지수 등급",
+        "state": {
+          "excellent": "매우 좋음",
+          "good": "좋음",
+          "normal": "보통",
+          "avoid": "비추천"
         }
       },
       "car_wash_index": {
         "name": "세차 지수",
         "state_attributes": {
-          "grade": {
-            "name": "단계"
-          },
           "recommendation": {
             "name": "주의사항"
           }
+        }
+      },
+      "car_wash_grade": {
+        "name": "세차 지수 등급",
+        "state": {
+          "excellent": "매우 좋음",
+          "delay": "보류 권장",
+          "caution": "세차 비추",
+          "avoid": "세차 금지"
         }
       },
       "freeze_risk_index": {
         "name": "동파 가능 지수",
         "state_attributes": {
-          "grade": {
-            "name": "단계"
-          },
           "recommendation": {
             "name": "주의사항"
           }
         }
       },
+      "freeze_risk_grade": {
+        "name": "동파 가능 지수 등급",
+        "state": {
+          "low": "낮음",
+          "normal": "보통",
+          "high": "높음",
+          "very_high": "매우 높음"
+        }
+      },
       "food_poisoning_index": {
         "name": "식중독 지수",
         "state_attributes": {
-          "grade": {
-            "name": "단계"
-          },
           "recommendation": {
             "name": "주의사항"
           }
+        }
+      },
+      "food_poisoning_grade": {
+        "name": "식중독 지수 등급",
+        "state": {
+          "safe": "관심",
+          "caution": "주의",
+          "warning": "경고",
+          "danger": "위험"
         }
       },
       "one_line_summary": {
@@ -179,6 +207,82 @@
           "none": "데이터 없음"
         }
       },
+      "pm10": {
+        "name": "미세먼지(PM10)"
+      },
+      "pm10_grade": {
+        "name": "미세먼지 등급",
+        "state": {
+          "good": "좋음",
+          "moderate": "보통",
+          "unhealthy": "나쁨",
+          "very_unhealthy": "매우나쁨"
+        }
+      },
+      "uv_index": {
+        "name": "자외선지수"
+      },
+      "uv_index_grade": {
+        "name": "자외선지수 등급",
+        "state": {
+          "low": "낮음",
+          "moderate": "보통",
+          "high": "높음",
+          "very_high": "매우높음",
+          "extreme": "위험"
+        }
+      },
+      "air_stagnation_index": {
+        "name": "대기정체지수"
+      },
+      "air_stagnation_grade": {
+        "name": "대기정체지수 등급",
+        "state": {
+          "low": "낮음",
+          "moderate": "보통",
+          "high": "높음",
+          "very_high": "매우높음"
+        }
+      },
+      "oak_pollen_risk": {
+        "name": "꽃가루농도위험지수(참나무)"
+      },
+      "oak_pollen_risk_grade": {
+        "name": "꽃가루농도위험지수(참나무) 등급",
+        "state": {
+          "low": "낮음",
+          "moderate": "보통",
+          "high": "높음",
+          "very_high": "매우높음"
+        }
+      },
+      "pine_pollen_risk": {
+        "name": "꽃가루농도위험지수(소나무)"
+      },
+      "pine_pollen_risk_grade": {
+        "name": "꽃가루농도위험지수(소나무) 등급",
+        "state": {
+          "low": "낮음",
+          "moderate": "보통",
+          "high": "높음",
+          "very_high": "매우높음"
+        }
+      },
+      "weed_pollen_risk": {
+        "name": "꽃가루농도위험지수(잡초류)"
+      },
+      "weed_pollen_risk_grade": {
+        "name": "꽃가루농도위험지수(잡초류) 등급",
+        "state": {
+          "low": "낮음",
+          "moderate": "보통",
+          "high": "높음",
+          "very_high": "매우높음"
+        }
+      },
+      "radar_precipitation": {
+        "name": "레이더 강수강도"
+      },
       "error_count_village_forecast": {
         "name": "동네예보 API 오류 수"
       },
@@ -190,6 +294,27 @@
       },
       "error_count_warning_now": {
         "name": "기상특보 API 오류 수"
+      },
+      "error_count_pm10": {
+        "name": "미세먼지 API 오류 수"
+      },
+      "error_count_uv_index": {
+        "name": "자외선지수 API 오류 수"
+      },
+      "error_count_air_stagnation": {
+        "name": "대기정체지수 API 오류 수"
+      },
+      "error_count_oak_pollen": {
+        "name": "꽃가루(참나무) API 오류 수"
+      },
+      "error_count_pine_pollen": {
+        "name": "꽃가루(소나무) API 오류 수"
+      },
+      "error_count_weed_pollen": {
+        "name": "꽃가루(잡초류) API 오류 수"
+      },
+      "error_count_radar_precipitation": {
+        "name": "레이더 강수강도 API 오류 수"
       }
     },
     "binary_sensor": {
@@ -210,11 +335,40 @@
       },
       "activation_warning_now": {
         "name": "기상특보 API"
+      },
+      "activation_pm10": {
+        "name": "미세먼지 API"
+      },
+      "activation_uv_index": {
+        "name": "자외선지수 API"
+      },
+      "activation_air_stagnation": {
+        "name": "대기정체지수 API"
+      },
+      "activation_oak_pollen": {
+        "name": "꽃가루(참나무) API"
+      },
+      "activation_pine_pollen": {
+        "name": "꽃가루(소나무) API"
+      },
+      "activation_weed_pollen": {
+        "name": "꽃가루(잡초류) API"
+      },
+      "activation_radar_precipitation": {
+        "name": "레이더 강수강도 API"
       }
     },
     "button": {
       "refresh": {
         "name": "수동 갱신"
+      }
+    },
+    "image": {
+      "radar_image": {
+        "name": "레이더 합성영상"
+      },
+      "satellite_image": {
+        "name": "위성 영상"
       }
     }
   }

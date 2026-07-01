@@ -13,11 +13,17 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN
 from .api import KmaApiClient
-from .coordinator import KmaForecastCoordinator
+from .coordinator import KmaForecastCoordinator, KmaImageCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = [Platform.WEATHER, Platform.SENSOR, Platform.BINARY_SENSOR, Platform.BUTTON]
+PLATFORMS = [
+    Platform.WEATHER,
+    Platform.SENSOR,
+    Platform.BINARY_SENSOR,
+    Platform.BUTTON,
+    Platform.IMAGE,
+]
 
 SUBENTRY_TYPE_ZONE = "zone"
 
@@ -35,10 +41,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_config_entry_first_refresh()
         coordinators[subentry_id] = coordinator
 
+    image_coordinator = KmaImageCoordinator(hass, client, entry)
+    await image_coordinator.async_config_entry_first_refresh()
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
         "coordinators": coordinators,
+        "image_coordinator": image_coordinator,
     }
 
     # 옵션/서브엔트리 변경 시 리로드

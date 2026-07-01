@@ -7,6 +7,10 @@ from custom_components.kma.api import (
     KmaActivationRequiredError,
     KmaApiError,
     KmaAuthError,
+    Pm10Observation,
+    _hourly_current,
+    _is_png,
+    _parse_pm10_line,
     _parse_typ02_items,
     _raise_for_error_payload,
     _split_with_trailing_quoted,
@@ -165,9 +169,16 @@ class TestParseTyp02Items:
             _parse_typ02_items(payload, "test")
 
     def test_generic_error_raises(self):
-        payload = self._wrap("99", "SYSTEM_ERROR_REASON")
+        payload = self._wrap("98", "SYSTEM_ERROR_REASON")
         with pytest.raises(KmaApiError):
             _parse_typ02_items(payload, "test")
+
+    def test_nodata_99_returns_empty(self):
+        # 생활기상지수/보건기상지수 API(예: 꽃가루)는 서비스 기간이 아니거나 지역코드에
+        # 자료가 없을 때 커스텀 메시지와 함께 99를 반환한다 — NODATA로 취급해야 한다.
+        payload = self._wrap("99", "해당지수자료 제공기간이 아닙니다! [자료제공기간 3월 ~ 6월]")
+        result = _parse_typ02_items(payload, "test")
+        assert result == []
 
     def test_invalid_json_raises(self):
         with pytest.raises(KmaApiError):
@@ -228,3 +239,77 @@ class TestRaiseForErrorPayload:
     def test_auth_error_is_subclass_of_api_error(self):
         with pytest.raises(KmaApiError):
             _raise_for_error_payload(401, self._body(401, "인증 오류"), "ep")
+
+
+# ---------------------------------------------------------------------------
+# _parse_pm10_line (kma_pm10.php)
+# ---------------------------------------------------------------------------
+class TestParsePm10Line:
+    def test_normal_line(self):
+        obs = _parse_pm10_line("202607011800,   108,   39,000000,,=")
+        assert obs == Pm10Observation(stn="108", tm="202607011800", pm10=pytest.approx(39.0), raw="202607011800,   108,   39,000000,,=")
+
+    def test_zero_reading(self):
+        obs = _parse_pm10_line("202607012230,   100,    0,000000,,=")
+        assert obs.pm10 == pytest.approx(0.0)
+
+    def test_trailing_equals_stripped(self):
+        # 트레일링 '=' 은 값이 아니라 종료 마커이므로 필드로 세면 안 됨
+        obs = _parse_pm10_line("202607011800, 108, 39, 000000,,=")
+        assert obs.tm == "202607011800"
+        assert obs.stn == "108"
+
+    def test_too_few_fields_returns_none(self):
+        assert _parse_pm10_line("202607011800,108") is None
+
+    def test_empty_line_returns_none(self):
+        assert _parse_pm10_line("") is None
+
+    def test_raw_preserved(self):
+        line = "202607011800,   108,   39,000000,,="
+        obs = _parse_pm10_line(line)
+        assert obs.raw == line
+
+
+# ---------------------------------------------------------------------------
+# _hourly_current (getUVIdxV3 / getAirDiffusionIdxV3)
+# ---------------------------------------------------------------------------
+class TestHourlyCurrent:
+    def test_h0_present(self):
+        item = {"h0": "1", "h3": "7", "h6": "6"}
+        assert _hourly_current(item) == pytest.approx(1.0)
+
+    def test_h0_missing_falls_back_to_h3(self):
+        item = {"h3": "75", "h6": "50"}
+        assert _hourly_current(item) == pytest.approx(75.0)
+
+    def test_h0_empty_string_falls_back(self):
+        # UV 응답은 예보 끝자락에서 빈 문자열 슬롯이 나올 수 있음
+        item = {"h0": "", "h3": "2"}
+        assert _hourly_current(item) == pytest.approx(2.0)
+
+    def test_all_empty_returns_none(self):
+        item = {"h0": "", "h3": "", "h6": ""}
+        assert _hourly_current(item) is None
+
+    def test_no_hourly_keys_returns_none(self):
+        assert _hourly_current({"date": "202607011200"}) is None
+
+
+# ---------------------------------------------------------------------------
+# _is_png (레이더/위성 이미지 게시 여부 판별)
+# ---------------------------------------------------------------------------
+class TestIsPng:
+    def test_real_png_magic_bytes(self):
+        assert _is_png(b"\x89PNG\r\n\x1a\n" + b"rest of file...") is True
+
+    def test_euc_kr_error_text_is_not_png(self):
+        # 아직 게시되지 않은 경우 "# file not exist" 같은 EUC-KR 텍스트가
+        # HTTP 200으로 오는 것이 확인됨 — 실제 PNG가 아님.
+        assert _is_png("# file not exist (RDR_CMB_202607012320.png)".encode("euc-kr")) is False
+
+    def test_empty_bytes_is_not_png(self):
+        assert _is_png(b"") is False
+
+    def test_json_error_body_is_not_png(self):
+        assert _is_png(b'{"result": {"status": 403}}') is False

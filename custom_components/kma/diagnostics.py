@@ -43,6 +43,13 @@ def _zone_diagnostics(
             "marine": len(data.get("marine") or []),
             "warnings": len(data.get("warnings") or []),
         },
+        "pm10_available": data.get("pm10") is not None,
+        "uv_index_available": data.get("uv_index") is not None,
+        "air_stagnation_available": data.get("air_stagnation") is not None,
+        "oak_pollen_available": data.get("oak_pollen") is not None,
+        "pine_pollen_available": data.get("pine_pollen") is not None,
+        "weed_pollen_available": data.get("weed_pollen") is not None,
+        "radar_precipitation_available": data.get("radar_precipitation") is not None,
         "coordinator": {
             "last_update_success": coordinator.last_update_success,
             "last_exception": (
