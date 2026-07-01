@@ -346,7 +346,10 @@ async def async_setup_entry(
     for subentry_id, coordinator in coordinators.items():
         subentry = entry.subentries[subentry_id]
         async_add_entities(
-            [KmaSensor(coordinator, subentry, desc) for desc in SENSOR_DESCRIPTIONS],
+            [
+                *[KmaSensor(coordinator, subentry, desc) for desc in SENSOR_DESCRIPTIONS],
+                KmaCurrentDataSourceSensor(coordinator, subentry),
+            ],
             config_subentry_id=subentry_id,
         )
 
@@ -948,6 +951,45 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 return attrs
 
         return None
+
+
+class KmaCurrentDataSourceSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
+    """현재값이 초단기실황/동네예보 중 어디서 왔는지 표시하는 진단 센서."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["ncst", "village", "none"]
+    _attr_translation_key = "current_data_source"
+    _attr_icon = "mdi:database-search"
+
+    def __init__(
+        self, coordinator: KmaForecastCoordinator, subentry: ConfigSubentry
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{subentry.subentry_id}_current_data_source"
+        zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, subentry.subentry_id)},
+            name=zone_name,
+            manufacturer="Korea Meteorological Administration",
+            model="KMA APIhub Forecast",
+            via_device=(DOMAIN, coordinator.config_entry.entry_id),
+        )
+
+    @property
+    def native_value(self) -> str:
+        return self.coordinator.get_current().source
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        data = self.coordinator.data or {}
+        return {
+            "ncst_available": data.get("ncst") is not None,
+            "ultra_fcst_records": len(data.get("ultra") or []),
+            "village_forecast_records": len(data.get("village") or []),
+            **self.coordinator.refresh_meta,
+        }
 
 
 class KmaApiErrorCountSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):

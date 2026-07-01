@@ -12,7 +12,6 @@ from homeassistant.components.binary_sensor import (
     BinarySensorEntity,
 )
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
-from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
@@ -264,7 +263,7 @@ class KmaPrecipitationBinarySensor(
 class KmaApiStatusBinarySensor(
     CoordinatorEntity[KmaForecastCoordinator], BinarySensorEntity
 ):
-    """허브 단위 API 활용신청/접근 상태 진단 센서.
+    """허브 단위 API 활용신청/접근 상태 센서.
 
     on  = 정상 응답(활용신청 완료)
     off = 미신청(403)/오류 — status 속성으로 상세 구분
@@ -272,7 +271,6 @@ class KmaApiStatusBinarySensor(
 
     _attr_has_entity_name = True
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
