@@ -367,6 +367,15 @@
       },
       "precipitation_forecast_image": {
         "name": "Precipitation Forecast Image"
+      },
+      "satellite_visible_image": {
+        "name": "Satellite Visible Image"
+      },
+      "satellite_shortwave_ir_image": {
+        "name": "Satellite Shortwave IR Image"
+      },
+      "satellite_water_vapor_image": {
+        "name": "Satellite Water Vapor Image"
       }
     }
   }

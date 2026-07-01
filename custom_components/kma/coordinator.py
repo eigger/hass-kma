@@ -507,6 +507,11 @@ class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     유지한다.
     """
 
+    _IMAGE_KEYS = (
+        "radar", "satellite", "precipitation_forecast",
+        "satellite_visible", "satellite_shortwave_ir", "satellite_water_vapor",
+    )
+
     def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
         self.client = client
         super().__init__(
@@ -517,37 +522,39 @@ class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=10),
         )
 
+    async def _fetch_image(self, data: dict[str, Any], key: str, label: str, coro: Any) -> None:
+        try:
+            image = await coro
+            if image is not None:
+                data[key] = image
+        except KmaActivationRequiredError:
+            _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
+        except KmaApiError as err:
+            _LOGGER.debug("%s 갱신 실패: %s", label, err)
+
     async def _async_update_data(self) -> dict[str, Any]:
         """레이더/위성/강수예측 최신 이미지를 조회. 실패/미게시 시 이전 값을 유지."""
-        data: dict[str, Any] = dict(
-            self.data or {"radar": None, "satellite": None, "precipitation_forecast": None}
+        data: dict[str, Any] = dict(self.data or dict.fromkeys(self._IMAGE_KEYS))
+
+        await self._fetch_image(data, "radar", "레이더 이미지", self.client.async_get_radar_image())
+        await self._fetch_image(
+            data, "satellite", "위성 이미지", self.client.async_get_satellite_image()
         )
-
-        try:
-            radar = await self.client.async_get_radar_image()
-            if radar is not None:
-                data["radar"] = radar
-        except KmaActivationRequiredError:
-            _LOGGER.warning("레이더 이미지 API 미신청(403). 활용신청이 필요합니다.")
-        except KmaApiError as err:
-            _LOGGER.debug("레이더 이미지 갱신 실패: %s", err)
-
-        try:
-            satellite = await self.client.async_get_satellite_image()
-            if satellite is not None:
-                data["satellite"] = satellite
-        except KmaActivationRequiredError:
-            _LOGGER.warning("위성 이미지 API 미신청(403). 활용신청이 필요합니다.")
-        except KmaApiError as err:
-            _LOGGER.debug("위성 이미지 갱신 실패: %s", err)
-
-        try:
-            precip_forecast = await self.client.async_get_precipitation_forecast_image()
-            if precip_forecast is not None:
-                data["precipitation_forecast"] = precip_forecast
-        except KmaActivationRequiredError:
-            _LOGGER.warning("강수예측 이미지 API 미신청(403). 활용신청이 필요합니다.")
-        except KmaApiError as err:
-            _LOGGER.debug("강수예측 이미지 갱신 실패: %s", err)
+        await self._fetch_image(
+            data, "precipitation_forecast", "강수예측 이미지",
+            self.client.async_get_precipitation_forecast_image(),
+        )
+        await self._fetch_image(
+            data, "satellite_visible", "위성 가시광선 이미지",
+            self.client.async_get_satellite_image(obs="vi006"),
+        )
+        await self._fetch_image(
+            data, "satellite_shortwave_ir", "위성 단파적외 이미지",
+            self.client.async_get_satellite_image(obs="sw038"),
+        )
+        await self._fetch_image(
+            data, "satellite_water_vapor", "위성 수증기 이미지",
+            self.client.async_get_satellite_image(obs="wv069"),
+        )
 
         return data

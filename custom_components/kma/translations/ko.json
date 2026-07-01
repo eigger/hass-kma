@@ -372,6 +372,15 @@
       },
       "precipitation_forecast_image": {
         "name": "초단기 강수예측 영상"
+      },
+      "satellite_visible_image": {
+        "name": "위성 가시광선 영상"
+      },
+      "satellite_shortwave_ir_image": {
+        "name": "위성 단파적외 영상"
+      },
+      "satellite_water_vapor_image": {
+        "name": "위성 수증기 영상"
       }
     }
   }

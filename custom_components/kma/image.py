@@ -1,5 +1,10 @@
 """기상청(KMA) 레이더/위성/강수예측 이미지(Image) 플랫폼 구현.
 
+위성은 적외(ir105) 외에 가시광선(vi006)/단파적외(sw038)/수증기(wv069) 채널도
+제공한다. 같은 nph-gk2a_img 엔드포인트를 obs 파라미터만 바꿔 호출하며(실측
+검증 2026-07-02), 반대로 obs=cld/fog/dst/rgb-* 등은 전부 1KB 안팎의 "미지원"
+플레이스홀더 PNG만 돌아와 실데이터가 아님을 확인했다(구현하지 않음).
+
 레이더/위성/강수예측 이미지는 특정 Zone과 무관한 전국(한반도) 단위 자료라, 실제 페칭은
 `KmaImageCoordinator`(coordinator.py) 하나가 담당한다(중복 API 호출 없음). 다만
 엔티티는 허브(API Hub) 디바이스가 아니라 각 Zone 디바이스에만 배치한다 —
@@ -70,18 +75,12 @@ async def async_setup_entry(
         )
         async_add_entities(
             [
-                KmaRadarImage(
+                entity_cls(
                     hass, coordinator,
-                    unique_id=f"{subentry_id}_radar_image", device_info=zone_device,
-                ),
-                KmaSatelliteImage(
-                    hass, coordinator,
-                    unique_id=f"{subentry_id}_satellite_image", device_info=zone_device,
-                ),
-                KmaPrecipitationForecastImage(
-                    hass, coordinator,
-                    unique_id=f"{subentry_id}_precipitation_forecast_image", device_info=zone_device,
-                ),
+                    unique_id=f"{subentry_id}_{entity_cls._attr_translation_key}",
+                    device_info=zone_device,
+                )
+                for entity_cls in _IMAGE_ENTITY_CLASSES
             ],
             config_subentry_id=subentry_id,
         )
@@ -154,3 +153,34 @@ class KmaPrecipitationForecastImage(_KmaBaseImage):
 
     _attr_translation_key = "precipitation_forecast_image"
     _data_key = "precipitation_forecast"
+
+
+class KmaSatelliteVisibleImage(_KmaBaseImage):
+    """위성(GK2A) 가시광선(vi006) 최신 이미지, 야간에는 관측되지 않음. [실측 검증 2026-07-02]"""
+
+    _attr_translation_key = "satellite_visible_image"
+    _data_key = "satellite_visible"
+
+
+class KmaSatelliteShortwaveIrImage(_KmaBaseImage):
+    """위성(GK2A) 단파적외(sw038) 최신 이미지, 야간 안개/하층운 탐지에 사용. [실측 검증 2026-07-02]"""
+
+    _attr_translation_key = "satellite_shortwave_ir_image"
+    _data_key = "satellite_shortwave_ir"
+
+
+class KmaSatelliteWaterVaporImage(_KmaBaseImage):
+    """위성(GK2A) 수증기(wv069) 최신 이미지. [실측 검증 2026-07-02]"""
+
+    _attr_translation_key = "satellite_water_vapor_image"
+    _data_key = "satellite_water_vapor"
+
+
+_IMAGE_ENTITY_CLASSES = (
+    KmaRadarImage,
+    KmaSatelliteImage,
+    KmaPrecipitationForecastImage,
+    KmaSatelliteVisibleImage,
+    KmaSatelliteShortwaveIrImage,
+    KmaSatelliteWaterVaporImage,
+)
