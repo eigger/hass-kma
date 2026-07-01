@@ -496,14 +496,15 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
 
 class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """레이더/위성 이미지 코디네이터 (허브 단위, Zone과 무관한 전국 이미지 1세트).
+    """레이더/위성/강수예측 이미지 코디네이터 (허브 단위, Zone과 무관한 전국 이미지 세트).
 
     ImageEntity는 `image_last_updated`를 코디네이터 갱신 시점에만 바꿔야 하므로
     (async_image 내부에서 바꾸면 순환 트리거가 됨), 바이트 페칭은 여기서 수행하고
     엔티티는 캐시된 바이트만 반환한다.
 
-    두 이미지 모두 게시 지연이 있어(레이더 ~20분, 위성 거의 없음) 아직 게시되지
-    않은 경우 async_get_*_image()가 None을 반환한다 — 이때는 이전 값을 유지한다.
+    이미지들 모두 게시 지연이 있어(레이더/강수예측 ~20분, 위성 거의 없음) 아직
+    게시되지 않은 경우 async_get_*_image()가 None을 반환한다 — 이때는 이전 값을
+    유지한다.
     """
 
     def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
@@ -517,8 +518,10 @@ class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
-        """레이더/위성 최신 이미지를 조회. 실패/미게시 시 이전 값을 유지."""
-        data: dict[str, Any] = dict(self.data or {"radar": None, "satellite": None})
+        """레이더/위성/강수예측 최신 이미지를 조회. 실패/미게시 시 이전 값을 유지."""
+        data: dict[str, Any] = dict(
+            self.data or {"radar": None, "satellite": None, "precipitation_forecast": None}
+        )
 
         try:
             radar = await self.client.async_get_radar_image()
@@ -537,5 +540,14 @@ class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("위성 이미지 API 미신청(403). 활용신청이 필요합니다.")
         except KmaApiError as err:
             _LOGGER.debug("위성 이미지 갱신 실패: %s", err)
+
+        try:
+            precip_forecast = await self.client.async_get_precipitation_forecast_image()
+            if precip_forecast is not None:
+                data["precipitation_forecast"] = precip_forecast
+        except KmaActivationRequiredError:
+            _LOGGER.warning("강수예측 이미지 API 미신청(403). 활용신청이 필요합니다.")
+        except KmaApiError as err:
+            _LOGGER.debug("강수예측 이미지 갱신 실패: %s", err)
 
         return data

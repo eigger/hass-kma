@@ -369,6 +369,9 @@
       },
       "satellite_image": {
         "name": "위성 영상"
+      },
+      "precipitation_forecast_image": {
+        "name": "초단기 강수예측 영상"
       }
     }
   }

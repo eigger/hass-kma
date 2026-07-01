@@ -1087,6 +1087,36 @@ class KmaApiClient:
             return None
         return ImageBinary(data=raw, content_type="image/png", filename=f"GK2A_{obs}_{tm}.png")
 
+    async def async_get_precipitation_forecast_image(
+        self, *, tm: str | None = None, ef: int = 60, qpf: str = "M"
+    ) -> ImageBinary | None:
+        """초단기 강수예측(QPF) 분포도 이미지 조회 (typ03/nph-qpf_ana_img). [실측 검증 2026-07-02]
+
+        레이더 관측 기반으로 ef분 뒤 강수 분포를 예측한 이미지(기본 60분 뒤,
+        qpf=M은 MAPLE 블렌딩 모델). 레이더 합성영상과 비슷하게 게시 지연이
+        있어(~20분) 같은 백오프를 사용한다. PNG 매직바이트로 실제 이미지
+        여부를 확인한다.
+        """
+        if tm is None:
+            backoff = _now_kst() - datetime.timedelta(minutes=20)
+            rounded = backoff - datetime.timedelta(
+                minutes=backoff.minute % 5, seconds=backoff.second, microseconds=backoff.microsecond
+            )
+            tm = rounded.strftime("%Y%m%d%H%M")
+        raw, _content_type = await self._request_binary(
+            "https://apihub.kma.go.kr/api/typ03/cgi/rdr/nph-qpf_ana_img",
+            {
+                "tm": tm, "qpf": qpf, "eva": 1, "option": 1, "ef": ef,
+                "map": "HR", "grid": 2, "legend": 1, "size": 600, "itv": 5,
+                "zoom_level": 0, "zoom_x": "0000000", "zoom_y": "0000000",
+            },
+        )
+        if not _is_png(raw):
+            return None
+        return ImageBinary(
+            data=raw, content_type="image/png", filename=f"QPF_{qpf}_{ef}min_{tm}.png"
+        )
+
     async def async_get_warning_now(self, *, fe: str = "e") -> list[dict[str, Any]]:
         """기상특보 현황 (wrn_now_data.php). [활용신청 완료, 검증됨]
 

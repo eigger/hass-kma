@@ -1,6 +1,6 @@
-"""기상청(KMA) 레이더/위성 이미지(Image) 플랫폼 구현.
+"""기상청(KMA) 레이더/위성/강수예측 이미지(Image) 플랫폼 구현.
 
-레이더/위성 이미지는 특정 Zone과 무관한 전국(한반도) 단위 자료라, 실제 페칭은
+레이더/위성/강수예측 이미지는 특정 Zone과 무관한 전국(한반도) 단위 자료라, 실제 페칭은
 `KmaImageCoordinator`(coordinator.py) 하나가 담당한다(중복 API 호출 없음). 다만
 엔티티는 허브(API Hub) 디바이스가 아니라 각 Zone 디바이스에만 배치한다 —
 사용자가 허브 디바이스에는 진단성 엔티티만 보이길 원해서, 같은 캐시 바이트를
@@ -78,16 +78,20 @@ async def async_setup_entry(
                     hass, coordinator,
                     unique_id=f"{subentry_id}_satellite_image", device_info=zone_device,
                 ),
+                KmaPrecipitationForecastImage(
+                    hass, coordinator,
+                    unique_id=f"{subentry_id}_precipitation_forecast_image", device_info=zone_device,
+                ),
             ],
             config_subentry_id=subentry_id,
         )
 
 
 class _KmaBaseImage(CoordinatorEntity[KmaImageCoordinator], ImageEntity):
-    """레이더/위성 공통 베이스: 지정된 디바이스 + coordinator.data[_data_key]에서 바이트 캐싱."""
+    """레이더/위성/강수예측 공통 베이스: 지정된 디바이스 + coordinator.data[_data_key]에서 바이트 캐싱."""
 
     _attr_has_entity_name = True
-    _data_key = ""  # 서브클래스에서 "radar"/"satellite"로 지정
+    _data_key = ""  # 서브클래스에서 "radar"/"satellite"/"precipitation_forecast"로 지정
 
     def __init__(
         self,
@@ -143,3 +147,10 @@ class KmaSatelliteImage(_KmaBaseImage):
 
     _attr_translation_key = "satellite_image"
     _data_key = "satellite"
+
+
+class KmaPrecipitationForecastImage(_KmaBaseImage):
+    """초단기 강수예측(QPF, 60분 뒤) 이미지. [실측 검증 2026-07-02]"""
+
+    _attr_translation_key = "precipitation_forecast_image"
+    _data_key = "precipitation_forecast"

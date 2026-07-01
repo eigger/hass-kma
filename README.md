@@ -44,12 +44,12 @@
 *   **레이더 강수강도 (`sensor.kma_<지역>_radar_precipitation`)** ✅ 실제 authKey로 동작 검증 완료(2026-07-01):
     *   `WthrRadarInfoService/getCompCappiQcdArea`(행정구역별 조회)를 사용해 Zone별 레이더 반사도(dBZ) 숫자 센서를 제공합니다. 자동화 조건식 등에 활용하기 좋습니다.
     *   ⚠️ 특정 지역(광주)은 2026년 행정구역 통합으로 대체된 구코드를 여전히 쓰고 있어 간헐적으로 오류가 발생할 수 있습니다 — 실패 시 이전 값을 유지합니다.
-*   **레이더/위성 이미지 (`image.kma_radar_image`, `image.kma_satellite_image`)** ✅ 실제 authKey로 동작 검증 완료(2026-07-01):
-    *   레이더 합성영상 PNG(강수 분포도, 범례·시각 포함)와 천리안위성(GK2A) 적외영상 PNG를 최신 스냅샷으로 제공합니다.
+*   **레이더/위성/강수예측 이미지 (`image.kma_radar_image`, `image.kma_satellite_image`, `image.kma_precipitation_forecast_image`)** ✅ 실제 authKey로 동작 검증 완료(2026-07-01, 강수예측 이미지는 2026-07-02):
+    *   레이더 합성영상 PNG(강수 분포도, 범례·시각 포함), 천리안위성(GK2A) 적외영상 PNG, 그리고 레이더 관측 기반 60분 뒤 강수 분포 예측(초단기 강수예측/QPF, MAPLE 블렌딩 모델) PNG를 최신 스냅샷으로 제공합니다.
     *   실제 API 호출은 Zone과 무관하게 딱 1세트만 발생하지만(한반도 전체 이미지라 Zone별로 다를 이유가 없음), 같은 캐시 이미지를 가리키는 엔티티를 **각 Zone 디바이스에** 배치합니다(허브/API Hub 디바이스에는 진단성 엔티티만 남기고 이미지는 두지 않음).
     *   약 10분 주기로 갱신되며, 대시보드의 Picture Entity 카드 등으로 바로 표시할 수 있습니다.
-    *   처음 시도했던 `nph-rdr_cmp1_api`(원시 반사도 격자 데이터만 제공)와 `nph-gk2a_img`(잘못된 경로) 대신, 실제 PNG를 반환하는 별도 엔드포인트(레이더: `typ04/rdr_cmp_file.php?data=img`, 위성: `typ03/nph-gk2a_img`)를 찾아 사용합니다.
-    *   ⚠️ 레이더는 게시 지연(~15~20분)이 있어 아직 게시되지 않은 시각을 요청하면 이미지 대신 텍스트 오류가 200 OK로 오는 경우가 있어, PNG 매직바이트로 실제 이미지 여부를 확인합니다.
+    *   처음 시도했던 `nph-rdr_cmp1_api`(원시 반사도 격자 데이터만 제공)와 `nph-gk2a_img`(잘못된 경로) 대신, 실제 PNG를 반환하는 별도 엔드포인트(레이더: `typ04/rdr_cmp_file.php?data=img`, 위성: `typ03/nph-gk2a_img`, 강수예측: `typ03/nph-qpf_ana_img`)를 찾아 사용합니다.
+    *   ⚠️ 레이더/강수예측은 게시 지연(~15~20분)이 있어 아직 게시되지 않은 시각을 요청하면 이미지 대신 텍스트 오류가 200 OK로 오는 경우가 있어, PNG 매직바이트로 실제 이미지 여부를 확인합니다.
 *   **재난 기상특보 안전 센서 (`binary_sensor.kma_*_warning`)**:
     *   선택된 거주 지역(광역자치단체 기준)에 기상 특보(호우, 대설, 강풍, 폭염, 한파, 태풍, 황사 등)가 발효되면 즉시 `on` 상태가 됩니다.
     *   발효된 특보의 개수, 특보 명칭(예: 폭염주의보, 호우경보 등), 발효 시간 및 상세 목록을 속성 값으로 지연 없이 노출합니다 (홈어시스턴트의 시스템 언어 설정에 맞춰 다국어 이름/등급 제공).
@@ -103,6 +103,7 @@
 | 기상청 날씨 | `binary_sensor.kma_<지역>_warning` | 기상특보 안전 센서 | 기상특보현황 (`wrn_now_data`) | 10분 |
 | 각 Zone | `image.kma_radar_image` | 레이더 합성영상 | `typ04/rdr_cmp_file.php` (data=img) ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 | 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외영상 | `typ03/nph-gk2a_img` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
+| 각 Zone | `image.kma_precipitation_forecast_image` | 초단기 강수예측(60분 뒤) 영상 | `typ03/nph-qpf_ana_img` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 
 ---
 
@@ -133,7 +134,7 @@
 *   지점 매핑: 서울/인천(강화)/수원/춘천(북춘천)/강릉(대관령)/청주·대전(천안)/전주/광주/대구/부산(구덕산)/제주(고산). PM10 관측망은 일반 ASOS보다 지점 수가 적어, 일부 지역(청주·대전·강릉·부산·제주)은 정확히 일치하는 지점이 없어 가장 가까운 지점으로 대체됩니다 — 특히 청주와 대전은 둘 다 천안 지점 값을 공유합니다.
 *   ⚠️ PM2.5(초미세먼지)는 이 API에서 제공되지 않아 범위 밖입니다.
 
-### 4. 레이더 강수강도(`radar_precipitation`) / 레이더·위성 이미지(`image.kma_radar_image`, `image.kma_satellite_image`)
+### 4. 레이더 강수강도(`radar_precipitation`) / 레이더·위성·강수예측 이미지(`image.kma_radar_image`, `image.kma_satellite_image`, `image.kma_precipitation_forecast_image`)
 처음 활용신청했던 레이더 합성영상 API(`nph-rdr_cmp1_api`, typ01)를 실제로 호출해보니 PNG 이미지가 아니라 **2305×2881 셀짜리 원시 dBZ(반사도) 격자 데이터**(ASCII 47MB 또는 바이너리 13MB)였습니다. 문서에도 "disp=A면 dbz*100 정수값 출력"이라고 명시되어 있어, 그 자체로는 이미지로 쓸 수 없었습니다.
 
 이후 두 갈래로 해결했습니다:
@@ -141,6 +142,7 @@
    *   ⚠️ 광주(구코드 2900000000 — 2026년 통합특별시 개편으로 대체된 레거시 코드)는 이 API에서 간헐적으로 오류가 발생함을 확인했습니다. 실패 시 이전 값을 유지합니다.
 2. **실제 PNG 이미지**: 별도로 문서를 더 확인한 결과, `typ04/rdr_cmp_file.php?data=img&cmp=cmb`(레이더)와 `typ03/nph-gk2a_img?obs=ir105`(위성)가 범례·시각이 포함된 완성된 PNG를 반환함을 실제로 확인했습니다(2026-07-01, 시각적으로도 검증). 각각 `image.kma_radar_image`, `image.kma_satellite_image`로 제공합니다.
    *   레이더는 게시 지연(~15~20분)이 있고, 아직 게시되지 않은 시각을 요청하면 PNG 대신 EUC-KR 오류 텍스트("# file not exist")가 HTTP 200으로 오면서 Content-Type도 신뢰할 수 없는 값(`application/x-zip-compressed` 등)이 오는 경우가 있어, PNG 매직바이트(`\x89PNG...`)로 실제 이미지 여부를 판별합니다.
+3. **강수예측(QPF) 이미지**: 레이더/위성 이미지 확인 과정에서 사용자가 신청한 나머지 API들을 추가로 검토한 결과, `typ03/nph-qpf_ana_img?qpf=M&ef=60`(레이더 관측 기반 MAPLE 블렌딩 모델로 60분 뒤 강수 분포를 예측)도 범례·시각이 포함된 완성된 PNG를 반환함을 확인했습니다(2026-07-02). `image.kma_precipitation_forecast_image`로 제공하며, 현재 레이더 이미지와 자연스럽게 짝을 이뤄 "지금"과 "60분 뒤"를 함께 볼 수 있습니다. 레이더 합성영상과 마찬가지로 게시 지연(~15~20분)이 있어 같은 백오프와 PNG 매직바이트 검증을 사용합니다.
    *   위성은 게시 지연이 거의 없음을 확인했습니다. 기본 채널은 적외(`ir105`, 주야간 모두 관측 가능)로 설정했습니다.
 
 ### 5. 자외선지수 / 대기정체지수 / 꽃가루농도위험지수 (`uv_index`, `air_stagnation_index`, `oak_pollen_risk`, `pine_pollen_risk`, `weed_pollen_risk` + 각 `*_grade`)

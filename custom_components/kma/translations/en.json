@@ -369,6 +369,9 @@
       },
       "satellite_image": {
         "name": "Satellite Image"
+      },
+      "precipitation_forecast_image": {
+        "name": "Precipitation Forecast Image"
       }
     }
   }
