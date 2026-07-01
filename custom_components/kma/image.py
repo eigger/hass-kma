@@ -2,10 +2,11 @@
 
 레이더/위성 이미지는 특정 Zone과 무관한 전국(한반도) 단위 자료라, 실제 페칭은
 `KmaImageCoordinator`(coordinator.py) 하나가 담당한다(중복 API 호출 없음). 다만
-사용자가 각 Zone 디바이스 화면에서도 바로 볼 수 있도록, 허브 디바이스용 엔티티
-2개(레이더/위성)에 더해 Zone 디바이스마다 같은 캐시 바이트를 가리키는 엔티티를
-추가로 배치한다 — 내용은 모두 동일한 한반도 전체 이미지이고, 추가 API 호출은
-발생하지 않는다.
+엔티티는 허브(API Hub) 디바이스가 아니라 각 Zone 디바이스에만 배치한다 —
+사용자가 허브 디바이스에는 진단성 엔티티만 보이길 원해서, 같은 캐시 바이트를
+가리키는 이미지 엔티티를 Zone 디바이스 화면에서만 볼 수 있게 한다. 내용은
+모든 Zone에서 동일한 한반도 전체 이미지이고, Zone 개수와 무관하게 추가 API
+호출은 발생하지 않는다.
 
 처음에는 레이더 원시 반사도 격자(nph-rdr_cmp1_api)가 PNG가 아니라 수백만 셀짜리
 데이터 덤프임을 확인하고 이미지 엔티티를 제거했었으나, 이후 실제 PNG를 반환하는
@@ -33,7 +34,6 @@ import logging
 from homeassistant.components.image import ImageEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -50,33 +50,13 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """허브 단위 + Zone별 복제 레이더/위성 이미지 엔티티 추가.
+    """Zone별 복제 레이더/위성 이미지 엔티티 추가 (허브 디바이스에는 배치하지 않음).
 
     페칭은 공유 KmaImageCoordinator 하나뿐이며, 여기서는 같은 캐시 바이트를
-    가리키는 엔티티를 허브 디바이스와 각 Zone 디바이스에 나눠 배치할 뿐이다.
+    가리키는 엔티티를 각 Zone 디바이스에 나눠 배치할 뿐이다.
     """
     store = hass.data[DOMAIN][entry.entry_id]
     coordinator: KmaImageCoordinator = store["image_coordinator"]
-
-    hub_device = DeviceInfo(
-        identifiers={(DOMAIN, entry.entry_id)},
-        name="기상청 APIhub",
-        manufacturer="Korea Meteorological Administration",
-        model="API Hub",
-        entry_type=DeviceEntryType.SERVICE,
-    )
-    async_add_entities(
-        [
-            KmaRadarImage(
-                hass, coordinator,
-                unique_id=f"{entry.entry_id}_radar_image", device_info=hub_device,
-            ),
-            KmaSatelliteImage(
-                hass, coordinator,
-                unique_id=f"{entry.entry_id}_satellite_image", device_info=hub_device,
-            ),
-        ]
-    )
 
     for subentry_id in store.get("coordinators", {}):
         subentry = entry.subentries[subentry_id]

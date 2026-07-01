@@ -46,7 +46,7 @@
     *   ⚠️ 특정 지역(광주)은 2026년 행정구역 통합으로 대체된 구코드를 여전히 쓰고 있어 간헐적으로 오류가 발생할 수 있습니다 — 실패 시 이전 값을 유지합니다.
 *   **레이더/위성 이미지 (`image.kma_radar_image`, `image.kma_satellite_image`)** ✅ 실제 authKey로 동작 검증 완료(2026-07-01):
     *   레이더 합성영상 PNG(강수 분포도, 범례·시각 포함)와 천리안위성(GK2A) 적외영상 PNG를 최신 스냅샷으로 제공합니다.
-    *   실제 API 호출은 Zone과 무관하게 딱 1세트만 발생하지만(한반도 전체 이미지라 Zone별로 다를 이유가 없음), 같은 캐시 이미지를 가리키는 엔티티를 **허브 디바이스와 각 Zone 디바이스 모두에** 배치해 어느 화면에서든 바로 볼 수 있습니다.
+    *   실제 API 호출은 Zone과 무관하게 딱 1세트만 발생하지만(한반도 전체 이미지라 Zone별로 다를 이유가 없음), 같은 캐시 이미지를 가리키는 엔티티를 **각 Zone 디바이스에** 배치합니다(허브/API Hub 디바이스에는 진단성 엔티티만 남기고 이미지는 두지 않음).
     *   약 10분 주기로 갱신되며, 대시보드의 Picture Entity 카드 등으로 바로 표시할 수 있습니다.
     *   처음 시도했던 `nph-rdr_cmp1_api`(원시 반사도 격자 데이터만 제공)와 `nph-gk2a_img`(잘못된 경로) 대신, 실제 PNG를 반환하는 별도 엔드포인트(레이더: `typ04/rdr_cmp_file.php?data=img`, 위성: `typ03/nph-gk2a_img`)를 찾아 사용합니다.
     *   ⚠️ 레이더는 게시 지연(~15~20분)이 있어 아직 게시되지 않은 시각을 요청하면 이미지 대신 텍스트 오류가 200 OK로 오는 경우가 있어, PNG 매직바이트로 실제 이미지 여부를 확인합니다.
@@ -101,8 +101,8 @@
 | 기상청 날씨 | `sensor.kma_<지역>_weed_pollen_risk_grade` | 꽃가루위험지수(잡초류) 등급 | 지수값(0~3) 그대로 등급 매핑 (ENUM) | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation` | 레이더 강수강도 | `WthrRadarInfoService/getCompCappiQcdArea` ✅검증됨 | 10분 |
 | 기상청 날씨 | `binary_sensor.kma_<지역>_warning` | 기상특보 안전 센서 | 기상특보현황 (`wrn_now_data`) | 10분 |
-| 기상청 APIhub + 각 Zone | `image.kma_radar_image` | 레이더 합성영상 | `typ04/rdr_cmp_file.php` (data=img) ✅검증됨. 허브·Zone 모두 배치, 실제 호출은 1세트만 | 10분 |
-| 기상청 APIhub + 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외영상 | `typ03/nph-gk2a_img` ✅검증됨. 허브·Zone 모두 배치, 실제 호출은 1세트만 | 10분 |
+| 각 Zone | `image.kma_radar_image` | 레이더 합성영상 | `typ04/rdr_cmp_file.php` (data=img) ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
+| 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외영상 | `typ03/nph-gk2a_img` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 
 ---
 
