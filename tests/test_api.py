@@ -9,6 +9,7 @@ from custom_components.kma.api import (
     KmaAuthError,
     Pm10Observation,
     _hourly_current,
+    _is_png,
     _parse_pm10_line,
     _parse_typ02_items,
     _raise_for_error_payload,
@@ -293,3 +294,22 @@ class TestHourlyCurrent:
 
     def test_no_hourly_keys_returns_none(self):
         assert _hourly_current({"date": "202607011200"}) is None
+
+
+# ---------------------------------------------------------------------------
+# _is_png (레이더/위성 이미지 게시 여부 판별)
+# ---------------------------------------------------------------------------
+class TestIsPng:
+    def test_real_png_magic_bytes(self):
+        assert _is_png(b"\x89PNG\r\n\x1a\n" + b"rest of file...") is True
+
+    def test_euc_kr_error_text_is_not_png(self):
+        # 아직 게시되지 않은 경우 "# file not exist" 같은 EUC-KR 텍스트가
+        # HTTP 200으로 오는 것이 확인됨 — 실제 PNG가 아님.
+        assert _is_png("# file not exist (RDR_CMB_202607012320.png)".encode("euc-kr")) is False
+
+    def test_empty_bytes_is_not_png(self):
+        assert _is_png(b"") is False
+
+    def test_json_error_body_is_not_png(self):
+        assert _is_png(b'{"result": {"status": 403}}') is False

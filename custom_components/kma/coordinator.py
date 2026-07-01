@@ -19,7 +19,6 @@ from .const import (
     PROVINCE_WARNING_KEYWORDS,
 )
 from .api import (
-    ImageBinary,
     KmaApiClient,
     KmaApiError,
     KmaActivationRequiredError,
@@ -497,15 +496,14 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
 
 class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """위성 이미지 코디네이터 (허브 단위, Zone과 무관한 전국 이미지 1세트).
-
-    레이더는 원시 반사도 격자(수백만 셀)만 제공되어 이미지로 쓸 수 없음이 확인되어
-    (2026-07-01) 행정구역별 강수강도 숫자 센서(radar_precipitation, Zone별
-    코디네이터)로 대체되었다 — 여기서는 위성만 다룬다.
+    """레이더/위성 이미지 코디네이터 (허브 단위, Zone과 무관한 전국 이미지 1세트).
 
     ImageEntity는 `image_last_updated`를 코디네이터 갱신 시점에만 바꿔야 하므로
     (async_image 내부에서 바꾸면 순환 트리거가 됨), 바이트 페칭은 여기서 수행하고
     엔티티는 캐시된 바이트만 반환한다.
+
+    두 이미지 모두 게시 지연이 있어(레이더 ~20분, 위성 거의 없음) 아직 게시되지
+    않은 경우 async_get_*_image()가 None을 반환한다 — 이때는 이전 값을 유지한다.
     """
 
     def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
@@ -518,12 +516,23 @@ class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=10),
         )
 
-    async def _async_update_data(self) -> dict[str, ImageBinary | None]:
-        """위성 최신 이미지를 조회. 실패 시 이전 값을 유지(전체 통합 실패로 처리하지 않음)."""
-        data: dict[str, ImageBinary | None] = dict(self.data or {"satellite": None})
+    async def _async_update_data(self) -> dict[str, Any]:
+        """레이더/위성 최신 이미지를 조회. 실패/미게시 시 이전 값을 유지."""
+        data: dict[str, Any] = dict(self.data or {"radar": None, "satellite": None})
 
         try:
-            data["satellite"] = await self.client.async_get_satellite_image()
+            radar = await self.client.async_get_radar_image()
+            if radar is not None:
+                data["radar"] = radar
+        except KmaActivationRequiredError:
+            _LOGGER.warning("레이더 이미지 API 미신청(403). 활용신청이 필요합니다.")
+        except KmaApiError as err:
+            _LOGGER.debug("레이더 이미지 갱신 실패: %s", err)
+
+        try:
+            satellite = await self.client.async_get_satellite_image()
+            if satellite is not None:
+                data["satellite"] = satellite
         except KmaActivationRequiredError:
             _LOGGER.warning("위성 이미지 API 미신청(403). 활용신청이 필요합니다.")
         except KmaApiError as err:

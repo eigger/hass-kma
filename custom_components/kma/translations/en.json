@@ -364,6 +364,9 @@
       }
     },
     "image": {
+      "radar_image": {
+        "name": "Radar Composite Image"
+      },
       "satellite_image": {
         "name": "Satellite Image"
       }

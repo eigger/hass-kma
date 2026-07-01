@@ -364,6 +364,9 @@
       }
     },
     "image": {
+      "radar_image": {
+        "name": "레이더 합성영상"
+      },
       "satellite_image": {
         "name": "위성 영상"
       }

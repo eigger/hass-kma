@@ -277,15 +277,6 @@ class RadarPrecipitation:
 
 
 @dataclass(frozen=True)
-class SatelliteFileInfo:
-    """위성(GK2A) 산출물 파일 목록 1건. [활용신청 필요 — 미검증]"""
-
-    filename: str
-    tm: str | None
-    raw: str
-
-
-@dataclass(frozen=True)
 class ImageBinary:
     """레이더/위성 바이너리 이미지 응답 공통 래퍼."""
 
@@ -357,6 +348,19 @@ def _to_float(value: str) -> float | None:
     except (ValueError, TypeError):
         return None
     return None if num in (-99.0, -99) else num
+
+
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def _is_png(data: bytes) -> bool:
+    """바이트열이 실제 PNG인지 확인.
+
+    레이더/위성 이미지 엔드포인트는 아직 파일이 게시되지 않았을 때 Content-Type을
+    올바르게 설정하지 않고 EUC-KR 텍스트 오류 메시지를 200 OK로 반환하는 경우가
+    있어(예: "# file not exist"), Content-Type 헤더 대신 매직바이트로 판별한다.
+    """
+    return data.startswith(_PNG_MAGIC)
 
 
 def _hourly_current(item: dict[str, Any]) -> float | None:
@@ -1037,41 +1041,51 @@ class KmaApiClient:
             value=_to_float(item.get("value")),
         )
 
-    async def async_get_satellite_file_list(
-        self, *, tm: str | None = None, channel: str | None = None
-    ) -> list[SatelliteFileInfo]:
-        """위성(GK2A) 산출물 파일 목록 조회 (sat_file_list.php). [활용신청 필요 — 미검증]
+    async def async_get_radar_image(
+        self, *, tm: str | None = None, cmp: str = "cmb"
+    ) -> ImageBinary | None:
+        """레이더 합성 이미지 다운로드 (typ04/rdr_cmp_file.php, data=img). [실측 검증 2026-07-01]
 
-        TODO: 활용신청 후 실제 파라미터/응답 포맷 확정. rdr_cmp_file_list.php와 같은
-        "url" 계열 텍스트 API라 쉼표구분 포맷일 가능성이 높아 그 형식으로 우선 파싱한다.
+        5분 간격. 게시 지연이 확인되어(2026-07-01, 15분 전은 실패/10분 전은 성공)
+        tm 생략 시 20분 전을 5분 단위로 내림해서 사용한다. 아직 게시되지 않은
+        경우 HTTP 200 + EUC-KR 텍스트("# file not exist...")로 응답하므로
+        (Content-Type도 신뢰할 수 없어 image/png가 아닌 값이 오기도 함) PNG
+        매직바이트로 실제 이미지 여부를 확인한다.
         """
-        text = await self._request(
-            "sat_file_list.php", {"tm": tm, "channel": channel}
+        if tm is None:
+            backoff = _now_kst() - datetime.timedelta(minutes=20)
+            rounded = backoff - datetime.timedelta(
+                minutes=backoff.minute % 5, seconds=backoff.second, microseconds=backoff.microsecond
+            )
+            tm = rounded.strftime("%Y%m%d%H%M")
+        raw, _content_type = await self._request_binary(
+            "https://apihub.kma.go.kr/api/typ04/url/rdr_cmp_file.php",
+            {"tm": tm, "data": "img", "cmp": cmp},
         )
-        out: list[SatelliteFileInfo] = []
-        for line in iter_data_lines(text):
-            parts = [p.strip() for p in line.split(",")]
-            if parts and parts[-1] == "=":
-                parts = parts[:-1]
-            if not parts or not parts[0]:
-                continue
-            out.append(SatelliteFileInfo(filename=parts[0], tm=tm, raw=line))
-        return out
+        if not _is_png(raw):
+            return None
+        return ImageBinary(data=raw, content_type="image/png", filename=f"RDR_CMP_{cmp.upper()}_{tm}.png")
 
     async def async_get_satellite_image(
-        self, *, tm: str | None = None, obs: str = "vi006", map: str = "HB"
-    ) -> ImageBinary:
-        """위성(GK2A) 분포도 이미지 조회 (nph-gk2a_img). [활용신청 필요 — 미검증]
+        self, *, tm: str | None = None, obs: str = "ir105", map: str = "HR"
+    ) -> ImageBinary | None:
+        """위성(GK2A) 분포도 이미지 조회 (typ03/nph-gk2a_img). [실측 검증 2026-07-01]
 
-        TODO: 2026-07-01 기준 이 경로는 404(유효하지 않은 API)를 반환 — 정확한
-        엔드포인트명/파라미터는 활용신청 후(혹은 apihub 문서 재확인 후) 확정 필요.
+        10분 간격, 게시 지연 거의 없음(2026-07-01 실측). obs 기본값은 적외선(ir105,
+        야간에도 관측 가능)으로 설정. PNG 매직바이트로 실제 이미지 여부를 확인한다.
         """
         tm = tm or _now_kst().strftime("%Y%m%d%H%M")
-        raw, content_type = await self._request_binary(
-            "https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-gk2a_img",
-            {"tm": tm, "obs": obs, "map": map},
+        raw, _content_type = await self._request_binary(
+            "https://apihub.kma.go.kr/api/typ03/cgi/sat/nph-gk2a_img",
+            {
+                "tm": tm, "obs": obs, "map": map, "grid": 2, "legend": 1,
+                "size": 600, "itv": 5, "zoom_level": 0,
+                "zoom_x": "0000000", "zoom_y": "0000000",
+            },
         )
-        return ImageBinary(data=raw, content_type=content_type or "image/png", filename=None)
+        if not _is_png(raw):
+            return None
+        return ImageBinary(data=raw, content_type="image/png", filename=f"GK2A_{obs}_{tm}.png")
 
     async def async_get_warning_now(self, *, fe: str = "e") -> list[dict[str, Any]]:
         """기상특보 현황 (wrn_now_data.php). [활용신청 완료, 검증됨]
