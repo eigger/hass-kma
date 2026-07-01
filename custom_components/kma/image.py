@@ -1,7 +1,11 @@
 """기상청(KMA) 레이더/위성 이미지(Image) 플랫폼 구현.
 
-레이더/위성 이미지는 Zone과 무관한 전국 단위 자료이므로 허브(부모 엔트리) 디바이스에
-배정하고, `KmaImageCoordinator`(coordinator.py)를 사용한다.
+레이더/위성 이미지는 특정 Zone과 무관한 전국(한반도) 단위 자료라, 실제 페칭은
+`KmaImageCoordinator`(coordinator.py) 하나가 담당한다(중복 API 호출 없음). 다만
+사용자가 각 Zone 디바이스 화면에서도 바로 볼 수 있도록, 허브 디바이스용 엔티티
+2개(레이더/위성)에 더해 Zone 디바이스마다 같은 캐시 바이트를 가리키는 엔티티를
+추가로 배치한다 — 내용은 모두 동일한 한반도 전체 이미지이고, 추가 API 호출은
+발생하지 않는다.
 
 처음에는 레이더 원시 반사도 격자(nph-rdr_cmp1_api)가 PNG가 아니라 수백만 셀짜리
 데이터 덤프임을 확인하고 이미지 엔티티를 제거했었으나, 이후 실제 PNG를 반환하는
@@ -13,6 +17,14 @@ HA 공식 문서에 따르면 `image_last_updated`는 코디네이터 갱신 시
 (`async_image` 내부에서 바꾸면 순환 트리거가 됨), `async_image`는 캐시된 바이트만
 반환해야 한다. 따라서 바이트 캐싱과 `image_last_updated` 갱신은
 `_handle_coordinator_update`에서 수행한다.
+
+주의: `CoordinatorEntity.async_added_to_hass()`는 `_handle_coordinator_update`를
+"다음 갱신부터" 호출할 리스너로만 등록하고, 엔티티가 추가되는 시점에는 즉시
+호출하지 않는다. 이 통합은 부모 엔트리 셋업 시 `KmaImageCoordinator`의 최초
+갱신을 먼저 끝낸 뒤에 플랫폼(엔티티)을 생성하므로, 이 동기화를 안 해주면
+코디네이터에는 이미 이미지가 있는데도 엔티티는 다음 10분 주기가 올 때까지
+`unavailable`(이미지·아이콘 없음)로 보이는 문제가 생긴다(실측 확인됨).
+그래서 `async_added_to_hass`를 오버라이드해 초기 상태를 즉시 동기화한다.
 """
 from __future__ import annotations
 
@@ -38,41 +50,92 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """허브 단위 레이더/위성 이미지 엔티티 추가 (Zone 무관)."""
+    """허브 단위 + Zone별 복제 레이더/위성 이미지 엔티티 추가.
+
+    페칭은 공유 KmaImageCoordinator 하나뿐이며, 여기서는 같은 캐시 바이트를
+    가리키는 엔티티를 허브 디바이스와 각 Zone 디바이스에 나눠 배치할 뿐이다.
+    """
     store = hass.data[DOMAIN][entry.entry_id]
     coordinator: KmaImageCoordinator = store["image_coordinator"]
+
+    hub_device = DeviceInfo(
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="기상청 APIhub",
+        manufacturer="Korea Meteorological Administration",
+        model="API Hub",
+        entry_type=DeviceEntryType.SERVICE,
+    )
     async_add_entities(
         [
-            KmaRadarImage(hass, coordinator, entry),
-            KmaSatelliteImage(hass, coordinator, entry),
+            KmaRadarImage(
+                hass, coordinator,
+                unique_id=f"{entry.entry_id}_radar_image", device_info=hub_device,
+            ),
+            KmaSatelliteImage(
+                hass, coordinator,
+                unique_id=f"{entry.entry_id}_satellite_image", device_info=hub_device,
+            ),
         ]
     )
 
+    for subentry_id in store.get("coordinators", {}):
+        subentry = entry.subentries[subentry_id]
+        zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
+        zone_device = DeviceInfo(
+            identifiers={(DOMAIN, subentry_id)},
+            name=zone_name,
+            manufacturer="Korea Meteorological Administration",
+            model="KMA APIhub Forecast",
+            via_device=(DOMAIN, entry.entry_id),
+        )
+        async_add_entities(
+            [
+                KmaRadarImage(
+                    hass, coordinator,
+                    unique_id=f"{subentry_id}_radar_image", device_info=zone_device,
+                ),
+                KmaSatelliteImage(
+                    hass, coordinator,
+                    unique_id=f"{subentry_id}_satellite_image", device_info=zone_device,
+                ),
+            ],
+            config_subentry_id=subentry_id,
+        )
+
 
 class _KmaBaseImage(CoordinatorEntity[KmaImageCoordinator], ImageEntity):
-    """레이더/위성 공통 베이스: 허브 디바이스 + coordinator.data[_data_key]에서 바이트 캐싱."""
+    """레이더/위성 공통 베이스: 지정된 디바이스 + coordinator.data[_data_key]에서 바이트 캐싱."""
 
     _attr_has_entity_name = True
     _data_key = ""  # 서브클래스에서 "radar"/"satellite"로 지정
 
     def __init__(
-        self, hass: HomeAssistant, coordinator: KmaImageCoordinator, entry: ConfigEntry
+        self,
+        hass: HomeAssistant,
+        coordinator: KmaImageCoordinator,
+        *,
+        unique_id: str,
+        device_info: DeviceInfo,
     ) -> None:
         CoordinatorEntity.__init__(self, coordinator)
         ImageEntity.__init__(self, hass)
-        self._entry = entry
         self._last_bytes: bytes | None = None
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name="기상청 APIhub",
-            manufacturer="Korea Meteorological Administration",
-            model="API Hub",
-            entry_type=DeviceEntryType.SERVICE,
-        )
+        self._attr_unique_id = unique_id
+        self._attr_device_info = device_info
 
     @property
     def available(self) -> bool:
         return super().available and self._last_bytes is not None
+
+    async def async_added_to_hass(self) -> None:
+        """엔티티 추가 시점에 코디네이터가 이미 들고 있는 데이터로 즉시 동기화.
+
+        CoordinatorEntity는 _handle_coordinator_update를 향후 갱신에 대한
+        리스너로만 등록하고 즉시 호출하지 않으므로, 여기서 한 번 직접 호출해
+        최초 갱신 결과를 곧바로 반영한다.
+        """
+        await super().async_added_to_hass()
+        self._handle_coordinator_update()
 
     def _handle_coordinator_update(self) -> None:
         """코디네이터 갱신 시점에만 바이트/갱신시각을 반영 (async_image에서는 반영 금지)."""
@@ -94,21 +157,9 @@ class KmaRadarImage(_KmaBaseImage):
     _attr_translation_key = "radar_image"
     _data_key = "radar"
 
-    def __init__(
-        self, hass: HomeAssistant, coordinator: KmaImageCoordinator, entry: ConfigEntry
-    ) -> None:
-        super().__init__(hass, coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_radar_image"
-
 
 class KmaSatelliteImage(_KmaBaseImage):
     """위성(GK2A) 적외 최신 이미지. [실측 검증 2026-07-01]"""
 
     _attr_translation_key = "satellite_image"
     _data_key = "satellite"
-
-    def __init__(
-        self, hass: HomeAssistant, coordinator: KmaImageCoordinator, entry: ConfigEntry
-    ) -> None:
-        super().__init__(hass, coordinator, entry)
-        self._attr_unique_id = f"{entry.entry_id}_satellite_image"
