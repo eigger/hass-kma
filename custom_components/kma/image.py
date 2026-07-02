@@ -100,11 +100,26 @@ class _KmaBaseImage(CoordinatorEntity[KmaImageCoordinator], ImageEntity):
         unique_id: str,
         device_info: DeviceInfo,
     ) -> None:
+        # unique_id/device_info를 부모 __init__ 호출보다 먼저 설정한다 —
+        # CoordinatorEntity/ImageEntity.__init__ 내부에서 self.unique_id를
+        # 참조하는 경로가 있어 순서가 반대면 등록 시점에 잘못된(None) 값이
+        # 쓰일 수 있다(entity_id가 매 재시작마다 새로 배정되는 원인 중 하나로
+        # 확인됨). 프로퍼티도 명시적으로 오버라이드해 항상 이 값을 반환하도록 고정한다.
+        self._attr_unique_id = unique_id
+        self._attr_device_info = device_info
         CoordinatorEntity.__init__(self, coordinator)
         ImageEntity.__init__(self, hass)
         self._last_bytes: bytes | None = None
-        self._attr_unique_id = unique_id
-        self._attr_device_info = device_info
+
+    @property
+    def unique_id(self) -> str | None:
+        """Return a unique ID."""
+        return self._attr_unique_id
+
+    @property
+    def device_info(self) -> DeviceInfo | None:
+        """Return device specific attributes."""
+        return self._attr_device_info
 
     @property
     def available(self) -> bool:
