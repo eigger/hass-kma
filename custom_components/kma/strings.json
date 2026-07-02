@@ -328,6 +328,94 @@
       "pm10_hourly_avg": {
         "name": "PM10 Hourly Average"
       },
+      "weather_commentary_section_1": {
+        "name": "Weather Commentary Section 1",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "weather_commentary_section_2": {
+        "name": "Weather Commentary Section 2",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "weather_commentary_section_3": {
+        "name": "Weather Commentary Section 3",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "weather_commentary_section_4": {
+        "name": "Weather Commentary Section 4",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "weather_commentary_section_5": {
+        "name": "Weather Commentary Section 5",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "weather_commentary_section_6": {
+        "name": "Weather Commentary Section 6",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "weather_commentary_section_7": {
+        "name": "Weather Commentary Section 7",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "weather_commentary_section_8": {
+        "name": "Weather Commentary Section 8",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "hazard_info_section_1": {
+        "name": "Hazard Info Section 1",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "hazard_info_section_2": {
+        "name": "Hazard Info Section 2",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
+      "hazard_info_section_3": {
+        "name": "Hazard Info Section 3",
+        "state_attributes": {
+          "text": {
+            "name": "Text"
+          }
+        }
+      },
       "recent_earthquake": {
         "name": "Recent Earthquake"
       },

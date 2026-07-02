@@ -605,6 +605,35 @@ def split_bulletin_sections(body: str) -> dict[str, str]:
     return sections
 
 
+def bulletin_section(
+    body: str, *, slot: int, total_slots: int
+) -> tuple[str, str] | None:
+    """split_bulletin_sections()의 섹션 중 slot번째(1부터 시작) 항목을 꺼낸다.
+
+    소제목은 그날그날 바뀌므로 고정 개수의 "섹션 N" 슬롯으로 노출한다(고아
+    엔티티를 만들지 않기 위함 — 실측 확인 2026-07-02). 실제 섹션 수가
+    total_slots보다 많으면, 마지막 슬롯(slot == total_slots)에 남은 섹션
+    전부를 병합해 담아 내용이 누락되지 않게 한다.
+
+    반환값은 (소제목, 본문) 튜플. 그날 그 슬롯에 해당하는 섹션이 없으면 None.
+    """
+    sections = split_bulletin_sections(body)
+    if not sections:
+        return None
+    items = list(sections.items())
+    if slot < 1 or slot - 1 >= len(items):
+        return None
+    if slot < total_slots or len(items) <= total_slots:
+        return items[slot - 1]
+
+    remaining = items[slot - 1:]
+    if len(remaining) == 1:
+        return remaining[0]
+    heading = f"{remaining[0][0]} 외 {len(remaining) - 1}건"
+    text = "\n\n".join(f"<{h}>\n{t}" for h, t in remaining)
+    return heading, text
+
+
 def _split_with_trailing_quoted(line: str, head_count: int) -> tuple[list[str], str]:
     """앞쪽 공백구분 필드 + 큰따옴표로 감싼 마지막 필드를 분리.
 

@@ -22,6 +22,7 @@ from custom_components.kma.api import (
     _split_with_trailing_quoted,
     _to_float,
     _to_int,
+    bulletin_section,
     iter_data_lines,
     split_bulletin_sections,
 )
@@ -449,3 +450,41 @@ class TestSplitBulletinSections:
         sections = split_bulletin_sections(body)
         assert "빈 섹션" not in sections
         assert sections["실제 섹션"] == "내용"
+
+
+# ---------------------------------------------------------------------------
+# bulletin_section (고정 개수 "섹션 N" 슬롯 조회)
+# ---------------------------------------------------------------------------
+class TestBulletinSection:
+    def _body(self, n: int) -> str:
+        return "".join(f"<섹션{i}>\n내용{i}\n\n" for i in range(1, n + 1))
+
+    def test_fewer_sections_than_slots(self):
+        body = self._body(2)
+        assert bulletin_section(body, slot=1, total_slots=5) == ("섹션1", "내용1")
+        assert bulletin_section(body, slot=2, total_slots=5) == ("섹션2", "내용2")
+        assert bulletin_section(body, slot=3, total_slots=5) is None
+
+    def test_exact_match(self):
+        body = self._body(3)
+        assert bulletin_section(body, slot=3, total_slots=3) == ("섹션3", "내용3")
+
+    def test_overflow_merges_into_last_slot(self):
+        body = self._body(5)
+        result = bulletin_section(body, slot=3, total_slots=3)
+        assert result is not None
+        heading, text = result
+        assert heading == "섹션3 외 2건"
+        assert "섹션3" in text and "섹션4" in text and "섹션5" in text
+        assert "내용3" in text and "내용4" in text and "내용5" in text
+
+    def test_overflow_single_remaining_section_keeps_own_heading(self):
+        body = self._body(3)
+        result = bulletin_section(body, slot=3, total_slots=3)
+        assert result == ("섹션3", "내용3")
+
+    def test_empty_body_returns_none(self):
+        assert bulletin_section("", slot=1, total_slots=3) is None
+
+    def test_slot_below_one_returns_none(self):
+        assert bulletin_section(self._body(3), slot=0, total_slots=3) is None

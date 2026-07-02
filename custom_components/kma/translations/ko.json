@@ -328,6 +328,94 @@
       "pm10_hourly_avg": {
         "name": "미세먼지(PM10) 시간평균"
       },
+      "weather_commentary_section_1": {
+        "name": "날씨해설 섹션 1",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "weather_commentary_section_2": {
+        "name": "날씨해설 섹션 2",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "weather_commentary_section_3": {
+        "name": "날씨해설 섹션 3",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "weather_commentary_section_4": {
+        "name": "날씨해설 섹션 4",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "weather_commentary_section_5": {
+        "name": "날씨해설 섹션 5",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "weather_commentary_section_6": {
+        "name": "날씨해설 섹션 6",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "weather_commentary_section_7": {
+        "name": "날씨해설 섹션 7",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "weather_commentary_section_8": {
+        "name": "날씨해설 섹션 8",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "hazard_info_section_1": {
+        "name": "기상정보 섹션 1",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "hazard_info_section_2": {
+        "name": "기상정보 섹션 2",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
+      "hazard_info_section_3": {
+        "name": "기상정보 섹션 3",
+        "state_attributes": {
+          "text": {
+            "name": "본문"
+          }
+        }
+      },
       "recent_earthquake": {
         "name": "최근 지진정보"
       },
