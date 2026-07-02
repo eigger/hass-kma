@@ -309,16 +309,16 @@
       "hazard_info": {
         "name": "기상정보",
         "state_attributes": {
-          "body": {
-            "name": "본문"
+          "sections": {
+            "name": "본문(섹션별)"
           }
         }
       },
       "weather_commentary": {
         "name": "날씨해설",
         "state_attributes": {
-          "body": {
-            "name": "본문"
+          "sections": {
+            "name": "본문(섹션별)"
           }
         }
       },
