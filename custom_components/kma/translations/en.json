@@ -283,6 +283,57 @@
       "radar_precipitation": {
         "name": "Radar Precipitation Intensity"
       },
+      "apparent_temperature_observed": {
+        "name": "Observed Apparent Temperature"
+      },
+      "heat_wave_risk": {
+        "name": "Heat Wave Impact Risk",
+        "state": {
+          "none": "None",
+          "concern": "Concern",
+          "caution": "Caution",
+          "warning": "Warning",
+          "danger": "Danger"
+        }
+      },
+      "cold_wave_risk": {
+        "name": "Cold Wave Impact Risk",
+        "state": {
+          "none": "None",
+          "concern": "Concern",
+          "caution": "Caution",
+          "warning": "Warning",
+          "danger": "Danger"
+        }
+      },
+      "hazard_info": {
+        "name": "Hazard Info",
+        "state_attributes": {
+          "body": {
+            "name": "Body"
+          }
+        }
+      },
+      "weather_commentary": {
+        "name": "Weather Commentary",
+        "state_attributes": {
+          "body": {
+            "name": "Body"
+          }
+        }
+      },
+      "snow_depth_observed": {
+        "name": "Observed Snow Depth"
+      },
+      "pm10_hourly_avg": {
+        "name": "PM10 Hourly Average"
+      },
+      "recent_earthquake": {
+        "name": "Recent Earthquake"
+      },
+      "typhoon_status": {
+        "name": "Typhoon Status"
+      },
       "error_count_village_forecast": {
         "name": "Village Forecast API Error Count"
       },
@@ -333,6 +384,36 @@
       },
       "error_count_satellite_water_vapor": {
         "name": "Satellite Water Vapor API Error Count"
+      },
+      "error_count_sfc_observation": {
+        "name": "High-Res Surface Observation API Error Count"
+      },
+      "error_count_heat_wave_risk": {
+        "name": "Heat Wave Impact Forecast API Error Count"
+      },
+      "error_count_cold_wave_risk": {
+        "name": "Cold Wave Impact Forecast API Error Count"
+      },
+      "error_count_hazard_info": {
+        "name": "Hazard Info API Error Count"
+      },
+      "error_count_weather_commentary": {
+        "name": "Weather Commentary API Error Count"
+      },
+      "error_count_snow_depth": {
+        "name": "Snow Depth Observation API Error Count"
+      },
+      "error_count_pm10_hourly": {
+        "name": "PM10 Hourly Stats API Error Count"
+      },
+      "error_count_dust_satellite": {
+        "name": "Dust Satellite Image API Error Count"
+      },
+      "error_count_earthquake": {
+        "name": "Earthquake API Error Count"
+      },
+      "error_count_typhoon": {
+        "name": "Typhoon API Error Count"
       }
     },
     "binary_sensor": {
@@ -392,6 +473,36 @@
       },
       "activation_satellite_water_vapor": {
         "name": "Satellite Water Vapor API"
+      },
+      "activation_sfc_observation": {
+        "name": "High-Res Surface Observation API"
+      },
+      "activation_heat_wave_risk": {
+        "name": "Heat Wave Impact Forecast API"
+      },
+      "activation_cold_wave_risk": {
+        "name": "Cold Wave Impact Forecast API"
+      },
+      "activation_hazard_info": {
+        "name": "Hazard Info API"
+      },
+      "activation_weather_commentary": {
+        "name": "Weather Commentary API"
+      },
+      "activation_snow_depth": {
+        "name": "Snow Depth Observation API"
+      },
+      "activation_pm10_hourly": {
+        "name": "PM10 Hourly Stats API"
+      },
+      "activation_dust_satellite": {
+        "name": "Dust Satellite Image API"
+      },
+      "activation_earthquake": {
+        "name": "Earthquake API"
+      },
+      "activation_typhoon": {
+        "name": "Typhoon API"
       }
     },
     "button": {
@@ -417,6 +528,9 @@
       },
       "satellite_water_vapor_image": {
         "name": "Satellite Water Vapor Image"
+      },
+      "dust_satellite_image": {
+        "name": "Dust Satellite Image"
       }
     }
   }

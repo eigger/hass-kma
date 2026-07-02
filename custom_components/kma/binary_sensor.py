@@ -18,8 +18,8 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import API_STATUS_IMAGE_KEYS, API_STATUS_ZONE_KEYS, DOMAIN
-from .coordinator import KmaForecastCoordinator, KmaImageCoordinator
+from .const import API_STATUS_HUB_KEYS, API_STATUS_IMAGE_KEYS, API_STATUS_ZONE_KEYS, DOMAIN
+from .coordinator import KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -109,8 +109,9 @@ async def async_setup_entry(
     # 허브(통합) 기기: API별 활용신청 상태 진단 센서.
     # Zone별 예·특보 API는 Zone 호출 피드백을 그대로 쓰므로 임의의(첫) Zone
     # 코디네이터에 연결하고, Zone과 무관한 레이더/위성 이미지 API는 공유
-    # image_coordinator에 연결한다. 새 API를 추가할 때는 const.py의
-    # API_STATUS_ZONE_KEYS/API_STATUS_IMAGE_KEYS에 key만 추가하면 여기서 자동으로
+    # image_coordinator, 지진/태풍 등 허브 데이터 API는 hub_coordinator에
+    # 연결한다. 새 API를 추가할 때는 const.py의 API_STATUS_ZONE_KEYS/
+    # API_STATUS_IMAGE_KEYS/API_STATUS_HUB_KEYS에 key만 추가하면 여기서 자동으로
     # 활용신청 상태 센서가 생성된다.
     entities: list[KmaApiStatusBinarySensor] = []
     if coordinators:
@@ -124,6 +125,12 @@ async def async_setup_entry(
         entities += [
             KmaApiStatusBinarySensor(image_coordinator, entry, key)
             for key in API_STATUS_IMAGE_KEYS
+        ]
+    hub_coordinator: KmaHubCoordinator | None = store.get("hub_coordinator")
+    if hub_coordinator is not None:
+        entities += [
+            KmaApiStatusBinarySensor(hub_coordinator, entry, key)
+            for key in API_STATUS_HUB_KEYS
         ]
     if entities:
         async_add_entities(entities)
@@ -263,16 +270,17 @@ class KmaPrecipitationBinarySensor(
 
 
 class KmaApiStatusBinarySensor(
-    CoordinatorEntity[KmaForecastCoordinator | KmaImageCoordinator], BinarySensorEntity
+    CoordinatorEntity[KmaForecastCoordinator | KmaImageCoordinator | KmaHubCoordinator], BinarySensorEntity
 ):
     """허브 단위 API 활용신청/접근 상태 센서.
 
     on  = 정상 응답(활용신청 완료)
     off = 미신청(403)/오류 — status 속성으로 상세 구분
 
-    Zone별 예·특보 코디네이터(KmaForecastCoordinator)와 Zone 무관 이미지
-    코디네이터(KmaImageCoordinator) 모두 api_status를 제공하므로(coordinator.py의
-    _ApiStatusMixin) 어느 쪽이든 그대로 연결할 수 있다.
+    Zone별 예·특보 코디네이터(KmaForecastCoordinator), Zone 무관 이미지
+    코디네이터(KmaImageCoordinator), 허브 데이터 코디네이터(KmaHubCoordinator)
+    모두 api_status를 제공하므로(coordinator.py의 _ApiStatusMixin) 어느 쪽이든
+    그대로 연결할 수 있다.
     """
 
     _attr_has_entity_name = True
@@ -280,7 +288,7 @@ class KmaApiStatusBinarySensor(
 
     def __init__(
         self,
-        coordinator: KmaForecastCoordinator | KmaImageCoordinator,
+        coordinator: KmaForecastCoordinator | KmaImageCoordinator | KmaHubCoordinator,
         entry: ConfigEntry,
         api_key: str,
     ) -> None:

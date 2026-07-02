@@ -176,6 +176,13 @@ class KmaSatelliteWaterVaporImage(_KmaBaseImage):
     _data_key = "satellite_water_vapor"
 
 
+class KmaDustSatelliteImage(_KmaBaseImage):
+    """황사위성영상(GK2A, 황사지수 IDI) 최신 이미지. [실측 검증 2026-07-02]"""
+
+    _attr_translation_key = "dust_satellite_image"
+    _data_key = "dust_satellite"
+
+
 _IMAGE_ENTITY_CLASSES = (
     KmaRadarImage,
     KmaSatelliteImage,
@@ -183,4 +190,5 @@ _IMAGE_ENTITY_CLASSES = (
     KmaSatelliteVisibleImage,
     KmaSatelliteShortwaveIrImage,
     KmaSatelliteWaterVaporImage,
+    KmaDustSatelliteImage,
 )

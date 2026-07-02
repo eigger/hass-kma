@@ -8,9 +8,15 @@ from custom_components.kma.api import (
     KmaApiError,
     KmaAuthError,
     Pm10Observation,
+    Pm10HourlyStats,
+    SnowObservation,
+    StationBulletin,
     _hourly_current,
     _is_png,
+    _parse_pm10_hourly_line,
     _parse_pm10_line,
+    _parse_snow_line,
+    _parse_station_bulletins,
     _parse_typ02_items,
     _raise_for_error_payload,
     _split_with_trailing_quoted,
@@ -313,3 +319,91 @@ class TestIsPng:
 
     def test_json_error_body_is_not_png(self):
         assert _is_png(b'{"result": {"status": 403}}') is False
+
+
+# ---------------------------------------------------------------------------
+# _parse_snow_line (kma_snow1.php)
+# ---------------------------------------------------------------------------
+class TestParseSnowLine:
+    def test_normal_line(self):
+        line = "202601151800,    93,           북춘천, 127.75443000,  37.94738000, 000-----,    0.5,="
+        obs = _parse_snow_line(line)
+        assert obs == SnowObservation(stn="93", tm="202601151800", depth=pytest.approx(0.5))
+
+    def test_zero_depth(self):
+        line = "202607021900,   108,             서울, 126.96590000,  37.57140000, 000-----,    0.0,="
+        obs = _parse_snow_line(line)
+        assert obs.depth == pytest.approx(0.0)
+
+    def test_too_few_fields_returns_none(self):
+        assert _parse_snow_line("202601151800,93") is None
+
+    def test_empty_line_returns_none(self):
+        assert _parse_snow_line("") is None
+
+
+# ---------------------------------------------------------------------------
+# _parse_pm10_hourly_line (dst_pm10_hr.php)
+# ---------------------------------------------------------------------------
+class TestParsePm10HourlyLine:
+    def test_normal_kma_line(self):
+        line = "2026.07.02.17:00   kma     90     14(12)      6     22"
+        stats = _parse_pm10_hourly_line(line)
+        assert stats == Pm10HourlyStats(
+            stn="90", tm="2026.07.02.17:00", avg=pytest.approx(14.0),
+            min=pytest.approx(6.0), max=pytest.approx(22.0),
+        )
+
+    def test_non_kma_org_returns_none(self):
+        # dst_pm10_hr.php는 org=cma(중국)/kcc/moe 데이터도 섞여 나오므로 제외해야 함
+        line = "2026.07.02.17:00   cma  52203     78( 1)     78     78"
+        assert _parse_pm10_hourly_line(line) is None
+
+    def test_too_few_fields_returns_none(self):
+        assert _parse_pm10_hourly_line("2026.07.02.17:00 kma") is None
+
+
+# ---------------------------------------------------------------------------
+# _parse_station_bulletins (wrn_inf_rpt.php / wthr_cmt_rpt.php 공용)
+# ---------------------------------------------------------------------------
+class TestParseStationBulletins:
+    def test_single_bulletin(self):
+        text = (
+            "#START7777\n"
+            "$0#109#202606280010#143#202606280012#2#김준형#tjwjdrnr#99#"
+            "오늘까지 서해중부해상 바다 안개, 해상 안전사고 유의#\n"
+            "$1#\n"
+            "<안개 현황 및 전망>\n"
+            "본문 내용 첫째줄\n"
+            "본문 내용 둘째줄#\n"
+            "=\n"
+            "#7777END"
+        )
+        bulletins = _parse_station_bulletins(text)
+        assert len(bulletins) == 1
+        b = bulletins[0]
+        assert b == StationBulletin(
+            stn="109", issued_at="202606280010",
+            title="오늘까지 서해중부해상 바다 안개, 해상 안전사고 유의",
+            body="<안개 현황 및 전망>\n본문 내용 첫째줄\n본문 내용 둘째줄",
+        )
+
+    def test_multiple_bulletins(self):
+        text = (
+            "$0#109#202606280010#143#202606280012#2#김준형#tjwjdrnr#99#제목1#\n"
+            "$1#\n본문1#\n=\n"
+            "$0#156#202606280040#77#202606280045#2#송영철#2yeji#99#제목2#\n"
+            "$1#\n본문2#\n=\n"
+        )
+        bulletins = _parse_station_bulletins(text)
+        assert len(bulletins) == 2
+        assert bulletins[0].stn == "109"
+        assert bulletins[0].title == "제목1"
+        assert bulletins[1].stn == "156"
+        assert bulletins[1].title == "제목2"
+
+    def test_empty_text_returns_empty_list(self):
+        assert _parse_station_bulletins("") == []
+
+    def test_no_header_returns_empty_list(self):
+        assert _parse_station_bulletins("그냥 텍스트\n더 텍스트") == []

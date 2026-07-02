@@ -13,7 +13,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN
 from .api import KmaApiClient
-from .coordinator import KmaForecastCoordinator, KmaImageCoordinator
+from .coordinator import KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,11 +44,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     image_coordinator = KmaImageCoordinator(hass, client, entry)
     await image_coordinator.async_config_entry_first_refresh()
 
+    hub_coordinator = KmaHubCoordinator(hass, client, entry)
+    await hub_coordinator.async_config_entry_first_refresh()
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
         "coordinators": coordinators,
         "image_coordinator": image_coordinator,
+        "hub_coordinator": hub_coordinator,
     }
 
     # 옵션/서브엔트리 변경 시 리로드

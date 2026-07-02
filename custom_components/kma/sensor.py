@@ -27,8 +27,8 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import API_STATUS_IMAGE_KEYS, API_STATUS_ZONE_KEYS, DOMAIN
-from .coordinator import CurrentWeather, KmaForecastCoordinator, KmaImageCoordinator
+from .const import API_STATUS_HUB_KEYS, API_STATUS_IMAGE_KEYS, API_STATUS_ZONE_KEYS, DOMAIN
+from .coordinator import CurrentWeather, KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
 from .api import VillageForecast
 from .weather import get_ha_condition
 from .helpers import (
@@ -42,6 +42,7 @@ from .helpers import (
     get_uv_index_grade,
     get_air_stagnation_grade,
     get_pollen_risk_grade,
+    get_impact_risk_grade,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -393,6 +394,52 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         native_unit_of_measurement="dBZ",
         state_class=SensorStateClass.MEASUREMENT,
     ),
+    SensorEntityDescription(
+        key="apparent_temperature_observed",
+        translation_key="apparent_temperature_observed",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="heat_wave_risk",
+        translation_key="heat_wave_risk",
+        device_class=SensorDeviceClass.ENUM,
+        options=["none", "concern", "caution", "warning", "danger"],
+        icon="mdi:sun-thermometer",
+    ),
+    SensorEntityDescription(
+        key="cold_wave_risk",
+        translation_key="cold_wave_risk",
+        device_class=SensorDeviceClass.ENUM,
+        options=["none", "concern", "caution", "warning", "danger"],
+        icon="mdi:snowflake-thermometer",
+    ),
+    SensorEntityDescription(
+        key="hazard_info",
+        translation_key="hazard_info",
+        icon="mdi:alert-outline",
+    ),
+    SensorEntityDescription(
+        key="weather_commentary",
+        translation_key="weather_commentary",
+        icon="mdi:text-long",
+    ),
+    SensorEntityDescription(
+        key="snow_depth_observed",
+        translation_key="snow_depth_observed",
+        icon="mdi:snowflake",
+        native_unit_of_measurement=UnitOfLength.CENTIMETERS,
+        device_class=SensorDeviceClass.PRECIPITATION,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="pm10_hourly_avg",
+        translation_key="pm10_hourly_avg",
+        device_class=SensorDeviceClass.PM10,
+        native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
 ]
 
 
@@ -404,22 +451,41 @@ async def async_setup_entry(
     """Zone 서브엔트리별 센서 + 허브 단위 API 에러 카운트 센서 추가."""
     store = hass.data[DOMAIN][entry.entry_id]
     coordinators = store["coordinators"]
+    hub_coordinator: KmaHubCoordinator | None = store.get("hub_coordinator")
 
     for subentry_id, coordinator in coordinators.items():
         subentry = entry.subentries[subentry_id]
-        async_add_entities(
-            [
-                *[KmaSensor(coordinator, subentry, desc) for desc in SENSOR_DESCRIPTIONS],
-                KmaCurrentDataSourceSensor(coordinator, subentry),
-            ],
-            config_subentry_id=subentry_id,
+        zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
+        zone_device = DeviceInfo(
+            identifiers={(DOMAIN, subentry_id)},
+            name=zone_name,
+            manufacturer="Korea Meteorological Administration",
+            model="KMA APIhub Forecast",
+            via_device=(DOMAIN, entry.entry_id),
         )
+        zone_entities: list[SensorEntity] = [
+            *[KmaSensor(coordinator, subentry, desc) for desc in SENSOR_DESCRIPTIONS],
+            KmaCurrentDataSourceSensor(coordinator, subentry),
+        ]
+        # 지진/태풍은 Zone과 무관한 허브 데이터라 실제 페칭은 hub_coordinator
+        # 하나뿐이지만, 이미지 엔티티와 같은 이유로 각 Zone 디바이스에 복제 배치한다
+        # (허브 디바이스에는 진단성 엔티티만 남긴다).
+        if hub_coordinator is not None:
+            zone_entities += [
+                KmaEarthquakeSensor(
+                    hub_coordinator, unique_id=f"{subentry_id}_recent_earthquake", device_info=zone_device,
+                ),
+                KmaTyphoonSensor(
+                    hub_coordinator, unique_id=f"{subentry_id}_typhoon_status", device_info=zone_device,
+                ),
+            ]
+        async_add_entities(zone_entities, config_subentry_id=subentry_id)
 
     # 허브(통합) 기기: API별 에러 카운트 진단 센서.
-    # Zone별 예·특보 API는 대표(첫) Zone 코디네이터, Zone 무관 이미지 API는
-    # 공유 image_coordinator에 연결한다. 새 API를 추가할 때는 const.py의
-    # API_STATUS_ZONE_KEYS/API_STATUS_IMAGE_KEYS에 key만 추가하면 여기서 자동으로
-    # 에러 카운트 센서가 생성된다.
+    # Zone별 예·특보 API는 대표(첫) Zone 코디네이터, Zone 무관 이미지/허브 데이터
+    # API는 각각 공유 image_coordinator/hub_coordinator에 연결한다. 새 API를
+    # 추가할 때는 const.py의 API_STATUS_ZONE_KEYS/API_STATUS_IMAGE_KEYS/
+    # API_STATUS_HUB_KEYS에 key만 추가하면 여기서 자동으로 에러 카운트 센서가 생성된다.
     entities: list[KmaApiErrorCountSensor] = []
     if coordinators:
         rep_coordinator = next(iter(coordinators.values()))
@@ -432,6 +498,11 @@ async def async_setup_entry(
         entities += [
             KmaApiErrorCountSensor(image_coordinator, entry, key)
             for key in API_STATUS_IMAGE_KEYS
+        ]
+    if hub_coordinator is not None:
+        entities += [
+            KmaApiErrorCountSensor(hub_coordinator, entry, key)
+            for key in API_STATUS_HUB_KEYS
         ]
     if entities:
         async_add_entities(entities)
@@ -658,6 +729,26 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         if key == "radar_precipitation":
             radar = data.get("radar_precipitation")
             return radar.value if radar is not None else None
+
+        if key == "apparent_temperature_observed":
+            sfc = data.get("sfc_observation")
+            return sfc.apparent_temperature if sfc is not None else None
+
+        if key in ("heat_wave_risk", "cold_wave_risk"):
+            risk = data.get(key)
+            return get_impact_risk_grade(risk.level) if risk is not None else None
+
+        if key in ("hazard_info", "weather_commentary"):
+            bulletin = data.get(key)
+            return bulletin.title[:255] if bulletin is not None else None
+
+        if key == "snow_depth_observed":
+            snow = data.get("snow_depth")
+            return snow.depth if snow is not None else None
+
+        if key == "pm10_hourly_avg":
+            hourly = data.get("pm10_hourly")
+            return hourly.avg if hourly is not None else None
 
         if key == "precipitation_start":
             nxt = self.coordinator.next_precipitation()
@@ -934,6 +1025,42 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 }
             return None
 
+        if key == "apparent_temperature_observed":
+            sfc = data.get("sfc_observation")
+            if sfc is not None:
+                return {
+                    "observed_time": sfc.tm,
+                    "temperature": sfc.temperature,
+                    "dew_point": sfc.dew_point,
+                    "humidity": sfc.humidity,
+                    "wind_speed": sfc.wind_speed,
+                }
+            return None
+
+        if key in ("heat_wave_risk", "cold_wave_risk"):
+            risk = data.get(key)
+            if risk is not None:
+                return {"level": risk.level, "announced": risk.tm_fc}
+            return None
+
+        if key in ("hazard_info", "weather_commentary"):
+            bulletin = data.get(key)
+            if bulletin is not None:
+                return {"issued_at": bulletin.issued_at, "body": bulletin.body}
+            return None
+
+        if key == "snow_depth_observed":
+            snow = data.get("snow_depth")
+            if snow is not None:
+                return {"observed_time": snow.tm}
+            return None
+
+        if key == "pm10_hourly_avg":
+            hourly = data.get("pm10_hourly")
+            if hourly is not None:
+                return {"observed_time": hourly.tm, "min": hourly.min, "max": hourly.max}
+            return None
+
         if key == "precipitation_start":
             nxt = self.coordinator.next_precipitation()
             if nxt is None:
@@ -1127,14 +1254,102 @@ class KmaCurrentDataSourceSensor(CoordinatorEntity[KmaForecastCoordinator], Sens
         }
 
 
+class _KmaHubSensorBase(CoordinatorEntity[KmaHubCoordinator], SensorEntity):
+    """지진/태풍처럼 Zone과 무관한 허브 데이터를 Zone 디바이스에 복제 표시하는 공통 베이스.
+
+    image.py의 _KmaBaseImage와 동일한 이유(허브 디바이스에는 진단성 엔티티만
+    두고 싶다는 사용자 요청)로 Zone 디바이스에만 배치한다. 실제 페칭은
+    KmaHubCoordinator 하나뿐이며 여기서는 같은 데이터를 가리키는 엔티티를
+    Zone마다 나눠 배치할 뿐이다.
+    """
+
+    _attr_has_entity_name = True
+    _data_key = ""  # 서브클래스에서 "earthquake"/"typhoon"으로 지정
+
+    def __init__(
+        self,
+        coordinator: KmaHubCoordinator,
+        *,
+        unique_id: str,
+        device_info: DeviceInfo,
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = unique_id
+        self._attr_device_info = device_info
+
+
+class KmaEarthquakeSensor(_KmaHubSensorBase):
+    """최근 지진정보. [실측 검증 2026-07-02]
+
+    state는 규모(매그니튜드)이며, 위치/발생시각 등은 속성으로 제공한다.
+    """
+
+    _attr_translation_key = "recent_earthquake"
+    _attr_icon = "mdi:pulse"
+    _data_key = "earthquake"
+
+    @property
+    def native_value(self) -> float | None:
+        eq = (self.coordinator.data or {}).get(self._data_key)
+        return eq.magnitude if eq is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        eq = (self.coordinator.data or {}).get(self._data_key)
+        if eq is None:
+            return {}
+        return {
+            "location": eq.location,
+            "occurred_at": eq.occurred_at,
+            "issued_at": eq.issued_at,
+            "domestic": eq.domestic,
+            "depth_km": eq.depth,
+            "msg_code": eq.msg_code,
+            "reference": eq.reference,
+        }
+
+
+class KmaTyphoonSensor(_KmaHubSensorBase):
+    """태풍정보(현재 상태). [실측 검증 2026-07-02]
+
+    state는 태풍번호(활성 태풍 없으면 0)이며, 위치/기압/풍속 등은 속성으로 제공한다.
+    """
+
+    _attr_translation_key = "typhoon_status"
+    _attr_icon = "mdi:weather-hurricane"
+    _data_key = "typhoon"
+
+    @property
+    def native_value(self) -> int:
+        typhoon = (self.coordinator.data or {}).get(self._data_key)
+        return typhoon.typ_no if typhoon is not None else 0
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        typhoon = (self.coordinator.data or {}).get(self._data_key)
+        if typhoon is None:
+            return {}
+        return {
+            "year": typhoon.year,
+            "lat": typhoon.lat,
+            "lon": typhoon.lon,
+            "direction": typhoon.direction,
+            "speed_kmh": typhoon.speed,
+            "pressure_hpa": typhoon.pressure,
+            "wind_speed_ms": typhoon.wind_speed,
+            "location": typhoon.location,
+            "analyzed_at": typhoon.typ_tm,
+        }
+
+
 class KmaApiErrorCountSensor(
-    CoordinatorEntity[KmaForecastCoordinator | KmaImageCoordinator], SensorEntity
+    CoordinatorEntity[KmaForecastCoordinator | KmaImageCoordinator | KmaHubCoordinator], SensorEntity
 ):
     """허브 단위 API별 누적 에러 카운트 진단 센서.
 
     UpdateFailed 상태에서도 카운터를 표시해야 하므로 available 를 항상 True로 유지.
-    Zone별 예·특보 코디네이터와 Zone 무관 이미지 코디네이터 모두 api_error_counts를
-    제공하므로(coordinator.py의 _ApiStatusMixin) 어느 쪽이든 그대로 연결할 수 있다.
+    Zone별 예·특보/이미지/허브 코디네이터 모두 api_error_counts를 제공하므로
+    (coordinator.py의 _ApiStatusMixin) 어느 쪽이든 그대로 연결할 수 있다.
     """
 
     _attr_has_entity_name = True
@@ -1144,7 +1359,7 @@ class KmaApiErrorCountSensor(
 
     def __init__(
         self,
-        coordinator: KmaForecastCoordinator | KmaImageCoordinator,
+        coordinator: KmaForecastCoordinator | KmaImageCoordinator | KmaHubCoordinator,
         entry: ConfigEntry,
         api_key: str,
     ) -> None:

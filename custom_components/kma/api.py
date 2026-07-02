@@ -285,6 +285,115 @@ class ImageBinary:
     filename: str | None = None
 
 
+@dataclass(frozen=True)
+class SfcObservation:
+    """고해상도 지상관측 특정지점 다중요소 조회 (sfc_nc_var.php). [실측 검증 2026-07-02]
+
+    ASOS(kma_sfctm2.php)와 달리 위경도를 직접 넘겨 조회하므로 지점코드 매핑이
+    필요 없다. apparent_temperature(ta_chi)는 계산값이 아니라 실측 체감온도.
+    """
+
+    lat: float
+    lon: float
+    tm: str
+    temperature: float | None            # ta (기온, ℃)
+    dew_point: float | None              # td (이슬점온도, ℃)
+    humidity: float | None               # hm (상대습도, %)
+    apparent_temperature: float | None   # ta_chi (체감온도, ℃)
+    wind_speed: float | None             # ws_10m (10분 평균풍속, m/s)
+
+
+@dataclass(frozen=True)
+class ImpactForecast:
+    """영향예보(폭염/한파) 위험수준 조회 (ifs_fct_pstt.php). [실측 검증 2026-07-02]
+
+    level: 0(영향없음)~4(위험). 관서(stn) 관할 내 여러 세부구역 중 최댓값을
+    대표값으로 사용한다(구역별 세분화는 하지 않음 — 상세 매핑 정보 없음).
+    """
+
+    stn: int
+    ifpar: str      # "hw"(폭염) | "cw"(한파)
+    level: int | None
+    tm_fc: str | None
+
+
+@dataclass(frozen=True)
+class EarthquakeNotice:
+    """최근 지진정보 통보문 (typ09/eqk/urlNewNotiEqk.do). [실측 검증 2026-07-02]"""
+
+    msg_code: str            # 통보문종류명 (예: 국내지진정보, 국외지진정보 등)
+    domestic: bool           # cntDiv == "Y"
+    location: str            # eqPt (발생위치)
+    issued_at: str           # tmIssue (발표시각)
+    occurred_at: str         # eqDate (발생시각)
+    magnitude: float | None  # magMl (규모)
+    depth: float | None      # eqDt (깊이, km)
+    lat: float | None        # eqLt
+    lon: float | None        # eqLn
+    reference: str | None    # ReFer (참고사항)
+
+
+@dataclass(frozen=True)
+class TyphoonInfo:
+    """태풍정보(현재 상태) 조회 (typ_now.php). [실측 검증 2026-07-02]
+
+    ft: 0(분석)/1(예측). 활성 태풍이 없으면 async_get_typhoon_now()가 None을 반환
+    (정상 — 태풍철이 아니거나 발생한 태풍이 없는 상태).
+    """
+
+    ft: int
+    year: int
+    typ_no: int              # TYP(태풍번호)
+    seq: int                 # SEQ(발표번호)
+    typ_tm: str               # 분석시각(UTC)
+    lat: float | None
+    lon: float | None
+    direction: str | None     # DIR(진행방향, 16방위)
+    speed: float | None       # SP(진행속도, km/h)
+    pressure: float | None    # PS(중심기압, hPa)
+    wind_speed: float | None  # WS(최대풍속, m/s)
+    location: str | None      # LOC(위치 설명, 자연어)
+
+
+@dataclass(frozen=True)
+class StationBulletin:
+    """관서별 텍스트 속보/해설문 공통 구조.
+
+    기상정보(wrn_inf_rpt.php)와 날씨해설(wthr_cmt_rpt.php)이 동일한 "$0 헤더 +
+    $1 본문" 포맷을 쓰므로 하나의 구조로 공유한다. [실측 검증 2026-07-02]
+    """
+
+    stn: str
+    issued_at: str  # TM_FC
+    title: str
+    body: str
+
+
+@dataclass(frozen=True)
+class SnowObservation:
+    """적설 관측 조회 (kma_snow1.php). [실측 검증 2026-07-02]"""
+
+    stn: str
+    tm: str
+    depth: float | None  # SD (적설, cm)
+
+
+@dataclass(frozen=True)
+class Pm10HourlyStats:
+    """미세먼지(PM10) 시간통계 조회 (dst_pm10_hr.php). [실측 검증 2026-07-02]
+
+    5분 원시값(kma_pm10.php)과 달리 해당 시간의 평균/최소/최대값을 제공한다.
+    같은 엔드포인트가 org=cma(중국기상청)/kcc/moe 데이터도 제공하지만(실측 확인),
+    Zone과 지리적으로 대응되는 관측망이 아니라서 이번 구현에서는 기상청(kma) 데이터만 사용한다.
+    """
+
+    stn: str
+    tm: str
+    avg: float | None
+    min: float | None
+    max: float | None
+
+
 # 하늘상태코드
 SKY_CODES: dict[str, str] = {
     "DB01": "맑음",
@@ -387,6 +496,77 @@ def _parse_pm10_line(line: str) -> Pm10Observation | None:
         return None
     tm, stn_id, pm10_raw = parts[0], parts[1], parts[2]
     return Pm10Observation(stn=stn_id, tm=tm, pm10=_to_float(pm10_raw), raw=line)
+
+
+def _parse_snow_line(line: str) -> SnowObservation | None:
+    """kma_snow1.php 원시 라인(쉼표구분, 트레일링 '=') 1건을 파싱.
+
+    포맷: "TM, STN_ID, STN_KO, LON, LAT, STN_SP, SD, =".
+    """
+    parts = [p.strip() for p in line.split(",")]
+    if parts and parts[-1] == "=":
+        parts = parts[:-1]
+    if len(parts) < 7:
+        return None
+    tm, stn_id, sd = parts[0], parts[1], parts[6]
+    return SnowObservation(stn=stn_id, tm=tm, depth=_to_float(sd))
+
+
+def _parse_pm10_hourly_line(line: str) -> Pm10HourlyStats | None:
+    """dst_pm10_hr.php 원시 라인(공백구분) 1건을 파싱. org=kma 라인만 대상으로 한다.
+
+    포맷: "YYYY.MM.DD.HH:MI  ORG  STN  AVG(CNT)  MIN  MAX" (공백구분).
+    """
+    parts = line.split()
+    if len(parts) < 6 or parts[1] != "kma":
+        return None
+    tm, _org, stn, avg_cnt, min_v, max_v = parts[:6]
+    avg_str = avg_cnt.split("(")[0]
+    return Pm10HourlyStats(stn=stn, tm=tm, avg=_to_float(avg_str), min=_to_float(min_v), max=_to_float(max_v))
+
+
+def _parse_station_bulletins(text: str) -> list[StationBulletin]:
+    """기상정보(wrn_inf_rpt.php)/날씨해설(wthr_cmt_rpt.php) 공통 "$0 헤더 + $1 본문"
+    포맷을 파싱한다.
+
+    헤더 라인: "$0#STN#TM_FC#TM_SEQ#TM_IN#CNT#MAN_FC#MAN_ID#SUBCD#TITLE#"
+    본문은 "$1#"로 시작해 "=" 단독 라인까지 이어지는 여러 줄.
+    """
+    bulletins: list[StationBulletin] = []
+    stn = tm_fc = title = None
+    body_lines: list[str] = []
+    in_body = False
+
+    def _flush() -> None:
+        if stn is not None:
+            bulletins.append(
+                StationBulletin(
+                    stn=stn, issued_at=tm_fc or "", title=title or "",
+                    body="\n".join(body_lines).strip(),
+                )
+            )
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip("\n")
+        if line.startswith("$0#"):
+            _flush()
+            parts = line.split("#")
+            stn = parts[1] if len(parts) > 1 else ""
+            tm_fc = parts[2] if len(parts) > 2 else ""
+            title = parts[-2] if len(parts) > 2 and parts[-1] == "" else (parts[-1] if len(parts) > 2 else "")
+            body_lines = []
+            in_body = False
+        elif line.startswith("$1#"):
+            in_body = True
+            rest = line[len("$1#"):]
+            if rest:
+                body_lines.append(rest)
+        elif line.strip() == "=":
+            in_body = False
+        elif in_body:
+            body_lines.append(line.rstrip("#"))
+    _flush()
+    return bulletins
 
 
 def _split_with_trailing_quoted(line: str, head_count: int) -> tuple[list[str], str]:
@@ -547,12 +727,19 @@ class KmaApiClient:
         return raw, content_type
 
     async def _request(
-        self, endpoint: str, params: dict[str, Any], *, is_json_api: bool = False
+        self,
+        endpoint: str,
+        params: dict[str, Any],
+        *,
+        is_json_api: bool = False,
+        encoding: str = ENCODING,
     ) -> str:
         """엔드포인트를 호출하고 디코딩된 텍스트를 반환.
 
         endpoint 예: "fct_shrt_reg.php". authKey는 자동 부착.
-        오류 응답(403/인증 등)은 예외로 변환.
+        오류 응답(403/인증 등)은 예외로 변환. 대부분의 typ01 텍스트 API는
+        EUC-KR이지만, typ09(지진정보) XML처럼 UTF-8인 엔드포인트는
+        encoding="utf-8"로 오버라이드한다(실측 확인 2026-07-02).
         """
         raw, status, content_type = await self._do_request(endpoint, params)
 
@@ -577,7 +764,7 @@ class KmaApiClient:
 
         if status != 200:
             raise KmaApiError(f"{endpoint}: HTTP {status}")
-        return raw.decode(ENCODING, errors="replace")
+        return raw.decode(encoding, errors="replace")
 
     # -- seqApi=10 예·특보 --------------------------------------------------
 
@@ -1156,29 +1343,262 @@ class KmaApiClient:
             {"wrn": wrn, "reg": reg, "tmfc1": tmfc1, "disp": 0, "help": 0},
         )
 
-    # -- seqApi=2 지상관측 --------------------------------------------------
+    # -- 고해상도 지상관측 ----------------------------------------------------
 
-    async def async_get_asos_now(
-        self, *, stn: str | int = 0, tm: str | None = None
-    ) -> list[dict[str, Any]]:
-        """ASOS 시간자료 (kma_sfctm2.php). [활용신청 필요 — 미검증]
+    async def async_get_sfc_observation(
+        self, *, lat: float, lon: float, tm1: str | None = None, tm2: str | None = None
+    ) -> SfcObservation | None:
+        """고해상도 지상관측 특정지점 다중요소 조회 (sfc_nc_var.php). [실측 검증 2026-07-02]
 
-        TODO: 활용신청 후 컬럼(TA 기온, HM 습도, WS 풍속, PA 기압 등) 매핑 확정.
-        stn=0 이면 전체 지점.
+        위경도 기반(Zone 좌표 그대로 사용, 지점코드 매핑 불필요). 실측 결과
+        너무 최신 시각을 요청하면 미게시(0.0) 값이 오므로(2026-07-02 확인),
+        기본적으로 15~25분 전 구간을 조회해 가장 최신 레코드를 사용한다.
         """
+        now = _now_kst()
+        tm2 = tm2 or (now - datetime.timedelta(minutes=15)).strftime("%Y%m%d%H%M")
+        tm1 = tm1 or (now - datetime.timedelta(minutes=25)).strftime("%Y%m%d%H%M")
+
         text = await self._request(
-            "kma_sfctm2.php", {"tm": tm, "stn": stn, "help": 0}
+            "sfc_nc_var.php",
+            {
+                "tm1": tm1, "tm2": tm2, "lat": lat, "lon": lon,
+                "obs": "ta,td,hm,ta_chi,ws_10m", "itv": 10, "help": 0,
+            },
         )
-        return [{"raw": line, "fields": line.split()} for line in iter_data_lines(text)]
+        lines = list(iter_data_lines(text))
+        if not lines:
+            return None
+        parts = [p.strip() for p in lines[-1].split(",")]
+        if len(parts) < 6:
+            return None
+        tm, ta, td, hm, ta_chi, ws = parts[:6]
+        return SfcObservation(
+            lat=lat, lon=lon, tm=tm,
+            temperature=_to_float(ta), dew_point=_to_float(td), humidity=_to_float(hm),
+            apparent_temperature=_to_float(ta_chi), wind_speed=_to_float(ws),
+        )
 
-    # -- seqApi=7 지진 ------------------------------------------------------
+    # -- 영향예보(폭염/한파) ---------------------------------------------------
 
-    async def async_get_earthquake_recent(self) -> list[dict[str, Any]]:
-        """최근 지진정보. [활용신청 필요 — 미검증]
+    async def _async_get_impact_risk(
+        self, *, stn: int, ifpar: str, tmef1: str | None = None, tmef2: str | None = None
+    ) -> ImpactForecast | None:
+        """영향예보 위험수준 공통 조회 (ifs_fct_pstt.php). [실측 검증 2026-07-02]
 
-        TODO: 정확한 엔드포인트/파라미터/컬럼 확정.
+        ifpar: "hw"(폭염) | "cw"(한파). 관서(stn) 관할 내 여러 세부구역(REG_ID)의
+        ILVL 중 최댓값을 대표값으로 사용한다. ifarea는 기본값(1, 보건 일반인)을 쓴다.
         """
-        raise NotImplementedError("지진 API 활용신청 후 엔드포인트 확정 필요")
+        now = _now_kst()
+        tmef1 = tmef1 or now.strftime("%Y%m%d")
+        tmef2 = tmef2 or (now + datetime.timedelta(days=1)).strftime("%Y%m%d")
+
+        text = await self._request(
+            "ifs_fct_pstt.php",
+            {"tmef1": tmef1, "tmef2": tmef2, "ifpar": ifpar, "stn": stn, "ef_sn": 1, "help": 0},
+        )
+        best_level: int | None = None
+        best_tm_fc: str | None = None
+        for line in iter_data_lines(text):
+            parts = [p.strip() for p in line.split(",")]
+            if parts and parts[-1] == "=":
+                parts = parts[:-1]
+            if len(parts) < 7:
+                continue
+            tm_fc, _tm_ef, row_stn, _reg_id, row_ifpar, _ifarea, ilvl = parts[:7]
+            if row_stn != str(stn) or row_ifpar.lower() != ifpar.lower():
+                continue
+            level = _to_int(ilvl)
+            if level is not None and (best_level is None or level > best_level):
+                best_level, best_tm_fc = level, tm_fc
+        return ImpactForecast(stn=stn, ifpar=ifpar, level=best_level, tm_fc=best_tm_fc)
+
+    async def async_get_heat_wave_risk(self, *, stn: int) -> ImpactForecast | None:
+        """폭염 영향예보 위험수준 조회. [실측 검증 2026-07-02]"""
+        return await self._async_get_impact_risk(stn=stn, ifpar="hw")
+
+    async def async_get_cold_wave_risk(self, *, stn: int) -> ImpactForecast | None:
+        """한파 영향예보 위험수준 조회. [실측 검증 2026-07-02]"""
+        return await self._async_get_impact_risk(stn=stn, ifpar="cw")
+
+    # -- 지진정보 -------------------------------------------------------------
+
+    async def async_get_earthquake_recent(self) -> EarthquakeNotice | None:
+        """최근 지진정보 통보문 조회 (typ09/eqk/urlNewNotiEqk.do). [실측 검증 2026-07-02]
+
+        orderCm=L(마지막 발표분만)로 조회해 최신 1건만 받는다. XML 응답이라
+        표준 라이브러리 xml.etree.ElementTree로 파싱한다. 다른 typ01 API와
+        달리 이 typ09 응답은 UTF-8이다(실측 확인 2026-07-02, EUC-KR로 디코딩하면
+        한글이 깨짐).
+        """
+        import xml.etree.ElementTree as ET
+
+        text = await self._request(
+            "https://apihub.kma.go.kr/api/typ09/url/eqk/urlNewNotiEqk.do",
+            {"orderTy": "xml", "orderCm": "L"},
+            encoding="utf-8",
+        )
+        try:
+            root = ET.fromstring(text)
+        except ET.ParseError as err:
+            raise KmaApiError(f"eqk/urlNewNotiEqk: XML 파싱 실패: {err}") from err
+
+        info = root.find(".//info")
+        if info is None:
+            return None
+
+        def _text(tag: str) -> str | None:
+            el = info.find(tag)
+            return el.text.strip() if el is not None and el.text else None
+
+        def _text_float(tag: str) -> float | None:
+            val = _text(tag)
+            return _to_float(val) if val is not None else None
+
+        return EarthquakeNotice(
+            msg_code=_text("msgCode") or "",
+            domestic=_text("cntDiv") == "Y",
+            location=_text("eqPt") or "",
+            issued_at=_text("tmIssue") or "",
+            occurred_at=_text("eqDate") or "",
+            magnitude=_text_float("magMl"),
+            depth=_text_float("eqDt"),
+            lat=_text_float("eqLt"),
+            lon=_text_float("eqLn"),
+            reference=_text("ReFer"),
+        )
+
+    # -- 태풍정보 -------------------------------------------------------------
+
+    async def async_get_typhoon_now(self, *, tm: str | None = None) -> TyphoonInfo | None:
+        """태풍정보(현재 상태) 조회 (typ_now.php). [실측 검증 2026-07-02]
+
+        mode=2(가장 최근의 분석정보와 예측정보)로 조회. 활성 태풍이 없으면
+        헤더만 오고 데이터 라인이 없어 None을 반환한다(정상 — 태풍철이 아니거나
+        발생한 태풍이 없는 상태). LOC(위치 설명)는 자연어라 뒤쪽 필드까지
+        전부 하나의 문자열로 취급한다(후행 값 일부 포함 가능, 표시용으로만 사용).
+        """
+        tm = tm or _now_kst().strftime("%Y%m%d%H%M")
+        text = await self._request(
+            "typ_now.php", {"tm": tm, "mode": 2, "disp": 0, "help": 0}
+        )
+        lines = list(iter_data_lines(text))
+        if not lines:
+            return None
+        parts = lines[0].split(None, 18)
+        if len(parts) < 18:
+            return None
+        (
+            ft, yy, typ_no, seq, _tmd, typ_tm, _ft_tm, lat, lon,
+            direction, speed, pressure, wind_speed, *_rest,
+        ) = parts[:13]
+        location = parts[18] if len(parts) > 18 else None
+        return TyphoonInfo(
+            ft=_to_int(ft) or 0, year=_to_int(yy) or 0, typ_no=_to_int(typ_no) or 0,
+            seq=_to_int(seq) or 0, typ_tm=typ_tm,
+            lat=_to_float(lat), lon=_to_float(lon), direction=direction,
+            speed=_to_float(speed), pressure=_to_float(pressure), wind_speed=_to_float(wind_speed),
+            location=location,
+        )
+
+    # -- 기상정보 / 날씨해설 (관서별 텍스트 속보) --------------------------------
+
+    async def async_get_hazard_info(
+        self, *, stn: int, tmfc1: str | None = None, tmfc2: str | None = None
+    ) -> StationBulletin | None:
+        """기상정보(위험기상 실시간 속보) 조회 (wrn_inf_rpt.php). [실측 검증 2026-07-02]
+
+        최근 24시간 내 관서(stn) 발표분 중 가장 최근 것을 반환.
+        """
+        now = _now_kst()
+        tmfc2 = tmfc2 or now.strftime("%Y%m%d%H%M")
+        tmfc1 = tmfc1 or (now - datetime.timedelta(hours=24)).strftime("%Y%m%d%H%M")
+        text = await self._request(
+            "wrn_inf_rpt.php",
+            {"tmfc1": tmfc1, "tmfc2": tmfc2, "stn": stn, "disp": 1, "help": 0},
+        )
+        bulletins = _parse_station_bulletins(text)
+        return bulletins[-1] if bulletins else None
+
+    async def async_get_weather_commentary(
+        self, *, stn: int, tmfc1: str | None = None, tmfc2: str | None = None
+    ) -> StationBulletin | None:
+        """날씨해설(예보관 작성 일일 해설문) 조회 (wthr_cmt_rpt.php). [실측 검증 2026-07-02]
+
+        최근 24시간 내 관서(stn) 발표분 중 가장 최근 것을 반환.
+        """
+        now = _now_kst()
+        tmfc2 = tmfc2 or now.strftime("%Y%m%d%H%M")
+        tmfc1 = tmfc1 or (now - datetime.timedelta(hours=24)).strftime("%Y%m%d%H%M")
+        text = await self._request(
+            "wthr_cmt_rpt.php",
+            {"tmfc1": tmfc1, "tmfc2": tmfc2, "stn": stn, "subcd": 0, "disp": 1, "help": 0},
+        )
+        bulletins = _parse_station_bulletins(text)
+        return bulletins[-1] if bulletins else None
+
+    # -- 적설관측 -------------------------------------------------------------
+
+    async def async_get_snow_depth(self, *, stn: int, tm: str | None = None) -> SnowObservation | None:
+        """실측 적설 관측 조회 (kma_snow1.php, sd=tot). [실측 검증 2026-07-02]"""
+        tm = tm or _now_kst().strftime("%Y%m%d%H%M")
+        text = await self._request(
+            "kma_snow1.php", {"sd": "tot", "tm": tm, "help": 0}
+        )
+        for line in iter_data_lines(text):
+            obs = _parse_snow_line(line)
+            if obs is not None and obs.stn == str(stn):
+                return obs
+        return None
+
+    # -- 황사위성영상 ---------------------------------------------------------
+
+    async def async_get_dust_satellite_image(self, *, time: str | None = None) -> ImageBinary | None:
+        """황사위성영상(GK2A, 황사지수 IDI) 조회 (YdstInfoService/getYdstSatlitImg).
+        [실측 검증 2026-07-02]
+
+        이 API 자체는 이미지 바이너리가 아니라 그날 하루치(5분 간격) 썸네일 PNG
+        URL 목록(JSON)을 반환한다. 목록은 그날 예상 파일명을 전부 미리 나열해
+        두므로, 아직 게시되지 않은 뒤쪽 URL은 다운로드하면 HTML 오류 페이지가
+        온다(실측 확인) — 뒤에서부터 순회하며 실제 PNG가 나오는 첫 URL을 쓴다.
+        공개 저장소 URL이라 authKey는 불필요함을 실측 확인.
+        """
+        time = time or _now_kst().strftime("%Y%m%d")
+        text = await self._request(
+            "api/typ02/openApi/YdstInfoService/getYdstSatlitImg",
+            {"pageNo": 1, "numOfRows": 10, "dataType": "JSON", "time": time},
+            is_json_api=True,
+        )
+        items = _parse_typ02_items(text, "getYdstSatlitImg")
+        if not items:
+            return None
+        raw_urls = items[0].get("satImgC-file-Sate", "")
+        urls = [u.strip() for u in raw_urls.strip("[]").split(",") if u.strip()]
+        for url in reversed(urls[-12:]):
+            raw, _content_type = await self._request_binary(url, {})
+            if _is_png(raw):
+                return ImageBinary(data=raw, content_type="image/png", filename=url.rsplit("/", 1)[-1])
+        return None
+
+    # -- 미세먼지 시간통계 ------------------------------------------------------
+
+    async def async_get_pm10_hourly_stats(self, *, stn: int, tm: str | None = None) -> Pm10HourlyStats | None:
+        """미세먼지(PM10) 시간통계(평균/최소/최대) 조회 (dst_pm10_hr.php, org=kma).
+        [실측 검증 2026-07-02]
+
+        해당 정시(예: 17:00)가 되기 전에는 그 시간대 통계가 없으므로 기본값은
+        70분 전을 정시로 내림한 시각을 사용한다.
+        """
+        if tm is None:
+            backoff = _now_kst() - datetime.timedelta(minutes=70)
+            tm = backoff.strftime("%Y%m%d%H00")
+        text = await self._request(
+            "dst_pm10_hr.php", {"tm": tm, "stn": 0, "mode": 1, "help": 0}
+        )
+        for line in iter_data_lines(text):
+            stats = _parse_pm10_hourly_line(line)
+            if stats is not None and stats.stn == str(stn):
+                return stats
+        return None
 
     # -- 헬스체크 -----------------------------------------------------------
 

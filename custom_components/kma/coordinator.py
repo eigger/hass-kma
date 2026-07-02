@@ -13,10 +13,12 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    API_STATUS_HUB_KEYS,
     API_STATUS_IMAGE_KEYS,
     API_STATUS_ZONE_KEYS,
     DOMAIN,
     LAND_ZONE_TO_AREA_NO,
+    LAND_ZONE_TO_OFFICE_STN,
     LAND_ZONE_TO_PM10_STN,
     PROVINCE_WARNING_KEYWORDS,
 )
@@ -118,8 +120,11 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         self.ny = subentry.data["ny"]
         self.land_reg = subentry.data["land_reg"]
         self.marine_reg = subentry.data["marine_reg"]
-        self.stn = LAND_ZONE_TO_PM10_STN.get(self.land_reg, 108)  # PM10 관측지점(기본값 서울)
+        self.stn = LAND_ZONE_TO_PM10_STN.get(self.land_reg, 108)  # PM10/적설/미세먼지 시간통계 관측지점(기본값 서울)
         self.area_no = LAND_ZONE_TO_AREA_NO.get(self.land_reg, "1100000000")  # 생활/보건기상지수 지역코드
+        self.office_stn = LAND_ZONE_TO_OFFICE_STN.get(self.land_reg, 109)  # 지방기상청 관서코드(기본값 서울)
+        self.lat = subentry.data["latitude"]
+        self.lon = subentry.data["longitude"]
 
         # API별 누적 에러 카운트 / 마지막 에러 시각 (HA 재시작 전까지 유지)
         self._init_api_status(API_STATUS_ZONE_KEYS)
@@ -137,6 +142,9 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
             "pine_pollen_stale": False,
             "weed_pollen_stale": False,
             "radar_precipitation_stale": False,
+            "sfc_observation_stale": False,
+            "snow_depth_stale": False,
+            "pm10_hourly_stale": False,
         }
 
         scan_interval = config_entry.options.get("scan_interval", 10)
@@ -299,6 +307,62 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
             refresh_meta["radar_precipitation_stale"] = True
         else:
             data["radar_precipitation"] = radar_obs
+
+        # 3-6. 고해상도 지상관측 (sfc_nc_var.php) [실측 검증 2026-07-02]
+        sfc_obs, status["sfc_observation"] = await self._fetch_optional(
+            "고해상도 지상관측",
+            self.client.async_get_sfc_observation(lat=self.lat, lon=self.lon),
+            default=None,
+        )
+        if sfc_obs is None and self.data and "sfc_observation" in self.data:
+            data["sfc_observation"] = self.data["sfc_observation"]
+            refresh_meta["sfc_observation_stale"] = True
+        else:
+            data["sfc_observation"] = sfc_obs
+
+        # 3-7. 영향예보 폭염/한파 (ifs_fct_pstt.php) [실측 검증 2026-07-02]
+        # 비시즌에는 위험구역이 없어 level=None이 정상 상태이므로 이전 값을 이어붙이지 않는다.
+        heat_obs, status["heat_wave_risk"] = await self._fetch_optional(
+            "영향예보(폭염)", self.client.async_get_heat_wave_risk(stn=self.office_stn), default=None
+        )
+        data["heat_wave_risk"] = heat_obs
+
+        cold_obs, status["cold_wave_risk"] = await self._fetch_optional(
+            "영향예보(한파)", self.client.async_get_cold_wave_risk(stn=self.office_stn), default=None
+        )
+        data["cold_wave_risk"] = cold_obs
+
+        # 3-8. 기상정보/날씨해설 (관서별 텍스트 속보) [실측 검증 2026-07-02]
+        # 최근 24시간 내 발표분이 없으면 None이 정상 상태이므로 이전 값을 이어붙이지 않는다.
+        hazard_obs, status["hazard_info"] = await self._fetch_optional(
+            "기상정보", self.client.async_get_hazard_info(stn=self.office_stn), default=None
+        )
+        data["hazard_info"] = hazard_obs
+
+        commentary_obs, status["weather_commentary"] = await self._fetch_optional(
+            "날씨해설", self.client.async_get_weather_commentary(stn=self.office_stn), default=None
+        )
+        data["weather_commentary"] = commentary_obs
+
+        # 3-9. 적설관측 (kma_snow1.php) [실측 검증 2026-07-02]
+        snow_obs, status["snow_depth"] = await self._fetch_optional(
+            "적설관측", self.client.async_get_snow_depth(stn=self.stn), default=None
+        )
+        if snow_obs is None and self.data and "snow_depth" in self.data:
+            data["snow_depth"] = self.data["snow_depth"]
+            refresh_meta["snow_depth_stale"] = True
+        else:
+            data["snow_depth"] = snow_obs
+
+        # 3-10. 미세먼지(PM10) 시간통계 (dst_pm10_hr.php) [실측 검증 2026-07-02]
+        pm10_hourly_obs, status["pm10_hourly"] = await self._fetch_optional(
+            "미세먼지 시간통계", self.client.async_get_pm10_hourly_stats(stn=self.stn), default=None
+        )
+        if pm10_hourly_obs is None and self.data and "pm10_hourly" in self.data:
+            data["pm10_hourly"] = self.data["pm10_hourly"]
+            refresh_meta["pm10_hourly_stale"] = True
+        else:
+            data["pm10_hourly"] = pm10_hourly_obs
 
         # 4. 특보현황 (wrn_now_data.php)
         warnings, status["warning_now"] = await self._fetch_optional(
@@ -569,7 +633,67 @@ class KmaImageCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]
             data, "satellite_water_vapor", "위성 수증기 이미지",
             self.client.async_get_satellite_image(obs="wv069"),
         )
+        status["dust_satellite"] = await self._fetch_image(
+            data, "dust_satellite", "황사위성영상",
+            self.client.async_get_dust_satellite_image(),
+        )
 
         data["api_status"] = status
         self._record_api_status(status)
         return data
+
+
+class KmaHubCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
+    """지진/태풍 코디네이터 (허브 단위, Zone과 무관한 전국 데이터).
+
+    이미지가 아니라 구조화된 데이터라 KmaImageCoordinator와는 별도로 둔다.
+    지진은 발생 즉시성이 중요하지만 apihub 자체가 실시간 푸시가 아니라 폴링
+    API이므로, 다른 허브 데이터와 같은 10분 주기로 통일한다.
+    """
+
+    def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
+        self.client = client
+        self._init_api_status(API_STATUS_HUB_KEYS)
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=config_entry,
+            name=f"{DOMAIN}_hub",
+            update_interval=timedelta(minutes=10),
+        )
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """최근 지진정보/태풍정보를 조회. 실패 시 이전 값을 유지."""
+        data: dict[str, Any] = dict(self.data or dict.fromkeys(API_STATUS_HUB_KEYS))
+        status: dict[str, str] = {}
+
+        eq_obs, status["earthquake"] = await self._fetch_optional(
+            "지진정보", self.client.async_get_earthquake_recent(), default=None
+        )
+        if eq_obs is not None:
+            data["earthquake"] = eq_obs
+
+        typhoon_obs, status["typhoon"] = await self._fetch_optional(
+            "태풍정보", self.client.async_get_typhoon_now(), default=None
+        )
+        # 활성 태풍이 없는 것은 정상 상태이므로, API 호출 자체가 성공(ok)했다면
+        # 이전 값을 이어붙이지 않고 그대로 None(없음)으로 갱신한다.
+        if status["typhoon"] == "ok":
+            data["typhoon"] = typhoon_obs
+
+        data["api_status"] = status
+        self._record_api_status(status)
+        return data
+
+    async def _fetch_optional(self, label: str, coro: Any, *, default: Any = None) -> tuple[Any, str]:
+        """선택적 API 호출을 수행하고 (결과, 상태)를 반환한다. KmaForecastCoordinator의
+        동명 메서드와 동일한 규약(상태: "ok"|"not_applied"|"error: 메시지")을 따른다.
+        """
+        try:
+            return await coro, "ok"
+        except KmaActivationRequiredError:
+            _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
+            return default, "not_applied"
+        except KmaApiError as err:
+            _LOGGER.warning("%s 업데이트 경고: %s", label, err)
+            return default, f"error: {err}"
