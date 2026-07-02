@@ -63,9 +63,15 @@ def _async_cleanup_orphaned_entities(hass: HomeAssistant, entry: ConfigEntry) ->
     valid_subentry_ids = set(entry.subentries.keys())
     legacy_hub_unique_ids = {f"{entry.entry_id}_{key}" for key in _LEGACY_HUB_IMAGE_KEYS}
 
+    _LOGGER.info("=== KMA Registry Entities Cleanup Check ===")
+    _LOGGER.info("valid_entry_ids: %s", valid_entry_ids)
+    _LOGGER.info("valid_subentry_ids: %s", valid_subentry_ids)
+    _LOGGER.info("legacy_hub_unique_ids: %s", legacy_hub_unique_ids)
+
     for entity_entry in list(ent_reg.entities.values()):
         if entity_entry.platform != DOMAIN:
             continue
+        
         is_deleted_entry = entity_entry.config_entry_id not in valid_entry_ids
         is_stale_subentry = (
             entity_entry.config_entry_id == entry.entry_id
@@ -73,9 +79,21 @@ def _async_cleanup_orphaned_entities(hass: HomeAssistant, entry: ConfigEntry) ->
             and entity_entry.config_subentry_id not in valid_subentry_ids
         )
         is_legacy_hub_image = entity_entry.unique_id in legacy_hub_unique_ids
+        
+        _LOGGER.info(
+            "Entity: %s, unique_id: %s, subentry: %s, is_deleted: %s, is_stale: %s, is_legacy: %s",
+            entity_entry.entity_id,
+            entity_entry.unique_id,
+            entity_entry.config_subentry_id,
+            is_deleted_entry,
+            is_stale_subentry,
+            is_legacy_hub_image,
+        )
+        
         if is_deleted_entry or is_stale_subentry or is_legacy_hub_image:
-            _LOGGER.info("고아 엔티티 정리: %s (unique_id=%s)", entity_entry.entity_id, entity_entry.unique_id)
+            _LOGGER.info("고아 엔티티 정리 실행: %s", entity_entry.entity_id)
             ent_reg.async_remove(entity_entry.entity_id)
+    _LOGGER.info("==========================================")
 
     dev_reg = dr.async_get(hass)
     for device_entry in list(dev_reg.devices.values()):
