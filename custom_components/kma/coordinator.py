@@ -13,6 +13,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    API_STATUS_IMAGE_KEYS,
+    API_STATUS_ZONE_KEYS,
     DOMAIN,
     LAND_ZONE_TO_AREA_NO,
     LAND_ZONE_TO_PM10_STN,
@@ -61,14 +63,45 @@ class ForecastPoint:
     sno: float | None        # 1시간 신적설 (cm)
 
 
-_API_STATUS_KEYS = [
-    "village_forecast", "land_forecast", "marine_forecast", "warning_now", "pm10",
-    "uv_index", "air_stagnation", "oak_pollen", "pine_pollen", "weed_pollen",
-    "radar_precipitation",
-]
+class _ApiStatusMixin:
+    """API별 활용신청 상태/누적 에러 카운트를 추적하는 공통 로직.
+
+    binary_sensor.KmaApiStatusBinarySensor / sensor.KmaApiErrorCountSensor가
+    이 믹스인의 api_status/api_error_counts/api_last_error_times를 그대로 읽으므로,
+    이 로직을 쓰는 코디네이터는 어떤 종류든 자동으로 활용신청 상태/에러 카운트
+    진단 센서 대상이 될 수 있다(binary_sensor.py/sensor.py의 API_STATUS_*_KEYS
+    목록에 key를 추가하기만 하면 됨).
+    """
+
+    def _init_api_status(self, keys: list[str]) -> None:
+        self._api_error_counts: dict[str, int] = {k: 0 for k in keys}
+        self._api_last_error_time: dict[str, datetime.datetime | None] = {k: None for k in keys}
+
+    def _record_api_status(self, status: dict[str, str]) -> None:
+        """status 딕셔너리("ok"/"not_applied"/"error: ...")를 보고 에러 카운트를 갱신."""
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        for api_key, api_stat in status.items():
+            if isinstance(api_stat, str) and api_stat.startswith("error"):
+                self._api_error_counts[api_key] = self._api_error_counts.get(api_key, 0) + 1
+                self._api_last_error_time[api_key] = now_utc
+
+    @property
+    def api_status(self) -> dict[str, str]:
+        """현재 기록된 API별 접근 상태."""
+        return (self.data or {}).get("api_status", {})
+
+    @property
+    def api_error_counts(self) -> dict[str, int]:
+        """API별 누적 에러 카운트 (세션 기준)."""
+        return dict(self._api_error_counts)
+
+    @property
+    def api_last_error_times(self) -> dict[str, datetime.datetime | None]:
+        """API별 마지막 에러 발생 시각 (UTC aware). 에러 없으면 None."""
+        return dict(self._api_last_error_time)
 
 
-class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
     """KMA 예·특보 데이터 코디네이터 (Zone 서브엔트리 단위)."""
 
     def __init__(
@@ -89,10 +122,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.area_no = LAND_ZONE_TO_AREA_NO.get(self.land_reg, "1100000000")  # 생활/보건기상지수 지역코드
 
         # API별 누적 에러 카운트 / 마지막 에러 시각 (HA 재시작 전까지 유지)
-        self._api_error_counts: dict[str, int] = {k: 0 for k in _API_STATUS_KEYS}
-        self._api_last_error_time: dict[str, datetime.datetime | None] = {
-            k: None for k in _API_STATUS_KEYS
-        }
+        self._init_api_status(API_STATUS_ZONE_KEYS)
         self._refresh_meta: dict[str, bool] = {
             "village_stale": False,
             "land_stale": False,
@@ -291,13 +321,8 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             ]
 
         data["api_status"] = status
-
         # API별 에러 카운트 / 마지막 에러 시각 업데이트 (UpdateFailed 이전에 기록해야 함)
-        now_utc = datetime.datetime.now(datetime.timezone.utc)
-        for api_key, api_stat in status.items():
-            if isinstance(api_stat, str) and api_stat.startswith("error"):
-                self._api_error_counts[api_key] = self._api_error_counts.get(api_key, 0) + 1
-                self._api_last_error_time[api_key] = now_utc
+        self._record_api_status(status)
 
         # 핵심 데이터인 동네예보(village)가 연결 오류(error)이거나 모든 API가 연결 오류면
         # 통합 단위 실패(UpdateFailed)로 처리하여 센서를 '사용 불가(오류)' 상태로 표시하고 재시도를 유도합니다.
@@ -325,21 +350,6 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except KmaApiError as err:
             _LOGGER.warning("%s 업데이트 경고: %s", label, err)
             return default, f"error: {err}"
-
-    @property
-    def api_status(self) -> dict[str, str]:
-        """현재 기록된 API별 접근 상태."""
-        return (self.data or {}).get("api_status", {})
-
-    @property
-    def api_error_counts(self) -> dict[str, int]:
-        """API별 누적 에러 카운트 (세션 기준)."""
-        return dict(self._api_error_counts)
-
-    @property
-    def api_last_error_times(self) -> dict[str, datetime.datetime | None]:
-        """API별 마지막 에러 발생 시각 (UTC aware). 에러 없으면 None."""
-        return dict(self._api_last_error_time)
 
     @property
     def refresh_meta(self) -> dict[str, bool]:
@@ -495,7 +505,7 @@ class KmaForecastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return base_date, base_time
 
 
-class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class KmaImageCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
     """레이더/위성/강수예측 이미지 코디네이터 (허브 단위, Zone과 무관한 전국 이미지 세트).
 
     ImageEntity는 `image_last_updated`를 코디네이터 갱신 시점에만 바꿔야 하므로
@@ -504,16 +514,12 @@ class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     이미지들 모두 게시 지연이 있어(레이더/강수예측 ~20분, 위성 거의 없음) 아직
     게시되지 않은 경우 async_get_*_image()가 None을 반환한다 — 이때는 이전 값을
-    유지한다.
+    유지한다(에러는 아니므로 상태는 "ok"로 기록).
     """
-
-    _IMAGE_KEYS = (
-        "radar", "satellite", "precipitation_forecast",
-        "satellite_visible", "satellite_shortwave_ir", "satellite_water_vapor",
-    )
 
     def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
         self.client = client
+        self._init_api_status(API_STATUS_IMAGE_KEYS)
         super().__init__(
             hass,
             _LOGGER,
@@ -522,39 +528,48 @@ class KmaImageCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=10),
         )
 
-    async def _fetch_image(self, data: dict[str, Any], key: str, label: str, coro: Any) -> None:
+    async def _fetch_image(self, data: dict[str, Any], key: str, label: str, coro: Any) -> str:
+        """이미지를 조회해 data[key]에 저장하고, 활용신청 상태 문자열을 반환한다."""
         try:
             image = await coro
             if image is not None:
                 data[key] = image
+            return "ok"
         except KmaActivationRequiredError:
             _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
+            return "not_applied"
         except KmaApiError as err:
             _LOGGER.debug("%s 갱신 실패: %s", label, err)
+            return f"error: {err}"
 
     async def _async_update_data(self) -> dict[str, Any]:
         """레이더/위성/강수예측 최신 이미지를 조회. 실패/미게시 시 이전 값을 유지."""
-        data: dict[str, Any] = dict(self.data or dict.fromkeys(self._IMAGE_KEYS))
+        data: dict[str, Any] = dict(self.data or dict.fromkeys(API_STATUS_IMAGE_KEYS))
+        status: dict[str, str] = {}
 
-        await self._fetch_image(data, "radar", "레이더 이미지", self.client.async_get_radar_image())
-        await self._fetch_image(
+        status["radar"] = await self._fetch_image(
+            data, "radar", "레이더 이미지", self.client.async_get_radar_image()
+        )
+        status["satellite"] = await self._fetch_image(
             data, "satellite", "위성 이미지", self.client.async_get_satellite_image()
         )
-        await self._fetch_image(
+        status["precipitation_forecast"] = await self._fetch_image(
             data, "precipitation_forecast", "강수예측 이미지",
             self.client.async_get_precipitation_forecast_image(),
         )
-        await self._fetch_image(
+        status["satellite_visible"] = await self._fetch_image(
             data, "satellite_visible", "위성 가시광선 이미지",
             self.client.async_get_satellite_image(obs="vi006"),
         )
-        await self._fetch_image(
+        status["satellite_shortwave_ir"] = await self._fetch_image(
             data, "satellite_shortwave_ir", "위성 단파적외 이미지",
             self.client.async_get_satellite_image(obs="sw038"),
         )
-        await self._fetch_image(
+        status["satellite_water_vapor"] = await self._fetch_image(
             data, "satellite_water_vapor", "위성 수증기 이미지",
             self.client.async_get_satellite_image(obs="wv069"),
         )
 
+        data["api_status"] = status
+        self._record_api_status(status)
         return data

@@ -181,10 +181,22 @@
     *   **보건기상지수 조회서비스** (Open API `HealthWthrIdxServiceV2` — `getOakPollenRiskIdxV2`, `getPinePollenRiskIdxV2`, `getWeedsPollenRiskndxV2`) - *꽃가루위험지수 센서용, 신규, ✅검증됨*
     *   **레이더영상 조회서비스** (Open API `WthrRadarInfoService` — `getCompCappiQcdArea`) - *레이더 강수강도 센서용, 신규, ✅검증됨*
     *   **레이더 합성자료 다운로드** (텍스트/이미지 API `typ04/rdr_cmp_file.php`) - *레이더 이미지 엔티티용, 신규, ✅검증됨*
-    *   **천리안 2A호 위성 분포도 조회** (그래픽 API `typ03/nph-gk2a_img`) - *위성 이미지 엔티티용, 신규, ✅검증됨*
+    *   **천리안 2A호 위성 분포도 조회** (그래픽 API `typ03/nph-gk2a_img`) - *위성 적외/가시광선/단파적외/수증기 이미지 엔티티 4종 공통, 신규, ✅검증됨*
+    *   **초단기 강수예측 그래픽 조회** (그래픽 API `typ03/nph-qpf_ana_img`) - *강수예측(QPF) 이미지 엔티티용, 신규, ✅검증됨*
 3. 신청 완료 후 발급받은 **인증키(authKey)**를 준비합니다.
 
-> ⚠️ **참고**: PM10, 생활기상지수/보건기상지수(자외선지수·대기정체지수·꽃가루위험지수), 레이더 강수강도, 레이더·위성 이미지 모두 실제 authKey로 정상 동작을 확인했습니다 — 활용신청만 완료하면 바로 사용 가능합니다.
+> ⚠️ **참고**: PM10, 생활기상지수/보건기상지수(자외선지수·대기정체지수·꽃가루위험지수), 레이더 강수강도, 레이더·위성·강수예측 이미지 모두 실제 authKey로 정상 동작을 확인했습니다 — 활용신청만 완료하면 바로 사용 가능합니다.
+
+### API 활용신청 상태를 확인하려면?
+
+각 API마다 활용신청을 깜빡했거나 아직 승인 대기 중인지 헷갈릴 수 있어, **기상청 APIhub** 허브 디바이스에 이 통합이 쓰는 API 전체(총 17개)에 대해 진단 센서를 하나씩 자동으로 만듭니다.
+
+*   **`binary_sensor.kma_activation_<api>`**: 활용신청 완료 + 정상 응답이면 `on`, 미신청(403)이거나 오류면 `off`. `status` 속성에 `ok`/`not_applied`/`error: ...` 상세 상태가 표시되어, 403(미신청)인지 다른 오류인지 바로 구분할 수 있습니다.
+*   **`sensor.kma_error_count_<api>`**: 해당 API의 누적 에러 횟수(진단 카테고리). `last_error_time`, `current_status` 속성도 함께 제공합니다.
+
+`<api>`에는 Zone별 예·특보/생활기상지수 API 11종(`village_forecast`, `land_forecast`, `marine_forecast`, `warning_now`, `pm10`, `uv_index`, `air_stagnation`, `oak_pollen`, `pine_pollen`, `weed_pollen`, `radar_precipitation`)과 Zone 무관 레이더·위성 이미지 API 6종(`radar`, `satellite`, `precipitation_forecast`, `satellite_visible`, `satellite_shortwave_ir`, `satellite_water_vapor`)이 모두 포함됩니다 — 이 통합이 호출하는 API는 예외 없이 전부 진단 센서가 있습니다.
+
+이 두 목록은 `const.py`의 `API_STATUS_ZONE_KEYS`/`API_STATUS_IMAGE_KEYS`에서 단일 소스로 관리됩니다. 새 센서가 새로운 API를 필요로 하게 되면, 해당 코디네이터의 데이터 조회 로직에서 상태 문자열("ok"/"not_applied"/"error: ...")을 채우고 이 두 목록 중 하나에 API key를 추가하기만 하면 활용신청 상태/에러 카운트 센서가 자동으로 생성됩니다(수동으로 센서 클래스를 새로 만들 필요 없음).
 
 ---
 

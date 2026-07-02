@@ -315,6 +315,24 @@
       },
       "error_count_radar_precipitation": {
         "name": "Radar Precipitation API Error Count"
+      },
+      "error_count_radar": {
+        "name": "Radar Composite Image API Error Count"
+      },
+      "error_count_satellite": {
+        "name": "Satellite IR API Error Count"
+      },
+      "error_count_precipitation_forecast": {
+        "name": "Precipitation Forecast Image API Error Count"
+      },
+      "error_count_satellite_visible": {
+        "name": "Satellite Visible API Error Count"
+      },
+      "error_count_satellite_shortwave_ir": {
+        "name": "Satellite Shortwave IR API Error Count"
+      },
+      "error_count_satellite_water_vapor": {
+        "name": "Satellite Water Vapor API Error Count"
       }
     },
     "binary_sensor": {
@@ -356,6 +374,24 @@
       },
       "activation_radar_precipitation": {
         "name": "Radar Precipitation API"
+      },
+      "activation_radar": {
+        "name": "Radar Composite Image API"
+      },
+      "activation_satellite": {
+        "name": "Satellite IR API"
+      },
+      "activation_precipitation_forecast": {
+        "name": "Precipitation Forecast Image API"
+      },
+      "activation_satellite_visible": {
+        "name": "Satellite Visible API"
+      },
+      "activation_satellite_shortwave_ir": {
+        "name": "Satellite Shortwave IR API"
+      },
+      "activation_satellite_water_vapor": {
+        "name": "Satellite Water Vapor API"
       }
     },
     "button": {

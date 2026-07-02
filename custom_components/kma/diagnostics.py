@@ -8,9 +8,35 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
-from .coordinator import KmaForecastCoordinator
+from .coordinator import KmaForecastCoordinator, KmaImageCoordinator
 
 REDACT_KEYS = ("auth_key", "authKey")
+
+
+def _image_diagnostics(coordinator: KmaImageCoordinator) -> dict[str, Any]:
+    """허브 단위 이미지 코디네이터(레이더/위성/강수예측) 진단 스냅샷을 구성한다."""
+    data = coordinator.data or {}
+    return {
+        "api_status": coordinator.api_status,
+        "api_error_counts": coordinator.api_error_counts,
+        "api_last_error_times": {
+            key: dt_util.as_local(value).isoformat() if value is not None else None
+            for key, value in coordinator.api_last_error_times.items()
+        },
+        "image_available": {
+            key: data.get(key) is not None
+            for key in (
+                "radar", "satellite", "precipitation_forecast",
+                "satellite_visible", "satellite_shortwave_ir", "satellite_water_vapor",
+            )
+        },
+        "coordinator": {
+            "last_update_success": coordinator.last_update_success,
+            "last_exception": (
+                str(coordinator.last_exception) if coordinator.last_exception else None
+            ),
+        },
+    }
 
 
 def _zone_diagnostics(
@@ -67,6 +93,7 @@ async def async_get_config_entry_diagnostics(
 
     store = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
     coordinators: dict[str, KmaForecastCoordinator] = store.get("coordinators", {})
+    image_coordinator: KmaImageCoordinator | None = store.get("image_coordinator")
 
     zones = {
         subentry_id: _zone_diagnostics(
@@ -85,6 +112,7 @@ async def async_get_config_entry_diagnostics(
                 "zone_count": len(zones),
             },
             "zones": zones,
+            "images": _image_diagnostics(image_coordinator) if image_coordinator else None,
         },
         REDACT_KEYS,
     )

@@ -315,6 +315,24 @@
       },
       "error_count_radar_precipitation": {
         "name": "레이더 강수강도 API 오류 수"
+      },
+      "error_count_radar": {
+        "name": "레이더 합성영상 API 오류 수"
+      },
+      "error_count_satellite": {
+        "name": "위성 적외 API 오류 수"
+      },
+      "error_count_precipitation_forecast": {
+        "name": "강수예측 영상 API 오류 수"
+      },
+      "error_count_satellite_visible": {
+        "name": "위성 가시광선 API 오류 수"
+      },
+      "error_count_satellite_shortwave_ir": {
+        "name": "위성 단파적외 API 오류 수"
+      },
+      "error_count_satellite_water_vapor": {
+        "name": "위성 수증기 API 오류 수"
       }
     },
     "binary_sensor": {
@@ -356,6 +374,24 @@
       },
       "activation_radar_precipitation": {
         "name": "레이더 강수강도 API"
+      },
+      "activation_radar": {
+        "name": "레이더 합성영상 API"
+      },
+      "activation_satellite": {
+        "name": "위성 적외 API"
+      },
+      "activation_precipitation_forecast": {
+        "name": "강수예측 영상 API"
+      },
+      "activation_satellite_visible": {
+        "name": "위성 가시광선 API"
+      },
+      "activation_satellite_shortwave_ir": {
+        "name": "위성 단파적외 API"
+      },
+      "activation_satellite_water_vapor": {
+        "name": "위성 수증기 API"
       }
     },
     "button": {

@@ -27,8 +27,8 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
-from .coordinator import KmaForecastCoordinator, CurrentWeather
+from .const import API_STATUS_IMAGE_KEYS, API_STATUS_ZONE_KEYS, DOMAIN
+from .coordinator import CurrentWeather, KmaForecastCoordinator, KmaImageCoordinator
 from .api import VillageForecast
 from .weather import get_ha_condition
 from .helpers import (
@@ -396,13 +396,6 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
 ]
 
 
-_API_STATUS_KEYS = [
-    "village_forecast", "land_forecast", "marine_forecast", "warning_now", "pm10",
-    "uv_index", "air_stagnation", "oak_pollen", "pine_pollen", "weed_pollen",
-    "radar_precipitation",
-]
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -423,15 +416,25 @@ async def async_setup_entry(
         )
 
     # 허브(통합) 기기: API별 에러 카운트 진단 센서.
-    # Zone 코디네이터 중 첫 번째를 대표로 사용하고, 에러 카운트는 인스턴스 변수로 추적.
+    # Zone별 예·특보 API는 대표(첫) Zone 코디네이터, Zone 무관 이미지 API는
+    # 공유 image_coordinator에 연결한다. 새 API를 추가할 때는 const.py의
+    # API_STATUS_ZONE_KEYS/API_STATUS_IMAGE_KEYS에 key만 추가하면 여기서 자동으로
+    # 에러 카운트 센서가 생성된다.
+    entities: list[KmaApiErrorCountSensor] = []
     if coordinators:
         rep_coordinator = next(iter(coordinators.values()))
-        async_add_entities(
-            [
-                KmaApiErrorCountSensor(rep_coordinator, entry, key)
-                for key in _API_STATUS_KEYS
-            ]
-        )
+        entities += [
+            KmaApiErrorCountSensor(rep_coordinator, entry, key)
+            for key in API_STATUS_ZONE_KEYS
+        ]
+    image_coordinator: KmaImageCoordinator | None = store.get("image_coordinator")
+    if image_coordinator is not None:
+        entities += [
+            KmaApiErrorCountSensor(image_coordinator, entry, key)
+            for key in API_STATUS_IMAGE_KEYS
+        ]
+    if entities:
+        async_add_entities(entities)
 
 
 class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
@@ -1124,10 +1127,14 @@ class KmaCurrentDataSourceSensor(CoordinatorEntity[KmaForecastCoordinator], Sens
         }
 
 
-class KmaApiErrorCountSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
+class KmaApiErrorCountSensor(
+    CoordinatorEntity[KmaForecastCoordinator | KmaImageCoordinator], SensorEntity
+):
     """허브 단위 API별 누적 에러 카운트 진단 센서.
 
     UpdateFailed 상태에서도 카운터를 표시해야 하므로 available 를 항상 True로 유지.
+    Zone별 예·특보 코디네이터와 Zone 무관 이미지 코디네이터 모두 api_error_counts를
+    제공하므로(coordinator.py의 _ApiStatusMixin) 어느 쪽이든 그대로 연결할 수 있다.
     """
 
     _attr_has_entity_name = True
@@ -1137,7 +1144,7 @@ class KmaApiErrorCountSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEn
 
     def __init__(
         self,
-        coordinator: KmaForecastCoordinator,
+        coordinator: KmaForecastCoordinator | KmaImageCoordinator,
         entry: ConfigEntry,
         api_key: str,
     ) -> None:

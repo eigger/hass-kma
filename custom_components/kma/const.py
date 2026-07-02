@@ -2,6 +2,27 @@
 
 DOMAIN = "kma"
 
+# 허브 단위 활용신청 상태(binary_sensor.activation_*)/에러 카운트(sensor.error_count_*)
+# 진단 센서를 자동 생성하는 데 쓰는 단일 소스. 새 API를 추가할 때 이 목록에만
+# key를 추가하면(+해당 코디네이터의 _async_update_data에서 status 딕셔너리에
+# 같은 key로 "ok"/"not_applied"/"error: ..."를 채우면) binary_sensor.py와
+# sensor.py가 활용신청 상태/에러 카운트 센서를 자동으로 만들어 준다
+# (coordinator.py의 _ApiStatusMixin 참고). translations(entity.binary_sensor.
+# activation_<key>, entity.sensor.error_count_<key>)에 이름만 추가하면 된다.
+#
+# Zone별 예·특보/생활기상지수 API — KmaForecastCoordinator가 관리.
+API_STATUS_ZONE_KEYS = [
+    "village_forecast", "land_forecast", "marine_forecast", "warning_now", "pm10",
+    "uv_index", "air_stagnation", "oak_pollen", "pine_pollen", "weed_pollen",
+    "radar_precipitation",
+]
+
+# 허브 단위(Zone 무관, 전국 단일 세트) 레이더/위성 이미지 API — KmaImageCoordinator가 관리.
+API_STATUS_IMAGE_KEYS = [
+    "radar", "satellite", "precipitation_forecast",
+    "satellite_visible", "satellite_shortwave_ir", "satellite_water_vapor",
+]
+
 # 대표 육상 예보구역 위경도 좌표 테이블
 # 포맷: { "대표예보구역코드": (위도, 경도) }
 REPRESENTATIVE_LAND_ZONES = {
