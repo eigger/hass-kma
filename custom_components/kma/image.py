@@ -63,7 +63,6 @@ async def async_setup_entry(
     store = hass.data[DOMAIN][entry.entry_id]
     coordinator: KmaImageCoordinator = store["image_coordinator"]
 
-    _LOGGER.info("=== KMA Image Platform Setup ===")
     for subentry_id in store.get("coordinators", {}):
         subentry = entry.subentries[subentry_id]
         zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
@@ -77,18 +76,11 @@ async def async_setup_entry(
         
         entities = []
         for entity_cls in _IMAGE_ENTITY_CLASSES:
-            u_id = f"{subentry_id}_{entity_cls._attr_translation_key}"
-            _LOGGER.info(
-                "Adding image entity: class=%s, unique_id=%s, subentry_id=%s",
-                entity_cls.__name__,
-                u_id,
-                subentry_id,
-            )
             entities.append(
                 entity_cls(
                     hass,
                     coordinator,
-                    unique_id=u_id,
+                    subentry_id=subentry_id,
                     device_info=zone_device,
                 )
             )
@@ -97,7 +89,6 @@ async def async_setup_entry(
             entities,
             config_subentry_id=subentry_id,
         )
-    _LOGGER.info("=================================")
 
 
 class _KmaBaseImage(CoordinatorEntity[KmaImageCoordinator], ImageEntity):
@@ -111,7 +102,7 @@ class _KmaBaseImage(CoordinatorEntity[KmaImageCoordinator], ImageEntity):
         hass: HomeAssistant,
         coordinator: KmaImageCoordinator,
         *,
-        unique_id: str,
+        subentry_id: str,
         device_info: DeviceInfo,
     ) -> None:
         # unique_id/device_info를 부모 __init__ 호출보다 먼저 설정한다 —
@@ -119,7 +110,9 @@ class _KmaBaseImage(CoordinatorEntity[KmaImageCoordinator], ImageEntity):
         # 참조하는 경로가 있어 순서가 반대면 등록 시점에 잘못된(None) 값이
         # 쓰일 수 있다(entity_id가 매 재시작마다 새로 배정되는 원인 중 하나로
         # 확인됨). 프로퍼티도 명시적으로 오버라이드해 항상 이 값을 반환하도록 고정한다.
-        self._attr_unique_id = unique_id
+        # 인스턴스 self를 통해 self._attr_translation_key를 참조함으로써
+        # 클래스 레벨 프로퍼티 디스크립터가 아닌 실제 문자열 값을 구해서 고유 ID를 생성한다.
+        self._attr_unique_id = f"{subentry_id}_{self._attr_translation_key}"
         self._attr_device_info = device_info
         CoordinatorEntity.__init__(self, coordinator)
         ImageEntity.__init__(self, hass)
