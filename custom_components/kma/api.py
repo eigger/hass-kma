@@ -47,6 +47,7 @@ import asyncio
 import datetime
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Iterator
 
@@ -567,6 +568,41 @@ def _parse_station_bulletins(text: str) -> list[StationBulletin]:
             body_lines.append(line.rstrip("#"))
     _flush()
     return bulletins
+
+
+_BULLETIN_SECTION_HEADER = re.compile(r"^<([^<>]+)>\s*$")
+
+
+def split_bulletin_sections(body: str) -> dict[str, str]:
+    """기상정보/날씨해설 본문을 `<중점 사항>`/`<기온 및 하늘상태>` 같은 소제목
+    기준으로 섹션별 텍스트로 분리한다.
+
+    소제목이 나오기 전의 텍스트(또는 소제목이 아예 없는 본문 전체)는 "머리말"
+    키로 보존한다. 빈 본문이면 빈 dict를 반환한다.
+    """
+    sections: dict[str, str] = {}
+    current_key: str | None = None
+    current_lines: list[str] = []
+
+    def _flush() -> None:
+        if current_key is not None:
+            text = "\n".join(current_lines).strip()
+            if text:
+                sections[current_key] = text
+
+    for line in body.splitlines():
+        match = _BULLETIN_SECTION_HEADER.match(line.strip())
+        if match:
+            _flush()
+            current_key = match.group(1).strip()
+            current_lines = []
+        else:
+            if current_key is None:
+                current_key = "머리말"
+            current_lines.append(line)
+    _flush()
+
+    return sections
 
 
 def _split_with_trailing_quoted(line: str, head_count: int) -> tuple[list[str], str]:

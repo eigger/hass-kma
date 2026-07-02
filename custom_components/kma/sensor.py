@@ -29,7 +29,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import API_STATUS_HUB_KEYS, API_STATUS_IMAGE_KEYS, API_STATUS_ZONE_KEYS, DOMAIN
 from .coordinator import CurrentWeather, KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
-from .api import VillageForecast
+from .api import VillageForecast, split_bulletin_sections
 from .weather import get_ha_condition
 from .helpers import (
     parse_pcp,
@@ -1046,7 +1046,10 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         if key in ("hazard_info", "weather_commentary"):
             bulletin = data.get(key)
             if bulletin is not None:
-                return {"issued_at": bulletin.issued_at, "body": bulletin.body}
+                return {
+                    "issued_at": bulletin.issued_at,
+                    "sections": split_bulletin_sections(bulletin.body),
+                }
             return None
 
         if key == "snow_depth_observed":

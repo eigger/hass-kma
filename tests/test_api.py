@@ -23,6 +23,7 @@ from custom_components.kma.api import (
     _to_float,
     _to_int,
     iter_data_lines,
+    split_bulletin_sections,
 )
 
 
@@ -407,3 +408,44 @@ class TestParseStationBulletins:
 
     def test_no_header_returns_empty_list(self):
         assert _parse_station_bulletins("그냥 텍스트\n더 텍스트") == []
+
+
+# ---------------------------------------------------------------------------
+# split_bulletin_sections (기상정보/날씨해설 본문 → 섹션별 dict)
+# ---------------------------------------------------------------------------
+class TestSplitBulletinSections:
+    def test_multiple_sections(self):
+        body = (
+            "<중점 사항>\n"
+            "오늘 소나기 예보\n"
+            "\n"
+            "<기온 및 하늘상태>\n"
+            "낮 기온 30도 안팎"
+        )
+        sections = split_bulletin_sections(body)
+        assert sections == {
+            "중점 사항": "오늘 소나기 예보",
+            "기온 및 하늘상태": "낮 기온 30도 안팎",
+        }
+
+    def test_text_before_first_header_becomes_preamble(self):
+        body = "머리말 텍스트\n<유의 사항>\n본문"
+        sections = split_bulletin_sections(body)
+        assert sections["머리말"] == "머리말 텍스트"
+        assert sections["유의 사항"] == "본문"
+
+    def test_no_headers_becomes_single_preamble_section(self):
+        sections = split_bulletin_sections("소제목 없는 그냥 텍스트")
+        assert sections == {"머리말": "소제목 없는 그냥 텍스트"}
+
+    def test_empty_body_returns_empty_dict(self):
+        assert split_bulletin_sections("") == {}
+
+    def test_whitespace_only_body_returns_empty_dict(self):
+        assert split_bulletin_sections("   \n   ") == {}
+
+    def test_empty_section_is_dropped(self):
+        body = "<빈 섹션>\n\n<실제 섹션>\n내용"
+        sections = split_bulletin_sections(body)
+        assert "빈 섹션" not in sections
+        assert sections["실제 섹션"] == "내용"

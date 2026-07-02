@@ -309,16 +309,16 @@
       "hazard_info": {
         "name": "Hazard Info",
         "state_attributes": {
-          "body": {
-            "name": "Body"
+          "sections": {
+            "name": "Body (by section)"
           }
         }
       },
       "weather_commentary": {
         "name": "Weather Commentary",
         "state_attributes": {
-          "body": {
-            "name": "Body"
+          "sections": {
+            "name": "Body (by section)"
           }
         }
       },
