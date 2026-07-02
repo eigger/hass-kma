@@ -89,7 +89,7 @@
         "name": "1시간 강수량"
       },
       "snowfall": {
-        "name": "1시간 신적설(예보)"
+        "name": "1시간 예상 신적설"
       },
       "today_temp_low": {
         "name": "오늘 최저기온"
@@ -196,8 +196,8 @@
       "one_line_summary": {
         "name": "한 줄 기상 요약"
       },
-      "precipitation_start": {
-        "name": "강수 시작 시각"
+      "precipitation_expected_time": {
+        "name": "강수 예상 시각"
       },
       "current_data_source": {
         "name": "현재값 데이터 소스",
@@ -282,6 +282,17 @@
       },
       "radar_precipitation": {
         "name": "레이더 강수강도"
+      },
+      "radar_precipitation_grade": {
+        "name": "레이더 강수강도 등급",
+        "state": {
+          "no_rain": "강수없음",
+          "very_light": "안개비",
+          "light": "약한비",
+          "moderate": "보통비",
+          "heavy": "강한비",
+          "very_heavy": "장대비"
+        }
       },
       "apparent_temperature_observed": {
         "name": "실측 체감온도"
@@ -419,8 +430,8 @@
       "recent_earthquake": {
         "name": "최근 지진정보"
       },
-      "typhoon_status": {
-        "name": "태풍 상태"
+      "typhoon_number": {
+        "name": "태풍 번호"
       },
       "error_count_village_forecast": {
         "name": "동네예보 API 오류 수"

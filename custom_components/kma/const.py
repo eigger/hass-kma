@@ -80,6 +80,22 @@ LAND_ZONE_TO_PM10_STN: dict[str, int] = {
     "11G00201": 185,  # 제주 → 고산 (최근접, 41.1km)
 }
 
+# PM10/적설관측/미세먼지 시간통계(kma_pm10.php, kma_snow1.php, dst_pm10_hr.php)가
+# 공유하는 관측지점(stn) 번호 → 지점명. LAND_ZONE_TO_PM10_STN 주석에서 추출.
+PM10_STN_NAMES: dict[int, str] = {
+    108: "서울",
+    201: "강화",
+    119: "수원",
+    93: "북춘천",
+    100: "대관령",
+    232: "천안",
+    146: "전주",
+    156: "광주",
+    143: "대구",
+    160: "구덕산",
+    185: "고산",
+}
+
 # PM10(미세먼지) 등급 기준 (환경부 기준, ㎍/㎥)
 PM10_GRADE_THRESHOLDS: list[tuple[int, str]] = [
     (30, "good"),
@@ -135,6 +151,17 @@ POLLEN_RISK_GRADE_MAP: dict[int, str] = {
     3: "very_high",
 }
 
+# 레이더 강수강도(dBZ) 등급 기준. 0 이하는 무에코/관측범위밖 센티널(-250 근방)을 포함해
+# "강수없음"으로 묶는다.
+RADAR_PRECIPITATION_GRADE_THRESHOLDS: list[tuple[int, str]] = [
+    (0, "no_rain"),
+    (20, "very_light"),
+    (30, "light"),
+    (40, "moderate"),
+    (50, "heavy"),
+]
+RADAR_PRECIPITATION_GRADE_VERY_HEAVY = "very_heavy"  # 50 초과
+
 
 # 지방기상청 관서코드(STN) — 영향예보(ifs_fct_pstt.php)/기상정보(wrn_inf_rpt.php)/
 # 날씨해설(wthr_cmt_rpt.php)에서 쓰는 지역 단위. REPRESENTATIVE_LAND_ZONES와 1:1 대응.
@@ -155,6 +182,20 @@ LAND_ZONE_TO_OFFICE_STN: dict[str, int] = {
     "11H10701": 143,  # 대구 (대구지방기상청)
     "11H20201": 159,  # 부산 (부산지방기상청)
     "11G00201": 184,  # 제주 (제주지방기상청)
+}
+
+# 영향예보(ifs_fct_pstt.php)/기상정보(wrn_inf_rpt.php)/날씨해설(wthr_cmt_rpt.php)가
+# 공유하는 관서(stn) 코드 → 관서명. LAND_ZONE_TO_OFFICE_STN 주석에서 추출.
+OFFICE_STN_NAMES: dict[int, str] = {
+    109: "서울지방기상청",
+    105: "강원지방기상청",
+    131: "청주기상지청",
+    133: "대전지방기상청",
+    146: "전주지방기상청",
+    156: "광주지방기상청",
+    143: "대구지방기상청",
+    159: "부산지방기상청",
+    184: "제주지방기상청",
 }
 
 # 영향예보(ifs_fct_pstt.php) 위험수준(ILVL) 등급 기준 — 0~4가 그대로 등급.

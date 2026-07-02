@@ -34,6 +34,8 @@ from .weather import get_ha_condition
 from .helpers import (
     parse_pcp,
     get_pm10_grade,
+    get_pm10_station_name,
+    get_office_name,
     get_discomfort_grade,
     get_laundry_grade,
     get_car_wash_grade,
@@ -43,6 +45,7 @@ from .helpers import (
     get_air_stagnation_grade,
     get_pollen_risk_grade,
     get_impact_risk_grade,
+    get_radar_precipitation_grade,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -214,8 +217,8 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         icon="mdi:weather-snowy-rainy",
     ),
     SensorEntityDescription(
-        key="precipitation_start",
-        translation_key="precipitation_start",
+        key="precipitation_expected_time",
+        translation_key="precipitation_expected_time",
         icon="mdi:weather-pouring",
         device_class=SensorDeviceClass.TIMESTAMP,
     ),
@@ -395,6 +398,13 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
+        key="radar_precipitation_grade",
+        translation_key="radar_precipitation_grade",
+        device_class=SensorDeviceClass.ENUM,
+        options=["no_rain", "very_light", "light", "moderate", "heavy", "very_heavy"],
+        icon="mdi:weather-pouring",
+    ),
+    SensorEntityDescription(
         key="apparent_temperature_observed",
         translation_key="apparent_temperature_observed",
         device_class=SensorDeviceClass.TEMPERATURE,
@@ -514,7 +524,7 @@ async def async_setup_entry(
                     hub_coordinator, unique_id=f"{subentry_id}_recent_earthquake", device_info=zone_device,
                 ),
                 KmaTyphoonSensor(
-                    hub_coordinator, unique_id=f"{subentry_id}_typhoon_status", device_info=zone_device,
+                    hub_coordinator, unique_id=f"{subentry_id}_typhoon_number", device_info=zone_device,
                 ),
             ]
         async_add_entities(zone_entities, config_subentry_id=subentry_id)
@@ -768,6 +778,10 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             radar = data.get("radar_precipitation")
             return radar.value if radar is not None else None
 
+        if key == "radar_precipitation_grade":
+            radar = data.get("radar_precipitation")
+            return get_radar_precipitation_grade(radar.value) if radar is not None else None
+
         if key == "apparent_temperature_observed":
             sfc = data.get("sfc_observation")
             return sfc.apparent_temperature if sfc is not None else None
@@ -797,7 +811,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             hourly = data.get("pm10_hourly")
             return hourly.avg if hourly is not None else None
 
-        if key == "precipitation_start":
+        if key == "precipitation_expected_time":
             nxt = self.coordinator.next_precipitation()
             return dt_util.as_local(nxt.dt) if nxt is not None else None
 
@@ -1028,6 +1042,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             if pm10 is not None:
                 return {
                     "station_id": pm10.stn,
+                    "station_name": get_pm10_station_name(pm10.stn),
                     "observed_time": pm10.tm,
                     "raw": pm10.raw,
                 }
@@ -1061,7 +1076,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                 }
             return None
 
-        if key == "radar_precipitation":
+        if key in ("radar_precipitation", "radar_precipitation_grade"):
             radar = data.get("radar_precipitation")
             if radar is not None:
                 return {
@@ -1077,6 +1092,8 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             if sfc is not None:
                 return {
                     "observed_time": sfc.tm,
+                    "lat": sfc.lat,
+                    "lon": sfc.lon,
                     "temperature": sfc.temperature,
                     "dew_point": sfc.dew_point,
                     "humidity": sfc.humidity,
@@ -1087,7 +1104,12 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         if key in ("heat_wave_risk", "cold_wave_risk"):
             risk = data.get(key)
             if risk is not None:
-                return {"level": risk.level, "announced": risk.tm_fc}
+                return {
+                    "level": risk.level,
+                    "announced": risk.tm_fc,
+                    "office_code": risk.stn,
+                    "office_name": get_office_name(risk.stn),
+                }
             return None
 
         if key in ("hazard_info", "weather_commentary"):
@@ -1095,6 +1117,8 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             if bulletin is not None:
                 return {
                     "issued_at": bulletin.issued_at,
+                    "office_code": bulletin.stn,
+                    "office_name": get_office_name(bulletin.stn),
                     "sections": split_bulletin_sections(bulletin.body),
                 }
             return None
@@ -1106,21 +1130,37 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             if bulletin is None:
                 return None
             result = bulletin_section(bulletin.body, slot=slot, total_slots=total_slots)
-            return {"text": result[1]} if result is not None else None
+            if result is None:
+                return None
+            return {
+                "text": result[1],
+                "office_code": bulletin.stn,
+                "office_name": get_office_name(bulletin.stn),
+            }
 
         if key == "snow_depth_observed":
             snow = data.get("snow_depth")
             if snow is not None:
-                return {"observed_time": snow.tm}
+                return {
+                    "station_id": snow.stn,
+                    "station_name": get_pm10_station_name(snow.stn),
+                    "observed_time": snow.tm,
+                }
             return None
 
         if key == "pm10_hourly_avg":
             hourly = data.get("pm10_hourly")
             if hourly is not None:
-                return {"observed_time": hourly.tm, "min": hourly.min, "max": hourly.max}
+                return {
+                    "station_id": hourly.stn,
+                    "station_name": get_pm10_station_name(hourly.stn),
+                    "observed_time": hourly.tm,
+                    "min": hourly.min,
+                    "max": hourly.max,
+                }
             return None
 
-        if key == "precipitation_start":
+        if key == "precipitation_expected_time":
             nxt = self.coordinator.next_precipitation()
             if nxt is None:
                 return {"expected": False}
@@ -1374,7 +1414,7 @@ class KmaTyphoonSensor(_KmaHubSensorBase):
     state는 태풍번호(활성 태풍 없으면 0)이며, 위치/기압/풍속 등은 속성으로 제공한다.
     """
 
-    _attr_translation_key = "typhoon_status"
+    _attr_translation_key = "typhoon_number"
     _attr_icon = "mdi:weather-hurricane"
     _data_key = "typhoon"
 
