@@ -38,32 +38,53 @@ _LEGACY_HUB_IMAGE_KEYS = ("radar_image", "satellite_image")
 
 
 def _async_cleanup_orphaned_entities(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """더 이상 존재하지 않는 Zone 서브엔트리(삭제 후 재생성 등)나 옛 허브 이미지
-    엔티티에 연결된 고아 엔티티/기기를 레지스트리에서 정리한다.
+    """이 통합(domain=kma) 소속 고아 엔티티/기기를 레지스트리 전체에서 정리한다.
 
-    Zone을 삭제 후 다시 추가하면 새 subentry_id가 발급되는데, 옛 subentry_id로
-    등록된 엔티티는 자동으로 지워지지 않고 "사용할 수 없음" 상태로 남아 같은
-    이름의 새 엔티티와 entity_id가 충돌한다(`_2` 접미사) — 실측으로 확인된
-    문제(2026-07-02)라 매 셋업마다 방어적으로 정리한다.
+    세 가지 경우를 잡는다:
+    1. **삭제된 config entry에 남은 잔재**: "통합을 통째로 삭제 후 재설치"하면
+       매번 새 entry_id가 발급되는데, 예전 entry_id에 연결된 엔티티가 어떤
+       이유로든(정상적인 core 정리가 실패하는 등) 레지스트리에 남을 수 있다.
+       이런 항목은 config_entry_id가 "현재 로드된 kma entry 중 하나"에 아예
+       속하지 않으므로 무조건 고아다. (실측 확인 2026-07-02: entry_id로만
+       필터링하면 이 케이스를 놓쳐서, 재설치할 때마다 고아가 쌓이고 entity_id
+       뒤에 `_2`, `_3`, ... 로 계속 번호가 늘어나는 문제가 있었음 — 이전 수정의
+       버그였고 이번에 전체 레지스트리를 훑도록 범위를 넓혀 수정.)
+    2. **삭제된 Zone 서브엔트리에 남은 잔재**: Zone을 삭제 후 재추가하면 새
+       subentry_id가 발급되는데, 옛 subentry_id로 등록된 엔티티가 남을 수 있다.
+    3. **옛 허브 이미지 엔티티**: 허브 디바이스에 레이더/위성 이미지를 두던
+       시기(524acc2 이전)의 unique_id.
+
+    entity_id는 전역에서 유일해야 하므로, 위 고아들이 하나라도 남아있으면 같은
+    이름을 쓰는 정상 엔티티가 매번 entity_id 뒤에 번호가 붙는 형태로 계속
+    충돌한다 — 그래서 매 셋업(재시작 포함)마다 방어적으로 전체를 정리한다.
     """
     ent_reg = er.async_get(hass)
+    valid_entry_ids = {e.entry_id for e in hass.config_entries.async_entries(DOMAIN)}
     valid_subentry_ids = set(entry.subentries.keys())
     legacy_hub_unique_ids = {f"{entry.entry_id}_{key}" for key in _LEGACY_HUB_IMAGE_KEYS}
 
     for entity_entry in list(ent_reg.entities.values()):
-        if entity_entry.config_entry_id != entry.entry_id:
+        if entity_entry.platform != DOMAIN:
             continue
+        is_deleted_entry = entity_entry.config_entry_id not in valid_entry_ids
         is_stale_subentry = (
-            entity_entry.config_subentry_id is not None
+            entity_entry.config_entry_id == entry.entry_id
+            and entity_entry.config_subentry_id is not None
             and entity_entry.config_subentry_id not in valid_subentry_ids
         )
         is_legacy_hub_image = entity_entry.unique_id in legacy_hub_unique_ids
-        if is_stale_subentry or is_legacy_hub_image:
+        if is_deleted_entry or is_stale_subentry or is_legacy_hub_image:
             _LOGGER.info("고아 엔티티 정리: %s (unique_id=%s)", entity_entry.entity_id, entity_entry.unique_id)
             ent_reg.async_remove(entity_entry.entity_id)
 
     dev_reg = dr.async_get(hass)
     for device_entry in list(dev_reg.devices.values()):
+        if not any(ident[0] == DOMAIN for ident in device_entry.identifiers):
+            continue
+        if not (device_entry.config_entries & valid_entry_ids):
+            _LOGGER.info("고아 기기 정리(삭제된 entry): %s (%s)", device_entry.name, device_entry.id)
+            dev_reg.async_remove_device(device_entry.id)
+            continue
         subentries_for_entry = device_entry.config_entries_subentries.get(entry.entry_id)
         if subentries_for_entry is None:
             continue
@@ -71,7 +92,7 @@ def _async_cleanup_orphaned_entities(hass: HomeAssistant, entry: ConfigEntry) ->
         # None은 허브 자체를 뜻하므로 항상 유효.
         if subentries_for_entry & (valid_subentry_ids | {None}):
             continue
-        _LOGGER.info("고아 기기 정리: %s (%s)", device_entry.name, device_entry.id)
+        _LOGGER.info("고아 기기 정리(삭제된 subentry): %s (%s)", device_entry.name, device_entry.id)
         dev_reg.async_remove_device(device_entry.id)
 
 

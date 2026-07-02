@@ -116,8 +116,10 @@
 | 기상청 날씨 | `sensor.kma_<지역>_apparent_temperature_observed` | 실측 체감온도 | `sfc_nc_var.php` (고해상도 지상관측) ✅검증됨 | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_heat_wave_risk` | 폭염 영향예보 위험수준 | `ifs_fct_pstt.php` (ifpar=hw) ✅검증됨 (ENUM) | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_cold_wave_risk` | 한파 영향예보 위험수준 | `ifs_fct_pstt.php` (ifpar=cw) ✅검증됨 (ENUM) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_hazard_info` | 기상정보 | `wrn_inf_rpt.php` ✅검증됨. 활용신청 불필요 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_weather_commentary` | 날씨해설 | `wthr_cmt_rpt.php` ✅검증됨. 활용신청 불필요 | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_hazard_info` | 기상정보(제목) | `wrn_inf_rpt.php` ✅검증됨. 활용신청 불필요 | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_hazard_info_section_1`~`_3` | 기상정보 섹션 1~3 | `wrn_inf_rpt.php` 본문을 소제목 기준 고정 3슬롯으로 분리 | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_weather_commentary` | 날씨해설(제목) | `wthr_cmt_rpt.php` ✅검증됨. 활용신청 불필요 | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_weather_commentary_section_1`~`_8` | 날씨해설 섹션 1~8 | `wthr_cmt_rpt.php` 본문을 소제목 기준 고정 8슬롯으로 분리 | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_snow_depth_observed` | 실측 적설 | `kma_snow1.php` ✅검증됨 | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_pm10_hourly_avg` | 미세먼지 시간평균 | `dst_pm10_hr.php` ✅검증됨 | 10분 |
 | 기상청 날씨 | `binary_sensor.kma_<지역>_warning` | 기상특보 안전 센서 | 기상특보현황 (`wrn_now_data`) | 10분 |
@@ -196,7 +198,8 @@
 관서(지방기상청)별 예보관이 직접 작성하는 텍스트 속보입니다(`wrn_inf_rpt.php`/`wthr_cmt_rpt.php`, typ01) — **활용신청이 필요 없어 바로 사용 가능**함을 실측 확인했습니다(2026-07-02). 두 API 모두 `"$0 헤더 + $1 본문"` 포맷을 공유해 같은 파서로 처리합니다.
 *   **기상정보**: 안개·소나기·뇌전 등 특정 현상에 대한 실시간 위험기상 안내문.
 *   **날씨해설**: 예보관이 쓴 일일 날씨 해설(수천 자 분량 — 기온/하늘상태/유의사항 등). `one_line_summary`(로컬 계산)를 보완하는 실제 예보관 문장입니다.
-*   상태값은 제목(255자 이내)만 담고, 전문은 `sections` 속성으로 제공됩니다(HA 센서 state 길이 제한). 본문을 하나의 긴 문자열로 몰아넣지 않고 `<중점 사항>`, `<기온 및 하늘상태>`, `<유의사항>` 같은 예보관의 소제목 기준으로 나눠 `{소제목: 내용}` 딕셔너리로 제공합니다(실측: 날씨해설 하나가 보통 6~8개 섹션으로 나뉨) — 소제목이 없는 텍스트는 `머리말` 키로 묶입니다.
+*   대표 센서(`hazard_info`/`weather_commentary`)의 상태값은 제목(255자 이내)만 담고, 전문은 `sections` 속성으로 제공됩니다(HA 센서 state 길이 제한). 본문을 하나의 긴 문자열로 몰아넣지 않고 `<중점 사항>`, `<기온 및 하늘상태>`, `<유의사항>` 같은 예보관의 소제목 기준으로 나눠 `{소제목: 내용}` 딕셔너리로 제공합니다(실측: 날씨해설 하나가 보통 6~8개 섹션으로 나뉨) — 소제목이 없는 텍스트는 `머리말` 키로 묶입니다.
+*   **섹션별 개별 센서**: 위 `sections` 속성과 별도로, `weather_commentary_section_1`~`_8`(8슬롯)/`hazard_info_section_1`~`_3`(3슬롯) 센서를 추가로 제공합니다. 소제목은 발표할 때마다 달라지는 자유 텍스트라(고정된 어휘가 아님) 소제목 이름 그대로 센서를 만들면 매일 다른 이름의 엔티티가 생겼다 사라지는 문제가 생깁니다 — 그래서 **고정된 개수·이름의 슬롯**을 두고 그날 순서대로 채웁니다(상태값=그날 그 슬롯의 소제목, `text` 속성=본문). 실제 섹션 수가 슬롯 수보다 많은 날은 마지막 슬롯에 남은 섹션 전부를 병합해 담아 내용이 누락되지 않게 합니다(예: `weather_commentary_section_8` 상태가 `"기압계 현황 및 전망 외 1건"`처럼 표시될 수 있음).
 
 ### 8. 지진정보(`sensor.kma_recent_earthquake`) / 태풍정보(`sensor.kma_typhoon_status`)
 Zone과 무관한 전국 단위 데이터라 실제 페칭은 허브 코디네이터(`KmaHubCoordinator`) 하나뿐이며, 레이더/위성 이미지와 같은 이유로 각 Zone 디바이스에 복제 배치합니다.

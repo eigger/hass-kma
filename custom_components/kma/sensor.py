@@ -29,7 +29,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import API_STATUS_HUB_KEYS, API_STATUS_IMAGE_KEYS, API_STATUS_ZONE_KEYS, DOMAIN
 from .coordinator import CurrentWeather, KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
-from .api import VillageForecast, split_bulletin_sections
+from .api import VillageForecast, bulletin_section, split_bulletin_sections
 from .weather import get_ha_condition
 from .helpers import (
     parse_pcp,
@@ -442,6 +442,44 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     ),
 ]
 
+# 날씨해설/기상정보 본문은 <중점 사항>/<기온 및 하늘상태> 같은 소제목으로 나뉘는데,
+# 소제목 자체가 그날그날 바뀌므로(고정된 어휘가 아님) 소제목 이름으로 직접 센서를
+# 만들면 매일 엔티티가 생겼다 사라지는 문제가 생긴다(방금 겪은 고아 엔티티 문제와
+# 동일한 유형). 대신 "섹션 N"이라는 고정 개수·고정 이름의 슬롯을 두고, 그날 순서대로
+# 채운다(상태값=그날의 소제목, text 속성=본문). 날씨해설이 기상정보보다 훨씬 길어서
+# (실측 최대 8개 섹션) 슬롯 수를 다르게 둔다. 슬롯보다 섹션이 많은 날은 마지막
+# 슬롯에 나머지 전부를 병합해 담아 내용이 누락되지 않게 한다(api.bulletin_section 참고).
+WEATHER_COMMENTARY_SECTION_SLOTS = 8
+HAZARD_INFO_SECTION_SLOTS = 3
+
+SENSOR_DESCRIPTIONS += [
+    SensorEntityDescription(
+        key=f"weather_commentary_section_{i}",
+        translation_key=f"weather_commentary_section_{i}",
+        icon="mdi:text-box-outline",
+    )
+    for i in range(1, WEATHER_COMMENTARY_SECTION_SLOTS + 1)
+] + [
+    SensorEntityDescription(
+        key=f"hazard_info_section_{i}",
+        translation_key=f"hazard_info_section_{i}",
+        icon="mdi:text-box-outline",
+    )
+    for i in range(1, HAZARD_INFO_SECTION_SLOTS + 1)
+]
+
+
+def _resolve_bulletin_section_key(key: str) -> tuple[str, int, int] | None:
+    """'weather_commentary_section_3' 같은 키를 (기반 bulletin 키, 슬롯, 총 슬롯수)로 분해.
+
+    이 패턴에 해당하지 않는 키는 None.
+    """
+    if key.startswith("weather_commentary_section_"):
+        return "weather_commentary", int(key.rsplit("_", 1)[1]), WEATHER_COMMENTARY_SECTION_SLOTS
+    if key.startswith("hazard_info_section_"):
+        return "hazard_info", int(key.rsplit("_", 1)[1]), HAZARD_INFO_SECTION_SLOTS
+    return None
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -741,6 +779,15 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         if key in ("hazard_info", "weather_commentary"):
             bulletin = data.get(key)
             return bulletin.title[:255] if bulletin is not None else None
+
+        section_ref = _resolve_bulletin_section_key(key)
+        if section_ref is not None:
+            bulletin_key, slot, total_slots = section_ref
+            bulletin = data.get(bulletin_key)
+            if bulletin is None:
+                return None
+            result = bulletin_section(bulletin.body, slot=slot, total_slots=total_slots)
+            return result[0] if result is not None else None
 
         if key == "snow_depth_observed":
             snow = data.get("snow_depth")
@@ -1051,6 +1098,15 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                     "sections": split_bulletin_sections(bulletin.body),
                 }
             return None
+
+        section_ref = _resolve_bulletin_section_key(key)
+        if section_ref is not None:
+            bulletin_key, slot, total_slots = section_ref
+            bulletin = data.get(bulletin_key)
+            if bulletin is None:
+                return None
+            result = bulletin_section(bulletin.body, slot=slot, total_slots=total_slots)
+            return {"text": result[1]} if result is not None else None
 
         if key == "snow_depth_observed":
             snow = data.get("snow_depth")
