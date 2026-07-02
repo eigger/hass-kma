@@ -7,6 +7,7 @@ from custom_components.kma.helpers import (
     get_discomfort_grade,
     get_food_poisoning_grade,
     get_freeze_risk_grade,
+    get_impact_risk_grade,
     get_laundry_grade,
     get_pm10_grade,
     get_pollen_risk_grade,
@@ -258,6 +259,29 @@ class TestGetPollenRiskGrade:
 
     def test_unmapped_value_returns_none(self):
         assert get_pollen_risk_grade(4) is None
+
+
+class TestGetImpactRiskGrade:
+    def test_none_returns_none(self):
+        assert get_impact_risk_grade(None) is None
+
+    def test_0_is_none_risk(self):
+        assert get_impact_risk_grade(0) == "none"
+
+    def test_1_is_concern(self):
+        assert get_impact_risk_grade(1) == "concern"
+
+    def test_2_is_caution(self):
+        assert get_impact_risk_grade(2) == "caution"
+
+    def test_3_is_warning(self):
+        assert get_impact_risk_grade(3) == "warning"
+
+    def test_4_is_danger(self):
+        assert get_impact_risk_grade(4) == "danger"
+
+    def test_unmapped_value_returns_none(self):
+        assert get_impact_risk_grade(5) is None
 
 
 # ---------------------------------------------------------------------------

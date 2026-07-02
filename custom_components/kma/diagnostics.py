@@ -7,8 +7,8 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
-from .coordinator import KmaForecastCoordinator, KmaImageCoordinator
+from .const import API_STATUS_HUB_KEYS, API_STATUS_IMAGE_KEYS, DOMAIN
+from .coordinator import KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
 
 REDACT_KEYS = ("auth_key", "authKey")
 
@@ -23,13 +23,27 @@ def _image_diagnostics(coordinator: KmaImageCoordinator) -> dict[str, Any]:
             key: dt_util.as_local(value).isoformat() if value is not None else None
             for key, value in coordinator.api_last_error_times.items()
         },
-        "image_available": {
-            key: data.get(key) is not None
-            for key in (
-                "radar", "satellite", "precipitation_forecast",
-                "satellite_visible", "satellite_shortwave_ir", "satellite_water_vapor",
-            )
+        "image_available": {key: data.get(key) is not None for key in API_STATUS_IMAGE_KEYS},
+        "coordinator": {
+            "last_update_success": coordinator.last_update_success,
+            "last_exception": (
+                str(coordinator.last_exception) if coordinator.last_exception else None
+            ),
         },
+    }
+
+
+def _hub_diagnostics(coordinator: KmaHubCoordinator) -> dict[str, Any]:
+    """허브 단위 비-이미지 코디네이터(지진/태풍) 진단 스냅샷을 구성한다."""
+    data = coordinator.data or {}
+    return {
+        "api_status": coordinator.api_status,
+        "api_error_counts": coordinator.api_error_counts,
+        "api_last_error_times": {
+            key: dt_util.as_local(value).isoformat() if value is not None else None
+            for key, value in coordinator.api_last_error_times.items()
+        },
+        "data_available": {key: data.get(key) is not None for key in API_STATUS_HUB_KEYS},
         "coordinator": {
             "last_update_success": coordinator.last_update_success,
             "last_exception": (
@@ -76,6 +90,13 @@ def _zone_diagnostics(
         "pine_pollen_available": data.get("pine_pollen") is not None,
         "weed_pollen_available": data.get("weed_pollen") is not None,
         "radar_precipitation_available": data.get("radar_precipitation") is not None,
+        "sfc_observation_available": data.get("sfc_observation") is not None,
+        "heat_wave_risk_available": data.get("heat_wave_risk") is not None,
+        "cold_wave_risk_available": data.get("cold_wave_risk") is not None,
+        "hazard_info_available": data.get("hazard_info") is not None,
+        "weather_commentary_available": data.get("weather_commentary") is not None,
+        "snow_depth_available": data.get("snow_depth") is not None,
+        "pm10_hourly_available": data.get("pm10_hourly") is not None,
         "coordinator": {
             "last_update_success": coordinator.last_update_success,
             "last_exception": (
@@ -94,6 +115,7 @@ async def async_get_config_entry_diagnostics(
     store = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
     coordinators: dict[str, KmaForecastCoordinator] = store.get("coordinators", {})
     image_coordinator: KmaImageCoordinator | None = store.get("image_coordinator")
+    hub_coordinator: KmaHubCoordinator | None = store.get("hub_coordinator")
 
     zones = {
         subentry_id: _zone_diagnostics(
@@ -113,6 +135,7 @@ async def async_get_config_entry_diagnostics(
             },
             "zones": zones,
             "images": _image_diagnostics(image_coordinator) if image_coordinator else None,
+            "hub": _hub_diagnostics(hub_coordinator) if hub_coordinator else None,
         },
         REDACT_KEYS,
     )

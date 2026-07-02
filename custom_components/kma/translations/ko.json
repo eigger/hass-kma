@@ -283,6 +283,57 @@
       "radar_precipitation": {
         "name": "레이더 강수강도"
       },
+      "apparent_temperature_observed": {
+        "name": "실측 체감온도"
+      },
+      "heat_wave_risk": {
+        "name": "폭염 영향예보 위험수준",
+        "state": {
+          "none": "영향없음",
+          "concern": "관심",
+          "caution": "주의",
+          "warning": "경고",
+          "danger": "위험"
+        }
+      },
+      "cold_wave_risk": {
+        "name": "한파 영향예보 위험수준",
+        "state": {
+          "none": "영향없음",
+          "concern": "관심",
+          "caution": "주의",
+          "warning": "경고",
+          "danger": "위험"
+        }
+      },
+      "hazard_info": {
+        "name": "기상정보",
+        "state_attributes": {
+          "body": {
+            "name": "본문"
+          }
+        }
+      },
+      "weather_commentary": {
+        "name": "날씨해설",
+        "state_attributes": {
+          "body": {
+            "name": "본문"
+          }
+        }
+      },
+      "snow_depth_observed": {
+        "name": "실측 적설"
+      },
+      "pm10_hourly_avg": {
+        "name": "미세먼지(PM10) 시간평균"
+      },
+      "recent_earthquake": {
+        "name": "최근 지진정보"
+      },
+      "typhoon_status": {
+        "name": "태풍 상태"
+      },
       "error_count_village_forecast": {
         "name": "동네예보 API 오류 수"
       },
@@ -333,6 +384,36 @@
       },
       "error_count_satellite_water_vapor": {
         "name": "위성 수증기 API 오류 수"
+      },
+      "error_count_sfc_observation": {
+        "name": "고해상도 지상관측 API 오류 수"
+      },
+      "error_count_heat_wave_risk": {
+        "name": "영향예보(폭염) API 오류 수"
+      },
+      "error_count_cold_wave_risk": {
+        "name": "영향예보(한파) API 오류 수"
+      },
+      "error_count_hazard_info": {
+        "name": "기상정보 API 오류 수"
+      },
+      "error_count_weather_commentary": {
+        "name": "날씨해설 API 오류 수"
+      },
+      "error_count_snow_depth": {
+        "name": "적설관측 API 오류 수"
+      },
+      "error_count_pm10_hourly": {
+        "name": "미세먼지 시간통계 API 오류 수"
+      },
+      "error_count_dust_satellite": {
+        "name": "황사위성영상 API 오류 수"
+      },
+      "error_count_earthquake": {
+        "name": "지진정보 API 오류 수"
+      },
+      "error_count_typhoon": {
+        "name": "태풍정보 API 오류 수"
       }
     },
     "binary_sensor": {
@@ -392,6 +473,36 @@
       },
       "activation_satellite_water_vapor": {
         "name": "위성 수증기 API"
+      },
+      "activation_sfc_observation": {
+        "name": "고해상도 지상관측 API"
+      },
+      "activation_heat_wave_risk": {
+        "name": "영향예보(폭염) API"
+      },
+      "activation_cold_wave_risk": {
+        "name": "영향예보(한파) API"
+      },
+      "activation_hazard_info": {
+        "name": "기상정보 API"
+      },
+      "activation_weather_commentary": {
+        "name": "날씨해설 API"
+      },
+      "activation_snow_depth": {
+        "name": "적설관측 API"
+      },
+      "activation_pm10_hourly": {
+        "name": "미세먼지 시간통계 API"
+      },
+      "activation_dust_satellite": {
+        "name": "황사위성영상 API"
+      },
+      "activation_earthquake": {
+        "name": "지진정보 API"
+      },
+      "activation_typhoon": {
+        "name": "태풍정보 API"
       }
     },
     "button": {
@@ -417,6 +528,9 @@
       },
       "satellite_water_vapor_image": {
         "name": "위성 수증기 영상"
+      },
+      "dust_satellite_image": {
+        "name": "황사위성영상"
       }
     }
   }

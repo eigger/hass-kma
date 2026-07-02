@@ -51,6 +51,18 @@
     *   처음 시도했던 `nph-rdr_cmp1_api`(원시 반사도 격자 데이터만 제공)와 `nph-gk2a_img`(잘못된 경로) 대신, 실제 PNG를 반환하는 별도 엔드포인트(레이더: `typ04/rdr_cmp_file.php?data=img`, 위성: `typ03/nph-gk2a_img`, 강수예측: `typ03/nph-qpf_ana_img`)를 찾아 사용합니다.
     *   ⚠️ 레이더/강수예측은 게시 지연(~15~20분)이 있어 아직 게시되지 않은 시각을 요청하면 이미지 대신 텍스트 오류가 200 OK로 오는 경우가 있어, PNG 매직바이트로 실제 이미지 여부를 확인합니다.
     *   ⚠️ 위성 가시광선(vi006)은 야간에는 관측되지 않아 검은 화면이 됩니다. 같은 `nph-gk2a_img` 엔드포인트에 `obs=cld`/`fog`/`dst`/`rgb-*` 등도 시도해봤으나 전부 1KB 안팎의 "미지원" 플레이스홀더 PNG만 반환되어(2026-07-02 실측) 구현하지 않았습니다 — 실제 값이 오는 채널은 ir105/vi006/sw038/wv069 4개뿐입니다.
+*   **고해상도 지상관측 / 영향예보(폭염·한파) / 실측 적설 / 미세먼지 시간통계** ✅ 실제 authKey로 동작 검증 완료(2026-07-02):
+    *   **실측 체감온도 (`apparent_temperature_observed`)**: 위경도 기반 고해상도 지상관측(`sfc_nc_var.php`)에서 받은 실측 체감온도. 기존 `apparent_temperature`(Steadman 공식 계산값)를 보완하는 실측치입니다.
+    *   **폭염/한파 영향예보 (`heat_wave_risk`/`cold_wave_risk`)**: 기상청 공식 영향예보(`ifs_fct_pstt.php`) 위험수준을 그대로 등급(ENUM: 영향없음/관심/주의/경고/위험)으로 제공합니다. 로컬 계산이 아닌 기상청이 직접 발표하는 공식 지표입니다.
+    *   **실측 적설 (`snow_depth_observed`)**: 관측소 실측 적설(`kma_snow1.php`). 기존 `snowfall`(예보값)을 보완합니다.
+    *   **미세먼지 시간평균 (`pm10_hourly_avg`)**: 5분 원시값(`pm10`)과 별개로 해당 시간의 평균/최소/최대를 제공하는 시간통계(`dst_pm10_hr.php`)입니다.
+*   **기상정보 / 날씨해설 텍스트 (`hazard_info`, `weather_commentary`)** ✅ 활용신청 불필요(2026-07-02 검증):
+    *   관서(지방기상청)별로 예보관이 직접 작성하는 위험기상 실시간 속보(안개·소나기·뇌전 등)와 일일 날씨 해설문을 그대로 제공합니다. 로컬 계산 요약(`one_line_summary`)과 달리 기상청 예보관이 쓴 실제 문장입니다.
+*   **지진정보 / 태풍정보 (`sensor.kma_*_recent_earthquake`, `sensor.kma_*_typhoon_status`)** ✅ 실제 authKey로 동작 검증 완료(2026-07-02):
+    *   지진정보는 국내외 최신 지진 통보문(규모, 위치, 발생시각)을, 태풍정보는 현재 활성 태풍의 위치·중심기압·최대풍속·이동방향을 제공합니다(활성 태풍이 없으면 정상적으로 "없음" 상태).
+    *   Zone과 무관한 전국 단위 데이터라 실제 API 호출은 1세트만 발생하지만, 레이더/위성 이미지와 같은 이유로 **각 Zone 디바이스에** 복제 배치합니다.
+*   **황사위성영상 (`image.kma_dust_satellite_image`)** ✅ 실제 authKey로 동작 검증 완료(2026-07-02):
+    *   GK2A 위성 기반 실제 황사지수(IDI) 이미지(`YdstInfoService/getYdstSatlitImg`)를 제공합니다. 나머지 위성 이미지들과 마찬가지로 각 Zone 디바이스에 배치됩니다.
 *   **재난 기상특보 안전 센서 (`binary_sensor.kma_*_warning`)**:
     *   선택된 거주 지역(광역자치단체 기준)에 기상 특보(호우, 대설, 강풍, 폭염, 한파, 태풍, 황사 등)가 발효되면 즉시 `on` 상태가 됩니다.
     *   발효된 특보의 개수, 특보 명칭(예: 폭염주의보, 호우경보 등), 발효 시간 및 상세 목록을 속성 값으로 지연 없이 노출합니다 (홈어시스턴트의 시스템 언어 설정에 맞춰 다국어 이름/등급 제공).
@@ -101,13 +113,23 @@
 | 기상청 날씨 | `sensor.kma_<지역>_weed_pollen_risk` | 꽃가루위험지수(잡초류) | `HealthWthrIdxServiceV2/getWeedsPollenRiskndxV2` ✅검증됨, 서비스기간 8~10월 | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_weed_pollen_risk_grade` | 꽃가루위험지수(잡초류) 등급 | 지수값(0~3) 그대로 등급 매핑 (ENUM) | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation` | 레이더 강수강도 | `WthrRadarInfoService/getCompCappiQcdArea` ✅검증됨 | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_apparent_temperature_observed` | 실측 체감온도 | `sfc_nc_var.php` (고해상도 지상관측) ✅검증됨 | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_heat_wave_risk` | 폭염 영향예보 위험수준 | `ifs_fct_pstt.php` (ifpar=hw) ✅검증됨 (ENUM) | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_cold_wave_risk` | 한파 영향예보 위험수준 | `ifs_fct_pstt.php` (ifpar=cw) ✅검증됨 (ENUM) | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_hazard_info` | 기상정보 | `wrn_inf_rpt.php` ✅검증됨. 활용신청 불필요 | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_weather_commentary` | 날씨해설 | `wthr_cmt_rpt.php` ✅검증됨. 활용신청 불필요 | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_snow_depth_observed` | 실측 적설 | `kma_snow1.php` ✅검증됨 | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_pm10_hourly_avg` | 미세먼지 시간평균 | `dst_pm10_hr.php` ✅검증됨 | 10분 |
 | 기상청 날씨 | `binary_sensor.kma_<지역>_warning` | 기상특보 안전 센서 | 기상특보현황 (`wrn_now_data`) | 10분 |
+| 각 Zone | `sensor.kma_recent_earthquake` | 최근 지진정보 | `typ09/eqk/urlNewNotiEqk.do` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
+| 각 Zone | `sensor.kma_typhoon_status` | 태풍 상태 | `typ_now.php` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 | 각 Zone | `image.kma_radar_image` | 레이더 합성영상 | `typ04/rdr_cmp_file.php` (data=img) ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 | 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외영상 | `typ03/nph-gk2a_img` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 | 각 Zone | `image.kma_precipitation_forecast_image` | 초단기 강수예측(60분 뒤) 영상 | `typ03/nph-qpf_ana_img` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 | 각 Zone | `image.kma_satellite_visible_image` | 위성(GK2A) 가시광선 영상 | `typ03/nph-gk2a_img?obs=vi006` ✅검증됨. 야간 미관측. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 | 각 Zone | `image.kma_satellite_shortwave_ir_image` | 위성(GK2A) 단파적외 영상 | `typ03/nph-gk2a_img?obs=sw038` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 | 각 Zone | `image.kma_satellite_water_vapor_image` | 위성(GK2A) 수증기 영상 | `typ03/nph-gk2a_img?obs=wv069` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
+| 각 Zone | `image.kma_dust_satellite_image` | 황사위성영상(IDI) | `YdstInfoService/getYdstSatlitImg` ✅검증됨. Zone마다 배치(허브에는 없음), 실제 호출은 1세트만 | 10분 |
 
 ---
 
@@ -163,6 +185,27 @@
     *   **광주는 예외 상황입니다**: 2026년에 전라남도와 통합되어 "전남광주통합특별시"(신코드 1200000000)로 개편되었지만, 이 생활기상지수 API는 아직 신코드를 인식하지 못해(2026-07-01 확인, 조회 시 검색결과 없음) 광주광역시 구코드(2900000000)를 그대로 쓰고 있습니다. API가 갱신되면 재확인이 필요합니다.
 *   ⚠️ "대상환경별 체감온도"(`getSenTaIdxV3`, 노인/어린이/농촌/비닐하우스/취약거주환경/도로/건설현장/조선소 8종 대상)는 검토했으나 제외했습니다 — 문서에 서비스 종료 예정 표시(~2026-05-10)가 있었고, 실제로 여러 시각·지역으로 호출해봐도 계속 "데이터 없음"만 응답해 서비스가 종료된 것으로 판단했습니다.
 
+### 6. 고해상도 지상관측(`apparent_temperature_observed`) / 영향예보(`heat_wave_risk`, `cold_wave_risk`) / 실측 적설(`snow_depth_observed`) / 미세먼지 시간평균(`pm10_hourly_avg`)
+사용자가 여러 차례에 걸쳐 공유한 API 문서를 실측 검증(2026-07-02)하며 추가한 4종입니다. 전부 Zone별 위경도 또는 지점코드를 그대로 재사용합니다.
+*   **고해상도 지상관측** (`sfc_nc_var.php`, typ01): Zone의 위경도를 직접 넘겨 조회하는 특정지점 다중요소 관측입니다. ASOS(`kma_sfctm2.php`, 지점코드 기반)보다 이 API를 우선 채택했는데, 지점코드 매핑표가 필요 없고 실측 체감온도(`ta_chi`)를 제공하기 때문입니다 — 서울 좌표로 `기온 25.5℃, 체감온도 27.0℃`처럼 실제 값을 확인했습니다. 너무 최근 시각을 요청하면 미게시(0.0) 값이 오므로 15~25분 전 구간을 조회합니다.
+*   **영향예보** (`ifs_fct_pstt.php`, typ01): 폭염(`ifpar=hw`)/한파(`ifpar=cw`) 위험수준(0~4, ENUM)을 관서(지방기상청) 코드로 조회합니다. Zone은 관서코드 매핑표(`LAND_ZONE_TO_OFFICE_STN`, 서울/인천/경기=109, 강원=105, 청주=131, 대전=133, 전주=146, 광주=156, 대구=143, 부산=159, 제주=184 — 실측으로 역추정한 9개 지방기상청 체계)로 변환되며, 관서 관할 내 여러 세부구역 중 최댓값을 대표값으로 씁니다. 비시즌(위험구역 없음)에는 정상적으로 "영향없음" 상태가 됩니다.
+*   **실측 적설** (`kma_snow1.php`, typ01): PM10과 같은 지점코드 체계(`LAND_ZONE_TO_PM10_STN`)를 재사용합니다.
+*   **미세먼지 시간평균** (`dst_pm10_hr.php`, typ01): 같은 PM10 지점코드를 재사용하되, 5분 원시값이 아니라 해당 시간의 평균/최소/최대 통계를 제공합니다. 이 엔드포인트는 `org` 파라미터로 중국기상청(CMA)/환경부(MOE) 데이터도 함께 제공함을 확인했으나(실측: 중국 10개 지점 수신 확인), Zone과 지리적으로 대응되는 관측망이 아니라서 이번 구현에서는 기상청(KMA) 데이터만 사용합니다.
+
+### 7. 기상정보(`hazard_info`) / 날씨해설(`weather_commentary`)
+관서(지방기상청)별 예보관이 직접 작성하는 텍스트 속보입니다(`wrn_inf_rpt.php`/`wthr_cmt_rpt.php`, typ01) — **활용신청이 필요 없어 바로 사용 가능**함을 실측 확인했습니다(2026-07-02). 두 API 모두 `"$0 헤더 + $1 본문"` 포맷을 공유해 같은 파서로 처리합니다.
+*   **기상정보**: 안개·소나기·뇌전 등 특정 현상에 대한 실시간 위험기상 안내문.
+*   **날씨해설**: 예보관이 쓴 일일 날씨 해설(수천 자 분량 — 기온/하늘상태/유의사항 등). `one_line_summary`(로컬 계산)를 보완하는 실제 예보관 문장입니다.
+*   상태값은 제목(255자 이내)만 담고, 전문은 `body` 속성으로 제공됩니다(HA 센서 state 길이 제한).
+
+### 8. 지진정보(`sensor.kma_recent_earthquake`) / 태풍정보(`sensor.kma_typhoon_status`)
+Zone과 무관한 전국 단위 데이터라 실제 페칭은 허브 코디네이터(`KmaHubCoordinator`) 하나뿐이며, 레이더/위성 이미지와 같은 이유로 각 Zone 디바이스에 복제 배치합니다.
+*   **지진정보** (`typ09/eqk/urlNewNotiEqk.do`): 국내외 지진 통보문(조기경보/속보/정보 구분)을 조회합니다. 실측(2026-07-02) 결과 실제 최근 지진(일본 혼슈 미야기현 앞바다 M6.0)을 정상 수신했습니다. 다른 typ01 API와 달리 이 typ09 응답은 EUC-KR이 아니라 UTF-8입니다(실측으로 확인 — EUC-KR로 디코딩하면 한글이 깨짐).
+*   **태풍정보** (`typ_now.php`): 현재 활성 태풍의 위치·중심기압·최대풍속·이동방향을 조회합니다(`mode=2`, 최근 분석+예측). 활성 태풍이 없으면 데이터 라인이 없어 정상적으로 "없음"(태풍번호 0) 상태가 됩니다 — 태풍철 여름~가을에 값이 채워집니다.
+
+### 9. 황사위성영상(`image.kma_dust_satellite_image`)
+`YdstInfoService/getYdstSatlitImg`(typ02/openApi)를 사용합니다. 이 API 자체는 이미지 바이너리가 아니라 그날 하루치(5분 간격) 썸네일 PNG URL 목록(JSON)을 반환하는데, 목록에는 아직 게시되지 않은 뒤쪽 시각의 URL도 미리 나열되어 있어(다운로드하면 HTML 오류 페이지가 옴, 실측 확인) 뒤에서부터 순회하며 실제 PNG가 나오는 첫 URL을 사용합니다. 공개 저장소 URL이라 이미지 다운로드 자체에는 authKey가 필요 없음을 확인했습니다. `nph-gk2a_img?obs=dst`가 가짜 플레이스홀더였던 것의 정식 대체 경로입니다.
+
 ---
 
 ## 🔑 필수 사전 작업 (기상청 API 신청)
@@ -183,20 +226,28 @@
     *   **레이더 합성자료 다운로드** (텍스트/이미지 API `typ04/rdr_cmp_file.php`) - *레이더 이미지 엔티티용, 신규, ✅검증됨*
     *   **천리안 2A호 위성 분포도 조회** (그래픽 API `typ03/nph-gk2a_img`) - *위성 적외/가시광선/단파적외/수증기 이미지 엔티티 4종 공통, 신규, ✅검증됨*
     *   **초단기 강수예측 그래픽 조회** (그래픽 API `typ03/nph-qpf_ana_img`) - *강수예측(QPF) 이미지 엔티티용, 신규, ✅검증됨*
+    *   **고해상도 지상관측** (텍스트 API `sfc_nc_var.php`, 특정지점 다중요소) - *실측 체감온도 센서용, 신규, ✅검증됨*
+    *   **영향예보(발표현황) 조회** (텍스트 API `ifs_fct_pstt.php`) - *폭염/한파 위험수준 센서용, 신규, ✅검증됨*
+    *   **적설관측자료 조회** (텍스트 API `kma_snow1.php`) - *실측 적설 센서용, 신규, ✅검증됨*
+    *   **황사(PM10) 시간통계자료 조회** (텍스트 API `dst_pm10_hr.php`) - *미세먼지 시간평균 센서용, 신규, ✅검증됨*
+    *   **지진정보(최근 발표 정보·속보) 조회** (텍스트 API `typ09/eqk/urlNewNotiEqk.do`) - *지진정보 센서용, 신규, ✅검증됨*
+    *   **태풍정보(기상청 발표) 조회** (텍스트 API `typ_now.php`) - *태풍정보 센서용, 신규, ✅검증됨*
+    *   **황사정보(위성영상) 조회서비스** (Open API `YdstInfoService` — `getYdstSatlitImg`) - *황사위성영상 엔티티용, 신규, ✅검증됨*
+    *   기상정보(`wrn_inf_rpt.php`)/날씨해설(`wthr_cmt_rpt.php`)은 별도 활용신청 없이 바로 동작함을 확인했습니다 — 신청 목록에 없어도 됩니다.
 3. 신청 완료 후 발급받은 **인증키(authKey)**를 준비합니다.
 
-> ⚠️ **참고**: PM10, 생활기상지수/보건기상지수(자외선지수·대기정체지수·꽃가루위험지수), 레이더 강수강도, 레이더·위성·강수예측 이미지 모두 실제 authKey로 정상 동작을 확인했습니다 — 활용신청만 완료하면 바로 사용 가능합니다.
+> ⚠️ **참고**: PM10, 생활기상지수/보건기상지수(자외선지수·대기정체지수·꽃가루위험지수), 레이더 강수강도, 레이더·위성·강수예측·황사위성 이미지, 고해상도 지상관측, 영향예보(폭염/한파), 실측 적설, 미세먼지 시간평균, 지진정보, 태풍정보 모두 실제 authKey로 정상 동작을 확인했습니다 — 활용신청만 완료하면 바로 사용 가능합니다.
 
 ### API 활용신청 상태를 확인하려면?
 
-각 API마다 활용신청을 깜빡했거나 아직 승인 대기 중인지 헷갈릴 수 있어, **기상청 APIhub** 허브 디바이스에 이 통합이 쓰는 API 전체(총 17개)에 대해 진단 센서를 하나씩 자동으로 만듭니다.
+각 API마다 활용신청을 깜빡했거나 아직 승인 대기 중인지 헷갈릴 수 있어, **기상청 APIhub** 허브 디바이스에 이 통합이 쓰는 API 전체(총 27개)에 대해 진단 센서를 하나씩 자동으로 만듭니다.
 
 *   **`binary_sensor.kma_activation_<api>`**: 활용신청 완료 + 정상 응답이면 `on`, 미신청(403)이거나 오류면 `off`. `status` 속성에 `ok`/`not_applied`/`error: ...` 상세 상태가 표시되어, 403(미신청)인지 다른 오류인지 바로 구분할 수 있습니다.
 *   **`sensor.kma_error_count_<api>`**: 해당 API의 누적 에러 횟수(진단 카테고리). `last_error_time`, `current_status` 속성도 함께 제공합니다.
 
-`<api>`에는 Zone별 예·특보/생활기상지수 API 11종(`village_forecast`, `land_forecast`, `marine_forecast`, `warning_now`, `pm10`, `uv_index`, `air_stagnation`, `oak_pollen`, `pine_pollen`, `weed_pollen`, `radar_precipitation`)과 Zone 무관 레이더·위성 이미지 API 6종(`radar`, `satellite`, `precipitation_forecast`, `satellite_visible`, `satellite_shortwave_ir`, `satellite_water_vapor`)이 모두 포함됩니다 — 이 통합이 호출하는 API는 예외 없이 전부 진단 센서가 있습니다.
+`<api>`에는 Zone별 예·특보/생활기상지수 API 18종(`village_forecast`, `land_forecast`, `marine_forecast`, `warning_now`, `pm10`, `uv_index`, `air_stagnation`, `oak_pollen`, `pine_pollen`, `weed_pollen`, `radar_precipitation`, `sfc_observation`, `heat_wave_risk`, `cold_wave_risk`, `hazard_info`, `weather_commentary`, `snow_depth`, `pm10_hourly`), Zone 무관 레이더·위성 이미지 API 7종(`radar`, `satellite`, `precipitation_forecast`, `satellite_visible`, `satellite_shortwave_ir`, `satellite_water_vapor`, `dust_satellite`), Zone 무관 허브 데이터 API 2종(`earthquake`, `typhoon`)이 모두 포함됩니다 — 이 통합이 호출하는 API는 예외 없이 전부 진단 센서가 있습니다.
 
-이 두 목록은 `const.py`의 `API_STATUS_ZONE_KEYS`/`API_STATUS_IMAGE_KEYS`에서 단일 소스로 관리됩니다. 새 센서가 새로운 API를 필요로 하게 되면, 해당 코디네이터의 데이터 조회 로직에서 상태 문자열("ok"/"not_applied"/"error: ...")을 채우고 이 두 목록 중 하나에 API key를 추가하기만 하면 활용신청 상태/에러 카운트 센서가 자동으로 생성됩니다(수동으로 센서 클래스를 새로 만들 필요 없음).
+이 세 목록은 `const.py`의 `API_STATUS_ZONE_KEYS`/`API_STATUS_IMAGE_KEYS`/`API_STATUS_HUB_KEYS`에서 단일 소스로 관리됩니다. 새 센서가 새로운 API를 필요로 하게 되면, 해당 코디네이터의 데이터 조회 로직에서 상태 문자열("ok"/"not_applied"/"error: ...")을 채우고 이 세 목록 중 하나에 API key를 추가하기만 하면 활용신청 상태/에러 카운트 센서가 자동으로 생성됩니다(수동으로 센서 클래스를 새로 만들 필요 없음).
 
 ---
 
@@ -261,13 +312,13 @@ mode: single
 
 ## 🛠️ 추가 필요 항목 (향후 로드맵)
 
-다음 항목들은 기상청 APIhub의 미신청 엔드포인트에 대한 추가 활용 신청 및 승인이 완료된 후 확장하여 구현할 수 있는 후보 과제입니다:
+지상관측 실황(ASOS 대체 — 고해상도 지상관측), 지진정보, 태풍 정보는 2026-07-02에 모두 구현·검증 완료되어 이 로드맵에서 졸업했습니다(위 "주요 기능", "주요 센서 상세 정보" 참고). 다음은 검토했지만 아직 구현하지 않은 후보입니다:
 
-1. **지상관측 실황 연동 (ASOS/AWS)**: `kma_sfctm2.php` 등의 API를 활용해 관측소 기준 실측 기온/습도/풍속/기압 데이터 수집 및 연동 확장.
-2. **지진/화산 이벤트 알림**: 최근 지진 발생 정보 API를 활용하여 신속한 지진 경보 및 통보 전문 알림 확장.
-3. **태풍 정보 연동**: 태풍 발생 및 이동 경로 예측 정보 연동 확장.
+1. **해양관측(부이+연안) 연동**: `kma_buoy2.php`/`sea_obs.php`로 파고·수온·기압 실측치를 해상 Zone에 제공. 활용신청 필요, 검증되지 않음.
+2. **해구별 예측 정보**: `marine_small_zone.php`/`marine_large_zone.php`로 유의파고·최대파주기·파향 등 +75시간 예측. 대/소해구 번호를 해상 Zone에 매핑하는 참조 자료가 추가로 필요해 우선순위가 낮습니다.
+3. **영향예보 폭염/한파 위험수준 분포도 이미지**: `ifs_ilvl_dmap.php` — 현재는 수치(ENUM)만 제공하는데, 전국 분포도 PNG도 실측으로 확인했으니 이미지 엔티티로 추가할 수 있습니다.
 
-> ✅ 미세먼지(PM10), 자외선지수·대기정체지수·꽃가루농도위험지수(참나무/소나무/잡초류), 레이더 강수강도, 레이더·위성 이미지 모두 실제 authKey로 동작을 검증했습니다. "대상환경별 체감온도"는 서비스 종료로 판단해 구현하지 않았습니다 (위 "주요 기능", "주요 센서 상세 정보", "필수 사전 작업" 참고).
+> ✅ 미세먼지(PM10, 5분 원시값+시간평균), 자외선지수·대기정체지수·꽃가루농도위험지수(참나무/소나무/잡초류), 레이더 강수강도, 레이더·위성(적외/가시광선/단파적외/수증기)·황사위성·강수예측 이미지, 고해상도 지상관측(실측 체감온도), 영향예보(폭염/한파), 기상정보·날씨해설, 실측 적설, 지진정보, 태풍정보 모두 실제 authKey로 동작을 검증했습니다. "대상환경별 체감온도"는 서비스 종료로 판단해 구현하지 않았습니다 (위 "주요 기능", "주요 센서 상세 정보", "필수 사전 작업" 참고).
 
 ---
 

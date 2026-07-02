@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from .const import (
     AIR_STAGNATION_GRADE_MAP,
+    IMPACT_RISK_GRADE_MAP,
     PM10_GRADE_THRESHOLDS,
     PM10_GRADE_VERY_UNHEALTHY,
     POLLEN_RISK_GRADE_MAP,
@@ -171,6 +172,13 @@ def get_pollen_risk_grade(value: float | None) -> str | None:
     if value is None:
         return None
     return POLLEN_RISK_GRADE_MAP.get(int(value))
+
+
+def get_impact_risk_grade(level: int | None) -> str | None:
+    """영향예보(폭염/한파) 위험수준(0~4)을 등급으로 분류. 그 외 값은 None."""
+    if level is None:
+        return None
+    return IMPACT_RISK_GRADE_MAP.get(int(level))
 
 
 def get_discomfort_grade(di: float | None) -> str | None:

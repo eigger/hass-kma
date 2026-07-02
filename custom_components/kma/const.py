@@ -14,14 +14,19 @@ DOMAIN = "kma"
 API_STATUS_ZONE_KEYS = [
     "village_forecast", "land_forecast", "marine_forecast", "warning_now", "pm10",
     "uv_index", "air_stagnation", "oak_pollen", "pine_pollen", "weed_pollen",
-    "radar_precipitation",
+    "radar_precipitation", "sfc_observation", "heat_wave_risk", "cold_wave_risk",
+    "hazard_info", "weather_commentary", "snow_depth", "pm10_hourly",
 ]
 
 # 허브 단위(Zone 무관, 전국 단일 세트) 레이더/위성 이미지 API — KmaImageCoordinator가 관리.
 API_STATUS_IMAGE_KEYS = [
     "radar", "satellite", "precipitation_forecast",
     "satellite_visible", "satellite_shortwave_ir", "satellite_water_vapor",
+    "dust_satellite",
 ]
+
+# 허브 단위(Zone 무관, 전국 단일 세트) 비-이미지 데이터 API — KmaHubCoordinator가 관리.
+API_STATUS_HUB_KEYS = ["earthquake", "typhoon"]
 
 # 대표 육상 예보구역 위경도 좌표 테이블
 # 포맷: { "대표예보구역코드": (위도, 경도) }
@@ -130,6 +135,36 @@ POLLEN_RISK_GRADE_MAP: dict[int, str] = {
     3: "very_high",
 }
 
+
+# 지방기상청 관서코드(STN) — 영향예보(ifs_fct_pstt.php)/기상정보(wrn_inf_rpt.php)/
+# 날씨해설(wthr_cmt_rpt.php)에서 쓰는 지역 단위. REPRESENTATIVE_LAND_ZONES와 1:1 대응.
+# 실측 검증 2026-07-02: ifs_fct_pstt.php(폭염) 전체 조회 결과에서 실제로 등장한 STN
+# 값(105/109/131/133/143/146/159)과 wrn_inf_rpt.php 사례(STN=109→경기북부, STN=156→
+# 광주전남)를 근거로 9개 지방기상청(서울/강원/청주/대전/전주/광주/대구/부산/제주)
+# 체계로 매핑함. 일반 ASOS 지점번호(108 등)와는 다른 별도 코드 체계이므로 주의.
+LAND_ZONE_TO_OFFICE_STN: dict[str, int] = {
+    "11B10101": 109,  # 서울 (서울지방기상청)
+    "11B20201": 109,  # 인천 (서울지방기상청 관할)
+    "11B20601": 109,  # 수원 (서울지방기상청 관할)
+    "11D10301": 105,  # 춘천 (강원지방기상청)
+    "11D20501": 105,  # 강릉 (강원지방기상청)
+    "11C10301": 131,  # 청주 (청주기상지청)
+    "11C20401": 133,  # 대전 (대전지방기상청)
+    "11F10201": 146,  # 전주 (전주지방기상청)
+    "11F20501": 156,  # 광주 (광주지방기상청)
+    "11H10701": 143,  # 대구 (대구지방기상청)
+    "11H20201": 159,  # 부산 (부산지방기상청)
+    "11G00201": 184,  # 제주 (제주지방기상청)
+}
+
+# 영향예보(ifs_fct_pstt.php) 위험수준(ILVL) 등급 기준 — 0~4가 그대로 등급.
+IMPACT_RISK_GRADE_MAP: dict[int, str] = {
+    0: "none",
+    1: "concern",
+    2: "caution",
+    3: "warning",
+    4: "danger",
+}
 
 # 광역 매핑 기반 특보 필터링용 키워드 사전
 PROVINCE_WARNING_KEYWORDS = {
