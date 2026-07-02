@@ -9,8 +9,11 @@ from custom_components.kma.helpers import (
     get_freeze_risk_grade,
     get_impact_risk_grade,
     get_laundry_grade,
+    get_office_name,
     get_pm10_grade,
+    get_pm10_station_name,
     get_pollen_risk_grade,
+    get_radar_precipitation_grade,
     get_uv_index_grade,
     haversine_distance,
     latlon_to_grid,
@@ -183,6 +186,91 @@ class TestGetPm10Grade:
 
     def test_zero(self):
         assert get_pm10_grade(0) == "good"
+
+
+# ---------------------------------------------------------------------------
+# get_pm10_station_name
+# ---------------------------------------------------------------------------
+class TestGetPm10StationName:
+    def test_none_returns_none(self):
+        assert get_pm10_station_name(None) is None
+
+    def test_known_int_station(self):
+        assert get_pm10_station_name(108) == "서울"
+
+    def test_known_string_station(self):
+        assert get_pm10_station_name("201") == "강화"
+
+    def test_shared_station_cheonan(self):
+        # 청주/대전이 공유하는 지점
+        assert get_pm10_station_name(232) == "천안"
+
+    def test_unknown_station_returns_none(self):
+        assert get_pm10_station_name(999999) is None
+
+    def test_non_numeric_string_returns_none(self):
+        assert get_pm10_station_name("not-a-number") is None
+
+
+# ---------------------------------------------------------------------------
+# get_office_name
+# ---------------------------------------------------------------------------
+class TestGetOfficeName:
+    def test_none_returns_none(self):
+        assert get_office_name(None) is None
+
+    def test_known_int_office(self):
+        assert get_office_name(109) == "서울지방기상청"
+
+    def test_known_string_office(self):
+        assert get_office_name("156") == "광주지방기상청"
+
+    def test_office_stn_differs_from_pm10_stn_scheme(self):
+        # 관서코드(109=서울)와 PM10 지점코드(108=서울)는 서로 다른 체계
+        assert get_office_name(109) == "서울지방기상청"
+        assert get_pm10_station_name(109) is None
+
+    def test_unknown_office_returns_none(self):
+        assert get_office_name(999999) is None
+
+    def test_non_numeric_string_returns_none(self):
+        assert get_office_name("not-a-number") is None
+
+
+# ---------------------------------------------------------------------------
+# get_radar_precipitation_grade
+# ---------------------------------------------------------------------------
+class TestGetRadarPrecipitationGrade:
+    def test_none_returns_none(self):
+        assert get_radar_precipitation_grade(None) is None
+
+    def test_no_echo_sentinel_is_no_rain(self):
+        # -250 근방은 무에코/관측범위밖 센티널 — 강수없음으로 취급
+        assert get_radar_precipitation_grade(-250.0) == "no_rain"
+
+    def test_zero_boundary_is_no_rain(self):
+        assert get_radar_precipitation_grade(0) == "no_rain"
+
+    def test_very_light_lower_boundary(self):
+        assert get_radar_precipitation_grade(0.1) == "very_light"
+
+    def test_very_light_upper_boundary(self):
+        assert get_radar_precipitation_grade(20) == "very_light"
+
+    def test_light_boundary(self):
+        assert get_radar_precipitation_grade(30) == "light"
+
+    def test_moderate_boundary(self):
+        assert get_radar_precipitation_grade(40) == "moderate"
+
+    def test_heavy_boundary(self):
+        assert get_radar_precipitation_grade(50) == "heavy"
+
+    def test_very_heavy_above_threshold(self):
+        assert get_radar_precipitation_grade(50.1) == "very_heavy"
+
+    def test_very_heavy_far_above(self):
+        assert get_radar_precipitation_grade(70) == "very_heavy"
 
 
 # ---------------------------------------------------------------------------

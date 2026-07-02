@@ -89,7 +89,7 @@
         "name": "Precipitation (1h)"
       },
       "snowfall": {
-        "name": "Snowfall (1h, forecast)"
+        "name": "Expected Snowfall (1h)"
       },
       "today_temp_low": {
         "name": "Today Low Temperature"
@@ -196,8 +196,8 @@
       "one_line_summary": {
         "name": "One-line Weather Summary"
       },
-      "precipitation_start": {
-        "name": "Precipitation Start Time"
+      "precipitation_expected_time": {
+        "name": "Expected Precipitation Time"
       },
       "current_data_source": {
         "name": "Current Data Source",
@@ -282,6 +282,17 @@
       },
       "radar_precipitation": {
         "name": "Radar Precipitation Intensity"
+      },
+      "radar_precipitation_grade": {
+        "name": "Radar Precipitation Grade",
+        "state": {
+          "no_rain": "No Rain",
+          "very_light": "Drizzle",
+          "light": "Light Rain",
+          "moderate": "Moderate Rain",
+          "heavy": "Heavy Rain",
+          "very_heavy": "Downpour"
+        }
       },
       "apparent_temperature_observed": {
         "name": "Observed Apparent Temperature"
@@ -419,8 +430,8 @@
       "recent_earthquake": {
         "name": "Recent Earthquake"
       },
-      "typhoon_status": {
-        "name": "Typhoon Status"
+      "typhoon_number": {
+        "name": "Typhoon Number"
       },
       "error_count_village_forecast": {
         "name": "Village Forecast API Error Count"

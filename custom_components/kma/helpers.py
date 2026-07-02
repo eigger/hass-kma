@@ -6,9 +6,13 @@ import math
 from .const import (
     AIR_STAGNATION_GRADE_MAP,
     IMPACT_RISK_GRADE_MAP,
+    OFFICE_STN_NAMES,
     PM10_GRADE_THRESHOLDS,
     PM10_GRADE_VERY_UNHEALTHY,
+    PM10_STN_NAMES,
     POLLEN_RISK_GRADE_MAP,
+    RADAR_PRECIPITATION_GRADE_THRESHOLDS,
+    RADAR_PRECIPITATION_GRADE_VERY_HEAVY,
     REPRESENTATIVE_LAND_ZONES,
     REPRESENTATIVE_MARINE_ZONES,
     UV_INDEX_GRADE_THRESHOLDS,
@@ -60,6 +64,32 @@ def parse_sno(val: str | float | None) -> float | None:
             return float(clean) * 0.5
         return float(clean)
     except ValueError:
+        return None
+
+
+def get_pm10_station_name(stn: str | int | None) -> str | None:
+    """PM10/적설관측/미세먼지 시간통계 공용 관측지점(stn) 번호를 지점명으로 변환.
+
+    매핑에 없는 지점번호이거나 입력이 None이면 None 반환.
+    """
+    if stn is None:
+        return None
+    try:
+        return PM10_STN_NAMES.get(int(stn))
+    except (TypeError, ValueError):
+        return None
+
+
+def get_office_name(stn: str | int | None) -> str | None:
+    """영향예보/기상정보/날씨해설 공용 관서(stn) 코드를 관서명으로 변환.
+
+    매핑에 없는 관서코드이거나 입력이 None이면 None 반환.
+    """
+    if stn is None:
+        return None
+    try:
+        return OFFICE_STN_NAMES.get(int(stn))
+    except (TypeError, ValueError):
         return None
 
 
@@ -158,6 +188,21 @@ def get_uv_index_grade(value: float | None) -> str | None:
         if value <= upper:
             return grade
     return UV_INDEX_GRADE_EXTREME
+
+
+def get_radar_precipitation_grade(value: float | None) -> str | None:
+    """레이더 반사도(dBZ)를 강수강도 등급으로 분류.
+
+    강수없음(no_rain) 0 이하(무에코/관측범위밖 센티널 포함), 안개비수준(very_light) ~20,
+    약한비(light) ~30, 보통비(moderate) ~40, 강한비(heavy) ~50, 장대비(very_heavy) 50 초과.
+    입력이 None이면 None 반환.
+    """
+    if value is None:
+        return None
+    for upper, grade in RADAR_PRECIPITATION_GRADE_THRESHOLDS:
+        if value <= upper:
+            return grade
+    return RADAR_PRECIPITATION_GRADE_VERY_HEAVY
 
 
 def get_air_stagnation_grade(value: float | None) -> str | None:

@@ -81,7 +81,8 @@
 | 기상청 날씨 | `sensor.kma_<지역>_oak_pollen_risk` / `_grade` | 꽃가루위험지수(참나무) / 등급 | `HealthWthrIdxServiceV2/getOakPollenRiskIdxV2` (서비스기간 3~6월) | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_pine_pollen_risk` / `_grade` | 꽃가루위험지수(소나무) / 등급 | `HealthWthrIdxServiceV2/getPinePollenRiskIdxV2` (서비스기간 3~6월) | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_weed_pollen_risk` / `_grade` | 꽃가루위험지수(잡초류) / 등급 | `HealthWthrIdxServiceV2/getWeedsPollenRiskndxV2` (서비스기간 8~10월) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation` | 레이더 강수강도 | `WthrRadarInfoService/getCompCappiQcdArea` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation` | 레이더 강수강도(dBZ) | `WthrRadarInfoService/getCompCappiQcdArea` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation_grade` | 레이더 강수강도 등급 | dBZ 값 기반 강수강도 등급 분류 (ENUM) | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_apparent_temperature_observed` | 실측 체감온도 | `sfc_nc_var.php` (고해상도 지상관측) | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_heat_wave_risk` / `_cold_wave_risk` | 폭염 / 한파 영향예보 위험수준 | `ifs_fct_pstt.php` (ENUM) | 10분 |
 | 기상청 날씨 | `sensor.kma_<지역>_snow_depth_observed` | 실측 적설 | `kma_snow1.php` | 10분 |
@@ -89,7 +90,7 @@
 | 기상청 날씨 | `sensor.kma_<지역>_weather_commentary` (+ `_section_1`~`_8`) | 날씨해설 | `wthr_cmt_rpt.php` | 10분 |
 | 기상청 날씨 | `binary_sensor.kma_<지역>_warning` | 기상특보 안전 센서 | 기상특보현황 (`wrn_now_data`) | 10분 |
 | 각 Zone | `sensor.kma_recent_earthquake` | 최근 지진정보 | `typ09/eqk/urlNewNotiEqk.do` | 10분 |
-| 각 Zone | `sensor.kma_typhoon_status` | 태풍 상태 | `typ_now.php` | 10분 |
+| 각 Zone | `sensor.kma_typhoon_number` | 태풍 번호 | `typ_now.php` | 10분 |
 | 각 Zone | `image.kma_radar_image` | 레이더 합성영상 | `typ04/rdr_cmp_file.php` | 10분 |
 | 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외영상 | `typ03/nph-gk2a_img` | 10분 |
 | 각 Zone | `image.kma_precipitation_forecast_image` | 초단기 강수예측(60분 뒤) 영상 | `typ03/nph-qpf_ana_img` | 10분 |
@@ -123,9 +124,10 @@
 * `pm10`: 농도 수치 (㎍/㎥)
 * `pm10_grade`: 환경부 기준 등급 (좋음 0~30 / 보통 31~80 / 나쁨 81~150 / 매우나쁨 151~)
 * `pm10_hourly_avg`: 5분 원시값과 별개로 시간 단위 평균/최소/최대 통계 제공
+* `pm10`/`pm10_hourly_avg` 모두 실제로 어느 관측소 값인지 알 수 있도록 `station_id`(지점번호)와 `station_name`(지점명, 예: "서울"/"강화"/"천안") 속성을 함께 제공합니다.
 
 ### 레이더 강수강도 / 레이더·위성·강수예측 이미지
-* **레이더 강수강도**: Zone 행정구역코드로 조회하는 반사도(dBZ) 수치 센서입니다. 최신 데이터가 약 20분 지연 후 게시되므로 기본 조회 시각을 25분 전으로 설정합니다.
+* **레이더 강수강도**: Zone 행정구역코드로 조회하는 반사도(dBZ) 수치 센서입니다. 최신 데이터가 약 20분 지연 후 게시되므로 기본 조회 시각을 25분 전으로 설정합니다. dBZ 값은 강수량(mm)이 아니라 반사 에너지의 로그 스케일 지표라 그대로는 직관적이지 않으므로, 강수없음/안개비/약한비/보통비/강한비/장대비 6단계로 분류한 `radar_precipitation_grade`(ENUM) 센서를 함께 제공합니다. 무에코·관측범위밖 센티널 값(-250 근방)은 "강수없음"으로 처리됩니다.
 * **이미지 엔티티**: 레이더 합성영상, 위성 적외/가시광선/단파적외/수증기 4채널, 60분 뒤 강수예측(QPF, MAPLE 블렌딩 모델), 황사위성(IDI) PNG를 Picture Entity 카드로 바로 표시할 수 있습니다. 약 10분 주기로 갱신됩니다.
 * 레이더/강수예측 이미지는 게시 지연(~15~20분)이 있어 아직 게시되지 않은 시각을 요청하면 오류 응답이 올 수 있으므로 PNG 매직바이트로 실제 이미지 여부를 확인합니다.
 * 위성 가시광선(`vi006`) 채널은 야간에는 관측되지 않아 검은 화면이 됩니다.
@@ -140,9 +142,9 @@
 * 가능한 지역은 시/군 단위로 조회해 정밀도를 높였으며, 광주는 행정구역 개편 이전 코드를 사용합니다(API가 신코드를 지원하지 않는 동안 유지)
 
 ### 고해상도 지상관측 / 영향예보 / 실측 적설 / 미세먼지 시간평균
-* **실측 체감온도**(`apparent_temperature_observed`): 위경도 기반 특정지점 다중요소 관측(`sfc_nc_var.php`)에서 받은 실측 체감온도로, 계산값인 `apparent_temperature`를 보완합니다.
+* **실측 체감온도**(`apparent_temperature_observed`): 위경도 기반 특정지점 다중요소 관측(`sfc_nc_var.php`)에서 받은 실측 체감온도로, 계산값인 `apparent_temperature`를 보완합니다. 관측소가 아니라 Zone의 위경도를 직접 조회하는 방식이라, 조회에 쓰인 좌표를 `lat`/`lon` 속성으로 그대로 제공합니다.
 * **영향예보**(`heat_wave_risk`/`cold_wave_risk`): 기상청이 직접 발표하는 폭염/한파 위험수준(ENUM)입니다. Zone은 관할 지방기상청 코드로 매핑되며, 비시즌에는 정상적으로 "영향없음" 상태가 됩니다.
-* **실측 적설**(`snow_depth_observed`): 관측소 실측 적설로, 예보값인 `snowfall`을 보완합니다.
+* **실측 적설**(`snow_depth_observed`): 관측소 실측 적설로, 예보값인 `snowfall`을 보완합니다. PM10과 같은 관측지점 체계를 공유하여 `station_id`/`station_name` 속성을 제공합니다.
 * **미세먼지 시간평균**(`pm10_hourly_avg`): 5분 원시값과 별개로 해당 시간의 평균/최소/최대 통계를 제공합니다.
 
 ### 기상정보 / 날씨해설
@@ -151,12 +153,13 @@
 * **기상정보**(`hazard_info`): 안개·소나기·뇌전 등 위험기상 실시간 안내문.
 * **날씨해설**(`weather_commentary`): 예보관이 작성한 일일 날씨 해설(기온/하늘상태/유의사항 등).
 * 대표 센서의 상태값은 제목만 담고, 전문은 `sections` 속성에 소제목 기준 딕셔너리로 제공됩니다. 이와 별도로 `_section_1`~`_8`(날씨해설)/`_section_1`~`_3`(기상정보) 고정 슬롯 센서를 제공하여, 발표할 때마다 달라지는 소제목이 있어도 엔티티 개수가 고정되도록 설계했습니다.
+* 관측소 지점이 아니라 **관할 지방기상청(관서) 단위**로 발표되는 정보라, 소속 관서를 `office_code`/`office_name`(예: "서울지방기상청") 속성으로 함께 제공합니다. 섹션 슬롯 센서에도 동일하게 포함됩니다. 폭염/한파 영향예보(`heat_wave_risk`/`cold_wave_risk`)도 같은 관서 체계를 공유합니다.
 
 ### 지진정보 / 태풍정보
 Zone과 무관한 전국 단위 데이터입니다.
 
 * **지진정보**(`sensor.kma_recent_earthquake`): 국내외 최신 지진 통보문(규모, 위치, 발생시각).
-* **태풍정보**(`sensor.kma_typhoon_status`): 현재 활성 태풍의 위치·중심기압·최대풍속·이동방향(활성 태풍이 없으면 "없음" 상태).
+* **태풍정보**(`sensor.kma_typhoon_number`): 현재 활성 태풍의 위치·중심기압·최대풍속·이동방향(활성 태풍이 없으면 "없음" 상태).
 
 ### 황사위성영상
 GK2A 위성 기반 황사지수(IDI) 이미지를 제공합니다(`image.kma_dust_satellite_image`).
