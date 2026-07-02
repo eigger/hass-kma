@@ -63,6 +63,7 @@ async def async_setup_entry(
     store = hass.data[DOMAIN][entry.entry_id]
     coordinator: KmaImageCoordinator = store["image_coordinator"]
 
+    _LOGGER.info("=== KMA Image Platform Setup ===")
     for subentry_id in store.get("coordinators", {}):
         subentry = entry.subentries[subentry_id]
         zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
@@ -73,17 +74,30 @@ async def async_setup_entry(
             model="KMA APIhub Forecast",
             via_device=(DOMAIN, entry.entry_id),
         )
-        async_add_entities(
-            [
+        
+        entities = []
+        for entity_cls in _IMAGE_ENTITY_CLASSES:
+            u_id = f"{subentry_id}_{entity_cls._attr_translation_key}"
+            _LOGGER.info(
+                "Adding image entity: class=%s, unique_id=%s, subentry_id=%s",
+                entity_cls.__name__,
+                u_id,
+                subentry_id,
+            )
+            entities.append(
                 entity_cls(
-                    hass, coordinator,
-                    unique_id=f"{subentry_id}_{entity_cls._attr_translation_key}",
+                    hass,
+                    coordinator,
+                    unique_id=u_id,
                     device_info=zone_device,
                 )
-                for entity_cls in _IMAGE_ENTITY_CLASSES
-            ],
+            )
+            
+        async_add_entities(
+            entities,
             config_subentry_id=subentry_id,
         )
+    _LOGGER.info("=================================")
 
 
 class _KmaBaseImage(CoordinatorEntity[KmaImageCoordinator], ImageEntity):
