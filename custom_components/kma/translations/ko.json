@@ -173,7 +173,7 @@
           "low": "낮음",
           "normal": "보통",
           "high": "높음",
-          "very_high": "매우 높음"
+          "very_high": "매우높음"
         }
       },
       "food_poisoning_index": {
@@ -467,13 +467,13 @@
         "name": "레이더 강수강도 API 오류 수"
       },
       "error_count_radar": {
-        "name": "레이더 합성영상 API 오류 수"
+        "name": "레이더 합성 영상 API 오류 수"
       },
       "error_count_satellite": {
         "name": "위성 적외 API 오류 수"
       },
       "error_count_precipitation_forecast": {
-        "name": "강수예측 영상 API 오류 수"
+        "name": "레이더 초단기 예측 강수 영상 API 오류 수"
       },
       "error_count_satellite_visible": {
         "name": "위성 가시광선 API 오류 수"
@@ -506,7 +506,7 @@
         "name": "미세먼지 시간통계 API 오류 수"
       },
       "error_count_dust_satellite": {
-        "name": "황사위성영상 API 오류 수"
+        "name": "위성 황사 영상 API 오류 수"
       },
       "error_count_earthquake": {
         "name": "지진정보 API 오류 수"
@@ -556,13 +556,13 @@
         "name": "레이더 강수강도 API"
       },
       "activation_radar": {
-        "name": "레이더 합성영상 API"
+        "name": "레이더 합성 영상 API"
       },
       "activation_satellite": {
         "name": "위성 적외 API"
       },
       "activation_precipitation_forecast": {
-        "name": "강수예측 영상 API"
+        "name": "레이더 초단기 예측 강수 영상 API"
       },
       "activation_satellite_visible": {
         "name": "위성 가시광선 API"
@@ -595,7 +595,7 @@
         "name": "미세먼지 시간통계 API"
       },
       "activation_dust_satellite": {
-        "name": "황사위성영상 API"
+        "name": "위성 황사 영상 API"
       },
       "activation_earthquake": {
         "name": "지진정보 API"
@@ -611,13 +611,13 @@
     },
     "image": {
       "radar_image": {
-        "name": "레이더 합성영상"
+        "name": "레이더 합성 영상"
       },
       "satellite_image": {
-        "name": "위성 영상"
+        "name": "위성 적외 영상"
       },
       "precipitation_forecast_image": {
-        "name": "초단기 강수예측 영상"
+        "name": "레이더 초단기 예측 강수 영상"
       },
       "satellite_visible_image": {
         "name": "위성 가시광선 영상"
@@ -629,7 +629,7 @@
         "name": "위성 수증기 영상"
       },
       "dust_satellite_image": {
-        "name": "황사위성영상"
+        "name": "위성 황사 영상"
       }
     }
   }
