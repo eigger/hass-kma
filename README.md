@@ -32,7 +32,7 @@
   * 자외선지수, 대기정체지수는 3시간 간격, 꽃가루위험지수(참나무/소나무/잡초류)는 일 2회 갱신되며 계절 서비스 기간 외에는 정상적으로 "데이터 없음" 상태가 됩니다.
 * **레이더 강수강도 및 레이더/위성/강수예측 이미지**
   * Zone 행정구역 기준 레이더 반사도(dBZ) 수치 센서.
-  * 레이더 합성영상, 위성(적외/가시광선/단파적외/수증기) 영상, 60분 뒤 강수예측(QPF) 영상, 황사위성영상을 Picture Entity로 바로 표시할 수 있는 PNG 이미지 엔티티로 제공합니다.
+  * 레이더 합성 영상, 위성(적외/가시광선/단파적외/수증기) 영상, 60분 뒤 강수예측(QPF) 영상, 위성 황사 영상을 Picture Entity로 바로 표시할 수 있는 PNG 이미지 엔티티로 제공합니다.
 * **고해상도 지상관측 / 영향예보 / 실측 적설**
   * 위경도 기반 실측 체감온도(`apparent_temperature_observed`).
   * 기상청 공식 폭염/한파 영향예보 위험수준(`heat_wave_risk`/`cold_wave_risk`, ENUM).
@@ -96,13 +96,13 @@
 | 기상청 날씨 | `binary_sensor.kma_<지역>_warning` | 기상특보 안전 센서 | 기상특보현황 (`wrn_now_data`) | `on`/`off` | 10분 |
 | 각 Zone | `sensor.kma_recent_earthquake` | 최근 지진정보 | `typ09/eqk/urlNewNotiEqk.do` | `4.3`(규모, 위치·시각은 속성) | 10분 |
 | 각 Zone | `sensor.kma_typhoon_number` | 태풍 번호 | `typ_now.php` | `0`(활성 없음) / `5`(5호 태풍) | 10분 |
-| 각 Zone | `image.kma_radar_image` | 레이더 합성영상 | `typ04/rdr_cmp_file.php` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외영상 | `typ03/nph-gk2a_img` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 Zone | `image.kma_precipitation_forecast_image` | 초단기 강수예측(60분 뒤) 영상 | `typ03/nph-qpf_ana_img` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_radar_image` | 레이더 합성 영상 | `typ04/rdr_cmp_file.php` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외 영상 | `typ03/nph-gk2a_img` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_precipitation_forecast_image` | 레이더 초단기 예측 강수 영상(60분 뒤) | `typ03/nph-qpf_ana_img` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
 | 각 Zone | `image.kma_satellite_visible_image` | 위성(GK2A) 가시광선 영상 | `typ03/nph-gk2a_img?obs=vi006` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
 | 각 Zone | `image.kma_satellite_shortwave_ir_image` | 위성(GK2A) 단파적외 영상 | `typ03/nph-gk2a_img?obs=sw038` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
 | 각 Zone | `image.kma_satellite_water_vapor_image` | 위성(GK2A) 수증기 영상 | `typ03/nph-gk2a_img?obs=wv069` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 Zone | `image.kma_dust_satellite_image` | 황사위성영상(IDI) | `YdstInfoService/getYdstSatlitImg` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_dust_satellite_image` | 위성 황사 영상(IDI) | `YdstInfoService/getYdstSatlitImg` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
 
 > 지진정보·태풍정보·레이더/위성/강수예측/황사위성 이미지는 Zone과 무관한 전국 단위 자료라 실제 API 호출은 1세트만 발생하지만, 각 Zone 디바이스에서 동일하게 조회할 수 있도록 Zone별로 엔티티를 배치합니다(허브 디바이스에는 진단 센서만 있습니다).
 >
@@ -135,17 +135,17 @@
 
 ### 레이더 강수강도 / 레이더·위성·강수예측 이미지
 * **레이더 강수강도**: Zone 행정구역코드로 조회하는 반사도(dBZ) 수치 센서입니다. 최신 데이터가 약 20분 지연 후 게시되므로 기본 조회 시각을 25분 전으로 설정합니다. dBZ 값은 강수량(mm)이 아니라 반사 에너지의 로그 스케일 지표라 그대로는 직관적이지 않으므로, 강수없음/안개비/약한비/보통비/강한비/장대비 6단계로 분류한 `radar_precipitation_grade`(ENUM) 센서를 함께 제공합니다. 무에코·관측범위밖 센티널 값(-250 근방)은 "강수없음"으로 처리됩니다.
-* **이미지 엔티티**: 레이더 합성영상, 위성 적외/가시광선/단파적외/수증기 4채널, 60분 뒤 강수예측(QPF, MAPLE 블렌딩 모델), 황사위성(IDI) PNG를 Picture Entity 카드로 바로 표시할 수 있습니다. 약 10분 주기로 갱신됩니다.
+* **이미지 엔티티**: 레이더 합성 영상, 위성 적외/가시광선/단파적외/수증기 4채널, 60분 뒤 레이더 초단기 예측 강수(QPF, MAPLE 블렌딩 모델), 위성 황사(IDI) PNG를 Picture Entity 카드로 바로 표시할 수 있습니다. 약 10분 주기로 갱신됩니다.
 * 레이더/강수예측 이미지는 게시 지연(~15~20분)이 있어 아직 게시되지 않은 시각을 요청하면 오류 응답이 올 수 있으므로 PNG 매직바이트로 실제 이미지 여부를 확인합니다.
 * 위성 가시광선(`vi006`) 채널은 야간에는 관측되지 않아 검은 화면이 됩니다.
 
 **샘플 이미지** (실제 authKey로 받은 원본, 범례·시각 포함 — 이미지 엔티티 7종 전체):
 
-| `image.kma_radar_image` (레이더 합성영상) | `image.kma_satellite_image` (위성 적외) |
+| `image.kma_radar_image` (레이더 합성 영상) | `image.kma_satellite_image` (위성 적외) |
 | --- | --- |
-| ![레이더 합성영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/radar_composite_sample.png) | ![위성 적외 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_ir105_sample.png) |
+| ![레이더 합성 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/radar_composite_sample.png) | ![위성 적외 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_ir105_sample.png) |
 
-| `image.kma_precipitation_forecast_image` (초단기 강수예측 QPF) | `image.kma_satellite_visible_image` (위성 가시광선) |
+| `image.kma_precipitation_forecast_image` (레이더 초단기 예측 강수 QPF) | `image.kma_satellite_visible_image` (위성 가시광선) |
 | --- | --- |
 | ![강수예측 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/precipitation_forecast_qpf_sample.png) | ![위성 가시광선 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_visible_sample.png) |
 
@@ -182,10 +182,10 @@ Zone과 무관한 전국 단위 데이터입니다.
 * **지진정보**(`sensor.kma_recent_earthquake`): 국내외 최신 지진 통보문(규모, 위치, 발생시각).
 * **태풍정보**(`sensor.kma_typhoon_number`): 현재 활성 태풍의 위치·중심기압·최대풍속·이동방향(활성 태풍이 없으면 "없음" 상태).
 
-### 황사위성영상
+### 위성 황사 영상
 GK2A 위성 기반 황사지수(IDI) 이미지를 제공합니다(`image.kma_dust_satellite_image`).
 
-![황사위성영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/dust_satellite_sample.png)
+![위성 황사 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/dust_satellite_sample.png)
 
 ---
 
