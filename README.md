@@ -53,53 +53,60 @@
 
 ## 📋 센서 목록
 
-| 기기 | 센서 ID | 센서 이름 | 사용 API | 갱신 주기 |
-| --- | --- | --- | --- | --- |
-| 기상청 날씨 | `weather.kma_<지역>` | 날씨 (Weather) | 동네예보 (`getVilageFcst`) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_temperature` | 기온 | 동네예보 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_humidity` | 습도 | 동네예보 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_wind_speed` | 풍속 | 동네예보 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_pop` | 강수확률 | 동네예보 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_pcp` | 1시간 강수량 | 동네예보 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_temp_min` | 오늘 최저기온 | 동네예보 극값 스캔 | 매시간 |
-| 기상청 날씨 | `sensor.kma_<지역>_temp_max` | 오늘 최고기온 | 동네예보 극값 스캔 | 매시간 |
-| 기상청 날씨 | `sensor.kma_<지역>_precipitation_forecast` | 비/눈 예보 탐색 | 동네예보 24시간 스캔 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_apparent_temperature` | 체감온도 | Steadman 공식 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_dew_point` | 이슬점 | Magnus-Tetens 공식 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_discomfort_index` / `_grade` | 불쾌지수 / 등급 | 기온·습도 기반 연산 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_laundry_index` / `_grade` | 빨래 건조 지수 / 등급 | 기온·습도·풍속·강수예보 종합 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_car_wash_index` / `_grade` | 세차 지수 / 등급 | 72시간 내 강수 예보 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_freeze_risk_index` / `_grade` | 동파 가능 지수 / 등급 | 48시간 내 최저 예보기온 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_food_poisoning_index` / `_grade` | 식중독 지수 / 등급 | 기온·습도 기반 예측 연산 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_one_line_summary` | 한 줄 기상 요약 | 현재 날씨·극값·강수·특보 종합 | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_land_forecast_summary` | 육상 예보 요약 | 단기육상예보조회 (`fct_afs_dl`) | 매일 5시, 17시 |
-| 기상청 날씨 | `sensor.kma_<지역>_marine_forecast_summary` | 해상 예보 요약 | 단기해상예보조회 (`fct_afs_do`) | 매일 5시, 17시 |
-| 기상청 날씨 | `sensor.kma_<지역>_pm10` / `_grade` | 미세먼지(PM10) / 등급 | PM10 관측자료 (`kma_pm10.php`) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_pm10_hourly_avg` | 미세먼지 시간평균 | `dst_pm10_hr.php` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_uv_index` / `_grade` | 자외선지수 / 등급 | `LivingWthrIdxServiceV3/getUVIdxV3` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_air_stagnation_index` / `_grade` | 대기정체지수 / 등급 | `LivingWthrIdxServiceV3/getAirDiffusionIdxV3` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_oak_pollen_risk` / `_grade` | 꽃가루위험지수(참나무) / 등급 | `HealthWthrIdxServiceV2/getOakPollenRiskIdxV2` (서비스기간 3~6월) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_pine_pollen_risk` / `_grade` | 꽃가루위험지수(소나무) / 등급 | `HealthWthrIdxServiceV2/getPinePollenRiskIdxV2` (서비스기간 3~6월) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_weed_pollen_risk` / `_grade` | 꽃가루위험지수(잡초류) / 등급 | `HealthWthrIdxServiceV2/getWeedsPollenRiskndxV2` (서비스기간 8~10월) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation` | 레이더 강수강도(dBZ) | `WthrRadarInfoService/getCompCappiQcdArea` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation_grade` | 레이더 강수강도 등급 | dBZ 값 기반 강수강도 등급 분류 (ENUM) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_apparent_temperature_observed` | 실측 체감온도 | `sfc_nc_var.php` (고해상도 지상관측) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_heat_wave_risk` / `_cold_wave_risk` | 폭염 / 한파 영향예보 위험수준 | `ifs_fct_pstt.php` (ENUM) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_snow_depth_observed` | 실측 적설 | `kma_snow1.php` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_hazard_info` (+ `_section_1`~`_3`) | 기상정보 | `wrn_inf_rpt.php` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_weather_commentary` (+ `_section_1`~`_8`) | 날씨해설 | `wthr_cmt_rpt.php` | 10분 |
-| 기상청 날씨 | `binary_sensor.kma_<지역>_warning` | 기상특보 안전 센서 | 기상특보현황 (`wrn_now_data`) | 10분 |
-| 각 Zone | `sensor.kma_recent_earthquake` | 최근 지진정보 | `typ09/eqk/urlNewNotiEqk.do` | 10분 |
-| 각 Zone | `sensor.kma_typhoon_number` | 태풍 번호 | `typ_now.php` | 10분 |
-| 각 Zone | `image.kma_radar_image` | 레이더 합성영상 | `typ04/rdr_cmp_file.php` | 10분 |
-| 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외영상 | `typ03/nph-gk2a_img` | 10분 |
-| 각 Zone | `image.kma_precipitation_forecast_image` | 초단기 강수예측(60분 뒤) 영상 | `typ03/nph-qpf_ana_img` | 10분 |
-| 각 Zone | `image.kma_satellite_visible_image` | 위성(GK2A) 가시광선 영상 | `typ03/nph-gk2a_img?obs=vi006` | 10분 |
-| 각 Zone | `image.kma_satellite_shortwave_ir_image` | 위성(GK2A) 단파적외 영상 | `typ03/nph-gk2a_img?obs=sw038` | 10분 |
-| 각 Zone | `image.kma_satellite_water_vapor_image` | 위성(GK2A) 수증기 영상 | `typ03/nph-gk2a_img?obs=wv069` | 10분 |
-| 각 Zone | `image.kma_dust_satellite_image` | 황사위성영상(IDI) | `YdstInfoService/getYdstSatlitImg` | 10분 |
+상태값이 어떻게 표현되는지 감이 오도록 **예시 값**을 함께 표시했습니다. 등급(`_grade`) 계열은 `device_class: enum`이라 홈어시스턴트 시스템 언어에 맞춰 상태값 자체가 자동 번역됩니다(예시는 한국어 기준).
+
+| 기기 | 센서 ID | 센서 이름 | 사용 API | 예시 값 | 갱신 주기 |
+| --- | --- | --- | --- | --- | --- |
+| 기상청 날씨 | `weather.kma_<지역>` | 날씨 (Weather) | 동네예보 (`getVilageFcst`) | `sunny`(맑음) 등 HA 표준 condition | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_temperature` | 기온 | 동네예보 | `22.5` ℃ | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_humidity` | 습도 | 동네예보 | `65` % | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_wind_speed` | 풍속 | 동네예보 | `3.2` m/s | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_pop` | 강수확률 | 동네예보 | `30` % | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_pcp` | 1시간 강수량 | 동네예보 | `0.0` / `5.0` mm | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_snowfall` | 1시간 예상 신적설 | 동네예보(SNO, 예보 전용) | `0.0` / `2.0` cm | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_temp_min` | 오늘 최저기온 | 동네예보 극값 스캔 | `11.0` ℃ | 매시간 |
+| 기상청 날씨 | `sensor.kma_<지역>_temp_max` | 오늘 최고기온 | 동네예보 극값 스캔 | `26.0` ℃ | 매시간 |
+| 기상청 날씨 | `sensor.kma_<지역>_rain_snow_expected` | 비/눈 예보 탐색 | 동네예보 24시간 스캔 | `none`/`rain`/`rain_snow`/`snow`/`shower` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_precipitation_expected_time` | 강수 예상 시각 | 동네예보+초단기예보 병합 | `2026-07-03T16:00:00+09:00` (타임스탬프) | 10분 |
+| 기상청 날씨 | `binary_sensor.kma_<지역>_precipitation_expected` | 곧 강수 예보 | 강수 예상 시각 6시간 이내 여부 | `on`/`off` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_apparent_temperature` | 체감온도 | Steadman 공식 | `21.8` ℃ | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_dew_point` | 이슬점 | Magnus-Tetens 공식 | `15.2` ℃ | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_discomfort_index` / `_grade` | 불쾌지수 / 등급 | 기온·습도 기반 연산 | `72.3` / `보통` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_laundry_index` / `_grade` | 빨래 건조 지수 / 등급 | 기온·습도·풍속·강수예보 종합 | `85` / `좋음` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_car_wash_index` / `_grade` | 세차 지수 / 등급 | 72시간 내 강수 예보 | `90` / `매우 좋음` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_freeze_risk_index` / `_grade` | 동파 가능 지수 / 등급 | 48시간 내 최저 예보기온 | `10` / `낮음` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_food_poisoning_index` / `_grade` | 식중독 지수 / 등급 | 기온·습도 기반 예측 연산 | `42` / `관심` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_one_line_summary` | 한 줄 기상 요약 | 현재 날씨·극값·강수·특보 종합 | `맑음, 19.5°C (11.0°C/26.0°C)` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_land_forecast_summary` | 육상 예보 요약 | 단기육상예보조회 (`fct_afs_dl`) | `가끔 구름많음` | 매일 5시, 17시 |
+| 기상청 날씨 | `sensor.kma_<지역>_marine_forecast_summary` | 해상 예보 요약 | 단기해상예보조회 (`fct_afs_do`) | `물결 0.5~1.0m` | 매일 5시, 17시 |
+| 기상청 날씨 | `sensor.kma_<지역>_pm10` / `_grade` | 미세먼지(PM10) / 등급 | PM10 관측자료 (`kma_pm10.php`) | `28` ㎍/㎥ / `좋음` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_pm10_hourly_avg` | 미세먼지 시간평균 | `dst_pm10_hr.php` | `31.5` ㎍/㎥ (최소/최대는 속성) | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_uv_index` / `_grade` | 자외선지수 / 등급 | `LivingWthrIdxServiceV3/getUVIdxV3` | `6` / `높음` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_air_stagnation_index` / `_grade` | 대기정체지수 / 등급 | `LivingWthrIdxServiceV3/getAirDiffusionIdxV3` | `50` / `보통` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_oak_pollen_risk` / `_grade` | 꽃가루위험지수(참나무) / 등급 | `HealthWthrIdxServiceV2/getOakPollenRiskIdxV2` (서비스기간 3~6월) | `1` / `보통` (기간 외 `데이터 없음`) | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_pine_pollen_risk` / `_grade` | 꽃가루위험지수(소나무) / 등급 | `HealthWthrIdxServiceV2/getPinePollenRiskIdxV2` (서비스기간 3~6월) | `1` / `보통` (기간 외 `데이터 없음`) | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_weed_pollen_risk` / `_grade` | 꽃가루위험지수(잡초류) / 등급 | `HealthWthrIdxServiceV2/getWeedsPollenRiskndxV2` (서비스기간 8~10월) | `1` / `보통` (기간 외 `데이터 없음`) | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation` | 레이더 강수강도(dBZ) | `WthrRadarInfoService/getCompCappiQcdArea` | `32.5` dBZ | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation_grade` | 레이더 강수강도 등급 | dBZ 값 기반 강수강도 등급 분류 (ENUM) | `약한비` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_apparent_temperature_observed` | 실측 체감온도 | `sfc_nc_var.php` (고해상도 지상관측) | `27.0` ℃ | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_heat_wave_risk` / `_cold_wave_risk` | 폭염 / 한파 영향예보 위험수준 | `ifs_fct_pstt.php` (ENUM) | `영향없음` / `주의` | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_snow_depth_observed` | 실측 적설 | `kma_snow1.php` | `0.0` cm | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_hazard_info` (+ `_section_1`~`_3`) | 기상정보 | `wrn_inf_rpt.php` | `안개 위험기상 정보`(제목, 전문은 속성) | 10분 |
+| 기상청 날씨 | `sensor.kma_<지역>_weather_commentary` (+ `_section_1`~`_8`) | 날씨해설 | `wthr_cmt_rpt.php` | `오늘의 날씨 해설`(제목, 전문은 속성) | 10분 |
+| 기상청 날씨 | `binary_sensor.kma_<지역>_warning` | 기상특보 안전 센서 | 기상특보현황 (`wrn_now_data`) | `on`/`off` | 10분 |
+| 각 Zone | `sensor.kma_recent_earthquake` | 최근 지진정보 | `typ09/eqk/urlNewNotiEqk.do` | `4.3`(규모, 위치·시각은 속성) | 10분 |
+| 각 Zone | `sensor.kma_typhoon_number` | 태풍 번호 | `typ_now.php` | `0`(활성 없음) / `5`(5호 태풍) | 10분 |
+| 각 Zone | `image.kma_radar_image` | 레이더 합성영상 | `typ04/rdr_cmp_file.php` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외영상 | `typ03/nph-gk2a_img` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_precipitation_forecast_image` | 초단기 강수예측(60분 뒤) 영상 | `typ03/nph-qpf_ana_img` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_satellite_visible_image` | 위성(GK2A) 가시광선 영상 | `typ03/nph-gk2a_img?obs=vi006` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_satellite_shortwave_ir_image` | 위성(GK2A) 단파적외 영상 | `typ03/nph-gk2a_img?obs=sw038` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_satellite_water_vapor_image` | 위성(GK2A) 수증기 영상 | `typ03/nph-gk2a_img?obs=wv069` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
+| 각 Zone | `image.kma_dust_satellite_image` | 황사위성영상(IDI) | `YdstInfoService/getYdstSatlitImg` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
 
 > 지진정보·태풍정보·레이더/위성/강수예측/황사위성 이미지는 Zone과 무관한 전국 단위 자료라 실제 API 호출은 1세트만 발생하지만, 각 Zone 디바이스에서 동일하게 조회할 수 있도록 Zone별로 엔티티를 배치합니다(허브 디바이스에는 진단 센서만 있습니다).
+>
+> **이미지 엔티티의 "상태(state)"는 PNG 자체가 아니라 마지막 갱신 시각(타임스탬프)입니다.** 실제 이미지는 대시보드에 Picture Entity 카드로 추가해야 보입니다 — 자동화에서 이미지 갱신 여부를 감지하려면 이 타임스탬프 상태 변화를 트리거로 쓰면 됩니다.
 
 ---
 
@@ -132,6 +139,20 @@
 * 레이더/강수예측 이미지는 게시 지연(~15~20분)이 있어 아직 게시되지 않은 시각을 요청하면 오류 응답이 올 수 있으므로 PNG 매직바이트로 실제 이미지 여부를 확인합니다.
 * 위성 가시광선(`vi006`) 채널은 야간에는 관측되지 않아 검은 화면이 됩니다.
 
+**샘플 이미지** (실제 authKey로 받은 원본, 범례·시각 포함 — 이미지 엔티티 7종 전체):
+
+| `image.kma_radar_image` (레이더 합성영상) | `image.kma_satellite_image` (위성 적외) |
+| --- | --- |
+| ![레이더 합성영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/radar_composite_sample.png) | ![위성 적외 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_ir105_sample.png) |
+
+| `image.kma_precipitation_forecast_image` (초단기 강수예측 QPF) | `image.kma_satellite_visible_image` (위성 가시광선) |
+| --- | --- |
+| ![강수예측 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/precipitation_forecast_qpf_sample.png) | ![위성 가시광선 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_visible_sample.png) |
+
+| `image.kma_satellite_shortwave_ir_image` (위성 단파적외) | `image.kma_satellite_water_vapor_image` (위성 수증기) |
+| --- | --- |
+| ![위성 단파적외 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_shortwave_ir_sample.png) | ![위성 수증기 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_water_vapor_sample.png) |
+
 ### 자외선지수 / 대기정체지수 / 꽃가루농도위험지수
 기상청 생활기상지수(`LivingWthrIdxServiceV3`)·보건기상지수(`HealthWthrIdxServiceV2`) API를 사용하며, 기존 authKey 그대로 동작합니다.
 
@@ -163,6 +184,8 @@ Zone과 무관한 전국 단위 데이터입니다.
 
 ### 황사위성영상
 GK2A 위성 기반 황사지수(IDI) 이미지를 제공합니다(`image.kma_dust_satellite_image`).
+
+![황사위성영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/dust_satellite_sample.png)
 
 ---
 
