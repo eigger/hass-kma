@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+
 from .const import (
     AIR_STAGNATION_GRADE_MAP,
     IMPACT_RISK_GRADE_MAP,
@@ -15,8 +16,8 @@ from .const import (
     RADAR_PRECIPITATION_GRADE_VERY_HEAVY,
     REPRESENTATIVE_LAND_ZONES,
     REPRESENTATIVE_MARINE_ZONES,
-    UV_INDEX_GRADE_THRESHOLDS,
     UV_INDEX_GRADE_EXTREME,
+    UV_INDEX_GRADE_THRESHOLDS,
 )
 
 

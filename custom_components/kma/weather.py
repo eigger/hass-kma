@@ -6,9 +6,6 @@ import logging
 from typing import Any
 
 from homeassistant.components.weather import (
-    Forecast,
-    WeatherEntity,
-    WeatherEntityFeature,
     ATTR_CONDITION_CLEAR_NIGHT,
     ATTR_CONDITION_CLOUDY,
     ATTR_CONDITION_PARTLYCLOUDY,
@@ -17,18 +14,21 @@ from homeassistant.components.weather import (
     ATTR_CONDITION_SNOWY,
     ATTR_CONDITION_SNOWY_RAINY,
     ATTR_CONDITION_SUNNY,
+    Forecast,
+    WeatherEntity,
+    WeatherEntityFeature,
 )
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
-from homeassistant.const import UnitOfTemperature, UnitOfSpeed
+from homeassistant.const import UnitOfSpeed, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
+from .api import LandForecast, VillageForecast
 from .const import DOMAIN
 from .coordinator import KmaForecastCoordinator
-from .api import VillageForecast, LandForecast
 from .helpers import parse_pcp
 
 _LOGGER = logging.getLogger(__name__)
@@ -112,7 +112,10 @@ def aggregate_daily_forecasts(
             continue
 
         try:
-            dt = datetime.datetime.strptime(date_str, "%Y%m%d")
+            # naive datetime을 그대로 유지해야 as_local()이 HA 설정 시간대의
+            # 자정으로 올바르게 해석한다. astimezone()으로 미리 tz를 붙이면
+            # 시스템 시간대가 껴서 다른 시각으로 잘못 변환된다.
+            dt = datetime.datetime.strptime(date_str, "%Y%m%d")  # noqa: DTZ007
             dt_localized = dt_util.as_utc(dt_util.as_local(dt))
             datetime_str = dt_localized.isoformat()
         except ValueError:
@@ -167,15 +170,19 @@ def aggregate_daily_forecasts(
     for lf in land_forecasts:
         try:
             date_str = lf.tm_ef[:8]
-            if date_str in existing_dates:
-                continue
-            land_by_date.setdefault(date_str, []).append(lf)
-        except Exception:
+        except (TypeError, AttributeError):
+            _LOGGER.debug("육상예보 tm_ef 파싱 스킵: %r", lf)
             continue
+        if date_str in existing_dates:
+            continue
+        land_by_date.setdefault(date_str, []).append(lf)
 
     for date_str, lfs in sorted(land_by_date.items()):
         try:
-            dt = datetime.datetime.strptime(date_str, "%Y%m%d")
+            # naive datetime을 그대로 유지해야 as_local()이 HA 설정 시간대의
+            # 자정으로 올바르게 해석한다. astimezone()으로 미리 tz를 붙이면
+            # 시스템 시간대가 껴서 다른 시각으로 잘못 변환된다.
+            dt = datetime.datetime.strptime(date_str, "%Y%m%d")  # noqa: DTZ007
             dt_localized = dt_util.as_utc(dt_util.as_local(dt))
             datetime_str = dt_localized.isoformat()
         except ValueError:
@@ -275,7 +282,7 @@ class KmaWeather(CoordinatorEntity[KmaForecastCoordinator], WeatherEntity):
             return sun_state.state == "below_horizon"
         
         # sun 엔티티가 없는 경우 현재 시간 기준으로 판단 (오후 6시 ~ 오전 6시)
-        now_hour = datetime.datetime.now().hour
+        now_hour = datetime.datetime.now().astimezone().hour
         return now_hour < 6 or now_hour >= 18
 
     def _is_night_at_hour(self, hour: int) -> bool:
