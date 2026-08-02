@@ -8,7 +8,6 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.config_entries import (
     ConfigEntry,
@@ -19,9 +18,9 @@ from homeassistant.config_entries import (
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .api import KmaApiClient, KmaApiError, KmaAuthError
 from .const import DOMAIN
-from .api import KmaApiClient, KmaAuthError, KmaApiError
-from .helpers import latlon_to_grid, get_nearest_land_zone, get_nearest_marine_zone
+from .helpers import get_nearest_land_zone, get_nearest_marine_zone, latlon_to_grid
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -77,7 +76,7 @@ class KmaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "invalid_auth"
             except KmaApiError:
                 errors["base"] = "cannot_connect"
-            except Exception:  # noqa: BLE001
+            except Exception:
                 _LOGGER.exception("API 키 검증 중 오류 발생")
                 errors["base"] = "unknown"
 

@@ -48,8 +48,9 @@ import datetime
 import json
 import logging
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Iterator
+from typing import Any
 
 import aiohttp
 
@@ -659,11 +660,15 @@ def parse_header_columns(text: str) -> list[str]:
         if line.startswith("#") and not line.startswith("#START") and not line.startswith("#7777"):
             parts = line[1:].strip().split()
             # 도움말 정의 라인(콜론 포함) 및 필드가 아주 적은 라인은 제외
-            if parts and len(parts) > 5 and ":" not in "".join(parts):
-                if any(k in parts for k in ("REG_ID", "STN", "STN_ID", "REG_UP")):
-                    # 특수 문자(대시 등) 제거하여 컬럼명 정제
-                    cleaned_parts = [p.split("-")[0].strip() for p in parts]
-                    return cleaned_parts
+            if (
+                parts
+                and len(parts) > 5
+                and ":" not in "".join(parts)
+                and any(k in parts for k in ("REG_ID", "STN", "STN_ID", "REG_UP"))
+            ):
+                # 특수 문자(대시 등) 제거하여 컬럼명 정제
+                cleaned_parts = [p.split("-")[0].strip() for p in parts]
+                return cleaned_parts
     return []
 
 
@@ -896,8 +901,7 @@ class KmaApiClient:
         19컬럼이며 마지막 WF는 큰따옴표로 감싸여 내부 공백 포함.
         """
         if not tmfc1:
-            import datetime
-            now = datetime.datetime.now()
+            now = datetime.datetime.now().astimezone()
             # 기상청 데이터 안정성을 위해 오늘 00:00 ~ 내일 23:00를 기본 범위로 설정
             tmfc1 = now.strftime("%Y%m%d0000")
             if not tmfc2:
@@ -937,8 +941,7 @@ class KmaApiClient:
 
         기본적으로 JSON 응답을 호출 및 디코딩하여 VillageForecast 리스트로 반환.
         """
-        import datetime
-        now = datetime.datetime.now()
+        now = datetime.datetime.now().astimezone()
         # base_date/base_time 미지정 시 가장 최근 기상청 단기예보 발표 시각 추정
         if not base_date or not base_time:
             base_date = base_date or now.strftime("%Y%m%d")

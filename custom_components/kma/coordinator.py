@@ -2,16 +2,21 @@
 from __future__ import annotations
 
 import datetime
-from datetime import timedelta
 import logging
-from typing import Any
-
 from dataclasses import dataclass
+from datetime import timedelta
+from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .api import (
+    KmaActivationRequiredError,
+    KmaApiClient,
+    KmaApiError,
+    VillageForecast,
+)
 from .const import (
     API_STATUS_HUB_KEYS,
     API_STATUS_IMAGE_KEYS,
@@ -21,12 +26,6 @@ from .const import (
     LAND_ZONE_TO_OFFICE_STN,
     LAND_ZONE_TO_PM10_STN,
     PROVINCE_WARNING_KEYWORDS,
-)
-from .api import (
-    KmaApiClient,
-    KmaApiError,
-    KmaActivationRequiredError,
-    VillageForecast,
 )
 from .helpers import parse_pcp, parse_sno
 
@@ -53,7 +52,7 @@ class CurrentWeather:
 class ForecastPoint:
     """시간별 예보 1포인트 (초단기예보 6시간 + 단기예보 병합)."""
 
-    dt: "datetime.datetime"  # 예보 시각 (KST naive)
+    dt: datetime.datetime  # 예보 시각 (KST naive)
     tmp: float | None
     sky: str | None
     pty: str | None
@@ -171,7 +170,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         # 1. 동네예보 (getVilageFcst)
         # 발표 시각은 0200,0500,0800,1100,1400,1700,2000,2300. 최근 발표분이 아직
         # 게시 전(NODATA)일 수 있으므로 이전 발표시각으로 backoff 재시도한다.
-        now = datetime.datetime.now()
+        now = datetime.datetime.now()  # noqa: DTZ005
         village_forecasts: list = []
         village_status = "error"
         last_error = None
@@ -425,11 +424,11 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         village: list[VillageForecast] = (self.data or {}).get("village", [])
         if not village:
             return None
-        now = datetime.datetime.now()
+        now = datetime.datetime.now()  # noqa: DTZ005
         best, best_diff = None, None
         for vf in village:
             try:
-                vdt = datetime.datetime.strptime(f"{vf.fcst_date}{vf.fcst_time}", "%Y%m%d%H%M")
+                vdt = datetime.datetime.strptime(f"{vf.fcst_date}{vf.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
             except ValueError:
                 continue
             diff = abs((vdt - now).total_seconds())
@@ -484,7 +483,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         for u in ultra:
             key = f"{u.fcst_date}{u.fcst_time}"
             try:
-                dt = datetime.datetime.strptime(key, "%Y%m%d%H%M")
+                dt = datetime.datetime.strptime(key, "%Y%m%d%H%M")  # noqa: DTZ007
             except ValueError:
                 continue
             seen.add(key)
@@ -504,7 +503,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
             if key <= last_ultra_key:
                 continue
             try:
-                dt = datetime.datetime.strptime(key, "%Y%m%d%H%M")
+                dt = datetime.datetime.strptime(key, "%Y%m%d%H%M")  # noqa: DTZ007
             except ValueError:
                 continue
             points.append(
@@ -520,7 +519,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
 
     def next_precipitation(self) -> ForecastPoint | None:
         """앞으로 강수가 시작되는 가장 가까운 예보 포인트. 없으면 None."""
-        now = datetime.datetime.now()
+        now = datetime.datetime.now()  # noqa: DTZ005
         for p in self.forecast_points():
             if p.dt < now - datetime.timedelta(hours=1):
                 continue
@@ -542,7 +541,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
             base_date, base_time = self._get_latest_forecast_time(cursor)
             candidates.append((base_date, base_time))
             # 직전 발표시각으로 커서 이동(해당 발표시각 16분 전)
-            dt = datetime.datetime.strptime(base_date + base_time, "%Y%m%d%H%M")
+            dt = datetime.datetime.strptime(base_date + base_time, "%Y%m%d%H%M")  # noqa: DTZ007
             cursor = dt - datetime.timedelta(minutes=16)
         return candidates
 

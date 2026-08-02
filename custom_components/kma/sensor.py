@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -16,37 +16,47 @@ from homeassistant.const import (
     CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     PERCENTAGE,
     EntityCategory,
-    UnitOfTemperature,
-    UnitOfSpeed,
     UnitOfLength,
+    UnitOfSpeed,
+    UnitOfTemperature,
 )
 from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
-from .const import API_STATUS_HUB_KEYS, API_STATUS_IMAGE_KEYS, API_STATUS_ZONE_KEYS, DOMAIN
-from .coordinator import CurrentWeather, KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
 from .api import VillageForecast, bulletin_section, split_bulletin_sections
-from .weather import get_ha_condition
+from .const import (
+    API_STATUS_HUB_KEYS,
+    API_STATUS_IMAGE_KEYS,
+    API_STATUS_ZONE_KEYS,
+    DOMAIN,
+)
+from .coordinator import (
+    CurrentWeather,
+    KmaForecastCoordinator,
+    KmaHubCoordinator,
+    KmaImageCoordinator,
+)
 from .helpers import (
-    parse_pcp,
+    get_air_stagnation_grade,
+    get_car_wash_grade,
+    get_discomfort_grade,
+    get_food_poisoning_grade,
+    get_freeze_risk_grade,
+    get_impact_risk_grade,
+    get_laundry_grade,
+    get_office_name,
     get_pm10_grade,
     get_pm10_station_name,
-    get_office_name,
-    get_discomfort_grade,
-    get_laundry_grade,
-    get_car_wash_grade,
-    get_freeze_risk_grade,
-    get_food_poisoning_grade,
-    get_uv_index_grade,
-    get_air_stagnation_grade,
     get_pollen_risk_grade,
-    get_impact_risk_grade,
     get_radar_precipitation_grade,
+    get_uv_index_grade,
+    parse_pcp,
 )
+from .weather import get_ha_condition
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -587,13 +597,13 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         if not village:
             return None
 
-        now = datetime.datetime.now()
+        now = datetime.datetime.now()  # noqa: DTZ005
         closest = None
         min_diff = None
 
         for f in village:
             try:
-                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
                 diff = abs((f_dt - now).total_seconds())
                 if min_diff is None or diff < min_diff:
                     min_diff = diff
@@ -631,14 +641,13 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             rain_expected = False
             for f in village:
                 try:
-                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
                     if f_dt < now - datetime.timedelta(hours=1):
                         continue
                     diff_hours = (f_dt - now).total_seconds() / 3600.0
-                    if 0.0 <= diff_hours <= 12.0:
-                        if f.pty and f.pty != "0":
-                            rain_expected = True
-                            break
+                    if 0.0 <= diff_hours <= 12.0 and f.pty and f.pty != "0":
+                        rain_expected = True
+                        break
                 except ValueError:
                     continue
 
@@ -651,7 +660,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             s_fact = 30.0 if sky == 1 else 20.0 if sky == 3 else 10.0
             t_fact = max(0.0, temp * 0.5)
             score = min(100.0, h_fact + w_fact + s_fact + t_fact)
-            return int(round(score))
+            return round(score)
         except (ValueError, TypeError):
             return None
 
@@ -662,14 +671,13 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         rain_hours = None
         for f in village:
             try:
-                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
                 if f_dt < now - datetime.timedelta(hours=1):
                     continue
                 diff_hours = (f_dt - now).total_seconds() / 3600.0
-                if 0.0 <= diff_hours <= 72.0:
-                    if f.pty and f.pty != "0":
-                        rain_hours = diff_hours
-                        break
+                if 0.0 <= diff_hours <= 72.0 and f.pty and f.pty != "0":
+                    rain_hours = diff_hours
+                    break
             except ValueError:
                 continue
 
@@ -688,7 +696,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         min_temp = None
         for f in village:
             try:
-                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
                 if f_dt < now - datetime.timedelta(hours=1):
                     continue
                 diff_hours = (f_dt - now).total_seconds() / 3600.0
@@ -718,7 +726,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             rh = float(curr.reh)
             fpi = 0.000189 * temp * rh + 0.215 * temp + 0.161 * rh - 2.85
             score = max(0.0, min(100.0, fpi))
-            return int(round(score))
+            return round(score)
         except (ValueError, TypeError):
             return None
 
@@ -727,7 +735,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         """센서의 상태값."""
         data = self.coordinator.data
         key = self.entity_description.key
-        now = datetime.datetime.now()
+        now = datetime.datetime.now()  # noqa: DTZ005
 
         if key == "land_forecast_summary":
             land = data.get("land", [])
@@ -817,7 +825,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
 
         # 오늘 최고/최저 기온 및 비/눈 탐색용 데이터
         village = data.get("village", [])
-        now = datetime.datetime.now()
+        now = datetime.datetime.now()  # noqa: DTZ005
         today_str = now.strftime("%Y%m%d")
 
         if key in ("today_temp_low", "today_temp_high"):
@@ -831,7 +839,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             rain_type = "none"
             for f in village:
                 try:
-                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
                     if f_dt < now - datetime.timedelta(hours=1):
                         continue
                     if (f_dt - now).total_seconds() > 24 * 3600:
@@ -965,15 +973,14 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                     rain_pty = None
                     for f in village:
                         try:
-                            f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                            f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
                             if f_dt < now - datetime.timedelta(hours=1):
                                 continue
                             diff_hours = (f_dt - now).total_seconds() / 3600.0
-                            if 0.0 <= diff_hours <= 24.0:
-                                if f.pty and f.pty != "0":
-                                    rain_time = f_dt
-                                    rain_pty = f.pty
-                                    break
+                            if 0.0 <= diff_hours <= 24.0 and f.pty and f.pty != "0":
+                                rain_time = f_dt
+                                rain_pty = f.pty
+                                break
                         except ValueError:
                             continue
 
@@ -1004,8 +1011,8 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
                     else:
                         summary = f"{cond_str} | Cur: {cur_temp}°C | Min: {t_low}°C, Max: {t_high}°C{rain_str}"
                     return summary
-                except Exception as err:
-                    _LOGGER.error("한 줄 기상 요약 생성 오류: %s", err)
+                except Exception:
+                    _LOGGER.exception("한 줄 기상 요약 생성 오류")
                     return None
             return None
 
@@ -1164,9 +1171,8 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             nxt = self.coordinator.next_precipitation()
             if nxt is None:
                 return {"expected": False}
-            hours = round(
-                (nxt.dt - datetime.datetime.now()).total_seconds() / 3600.0, 1
-            )
+            now = datetime.datetime.now()  # noqa: DTZ005
+            hours = round((nxt.dt - now).total_seconds() / 3600.0, 1)
             pty_names = {
                 "1": "비", "2": "비/눈", "3": "눈", "4": "소나기",
                 "5": "빗방울", "6": "빗방울/눈날림", "7": "눈날림",
@@ -1184,7 +1190,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         # 비/눈 예보 상세 속성
         if key == "rain_snow_expected":
             village = data.get("village", [])
-            now = datetime.datetime.now()
+            now = datetime.datetime.now()  # noqa: DTZ005
             rain_start_dt = None
             pty_code = "0"
             pop = None
@@ -1196,7 +1202,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
 
             for f in village:
                 try:
-                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")
+                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
                     if f_dt < now - datetime.timedelta(hours=1):
                         continue
                     diff_hours = (f_dt - now).total_seconds() / 3600.0
@@ -1320,7 +1326,7 @@ class KmaCurrentDataSourceSensor(CoordinatorEntity[KmaForecastCoordinator], Sens
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_device_class = SensorDeviceClass.ENUM
-    _attr_options = ["ncst", "village", "none"]
+    _attr_options: ClassVar[list[str]] = ["ncst", "village", "none"]
     _attr_translation_key = "current_data_source"
     _attr_icon = "mdi:database-search"
 

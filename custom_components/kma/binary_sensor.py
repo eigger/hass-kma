@@ -5,8 +5,6 @@ import datetime
 import logging
 from typing import Any
 
-from homeassistant.util import dt as dt_util
-
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
     BinarySensorEntity,
@@ -17,8 +15,14 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
-from .const import API_STATUS_HUB_KEYS, API_STATUS_IMAGE_KEYS, API_STATUS_ZONE_KEYS, DOMAIN
+from .const import (
+    API_STATUS_HUB_KEYS,
+    API_STATUS_IMAGE_KEYS,
+    API_STATUS_ZONE_KEYS,
+    DOMAIN,
+)
 from .coordinator import KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -243,7 +247,8 @@ class KmaPrecipitationBinarySensor(
         nxt = self.coordinator.next_precipitation()
         if nxt is None:
             return None
-        hours = (nxt.dt - datetime.datetime.now()).total_seconds() / 3600.0
+        now = datetime.datetime.now()  # noqa: DTZ005
+        hours = (nxt.dt - now).total_seconds() / 3600.0
         return nxt, hours
 
     @property
