@@ -24,6 +24,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
@@ -566,7 +567,7 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
+class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, SensorEntity):
     """기상청 센서 엔티티."""
 
     _attr_has_entity_name = True
@@ -590,6 +591,69 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
             model="KMA APIhub Forecast",
             via_device=(DOMAIN, coordinator.config_entry.entry_id),
         )
+
+        # 오늘 최고/최저기온 누적값. 동네예보(village)는 이미 지난 시각의 예보를
+        # 다시 내려주지 않으므로, 시간이 지날수록 남은 미래 시간대만 남아 그
+        # 구간의 min/max만 계산하면 낮이 지날수록 최고기온이 낮아지고 밤이
+        # 깊어질수록 최저기온이 올라가는(과거 극값이 사라지는) 문제가 생긴다.
+        # 그래서 하루 동안 계산된 값 중 가장 극단적인 값을 여기 누적 보관해
+        # "지금까지 실제로 도달한 최고/최저"가 사라지지 않게 한다.
+        self._today_extremes_date: str | None = None
+        self._today_low: float | None = None
+        self._today_high: float | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """오늘 최고/최저기온은 재시작 후에도 당일 누적값을 이어가도록 이전 상태를 복원."""
+        await super().async_added_to_hass()
+        if self.entity_description.key not in ("today_temp_low", "today_temp_high"):
+            return
+        last_state = await self.async_get_last_state()
+        if last_state is None or last_state.state in (None, "unknown", "unavailable"):
+            return
+        last_date = dt_util.as_local(last_state.last_changed).strftime("%Y%m%d")
+        today_str = datetime.datetime.now().strftime("%Y%m%d")  # noqa: DTZ005
+        if last_date != today_str:
+            return
+        try:
+            value = float(last_state.state)
+        except (TypeError, ValueError):
+            return
+        self._today_extremes_date = today_str
+        if self.entity_description.key == "today_temp_low":
+            self._today_low = value
+        else:
+            self._today_high = value
+
+    def _get_today_temp_extremes(
+        self,
+        village: list[VillageForecast],
+        curr: CurrentWeather,
+        today_str: str,
+    ) -> tuple[float | None, float | None]:
+        """오늘(로컬 날짜) 누적 최저/최고 기온을 계산해 반환.
+
+        `today_temp_low`/`today_temp_high`/`one_line_summary` 셋 다 동일한
+        누적 규칙을 써야 값이 서로 어긋나지 않으므로 이 헬퍼로 공유한다.
+        """
+        today_temps = [f.tmp for f in village if f.fcst_date == today_str and f.tmp is not None]
+        if curr.tmp is not None:
+            try:
+                today_temps.append(float(curr.tmp))
+            except (TypeError, ValueError):
+                pass
+
+        if self._today_extremes_date != today_str:
+            self._today_extremes_date = today_str
+            self._today_low = None
+            self._today_high = None
+
+        if today_temps:
+            new_low = min(today_temps)
+            new_high = max(today_temps)
+            self._today_low = new_low if self._today_low is None else min(self._today_low, new_low)
+            self._today_high = new_high if self._today_high is None else max(self._today_high, new_high)
+
+        return self._today_low, self._today_high
 
     def _get_current_forecast(self) -> VillageForecast | None:
         """현재 시각에 가장 인접한 동네예보 레코드를 반환."""
@@ -829,11 +893,8 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
         today_str = now.strftime("%Y%m%d")
 
         if key in ("today_temp_low", "today_temp_high"):
-            today_temps = [f.tmp for f in village if f.fcst_date == today_str and f.tmp is not None]
-            if key == "today_temp_low":
-                return min(today_temps) if today_temps else None
-            if key == "today_temp_high":
-                return max(today_temps) if today_temps else None
+            low, high = self._get_today_temp_extremes(village, self.coordinator.get_current(), today_str)
+            return low if key == "today_temp_low" else high
 
         if key == "rain_snow_expected":
             rain_type = "none"
@@ -963,10 +1024,12 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
 
                     cur_temp = float(curr.tmp)
                     
-                    # Today min/max temps
-                    today_temps = [f.tmp for f in village if f.fcst_date == today_str and f.tmp is not None]
-                    t_low = min(today_temps) if today_temps else cur_temp
-                    t_high = max(today_temps) if today_temps else cur_temp
+                    # Today min/max temps (today_temp_low/high 센서와 동일한 누적 규칙 공유)
+                    t_low, t_high = self._get_today_temp_extremes(village, curr, today_str)
+                    if t_low is None:
+                        t_low = cur_temp
+                    if t_high is None:
+                        t_high = cur_temp
 
                     # Rain expected in 24 hours search
                     rain_time = None
