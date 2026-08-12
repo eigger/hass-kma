@@ -390,10 +390,20 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         # 핵심 데이터인 동네예보(village)가 연결 오류(error)이거나 모든 API가 연결 오류면
         # 통합 단위 실패(UpdateFailed)로 처리하여 센서를 '사용 불가(오류)' 상태로 표시하고 재시도를 유도합니다.
         # (미신청/NODATA는 정상 동작 범위로 보고 실패시키지 않습니다.)
-        if status.get("village_forecast", "").startswith("error"):
-            raise UpdateFailed("동네예보 API 호출이 실패했습니다.")
-        if status and all(isinstance(v, str) and v.startswith("error") for v in status.values()):
-            raise UpdateFailed("모든 기상청 API 호출이 실패했습니다.")
+        # 단, 이전에 한 번이라도 성공한 데이터가 있다면(self.data is not None) 위에서 이미
+        # 필드별로 이전 값을 채워뒀으므로 그걸 그대로 반환한다. 여기서 무조건 UpdateFailed를
+        # 던지면 애써 채워둔 이전 값을 버리고 코디네이터 전체를 unavailable로 만들어, 발표시각
+        # 직후 API 혼잡 등 일시적 오류 때마다 모든 센서가 "알 수 없음"으로 튀는 문제가 있었다.
+        # 최초 설정 시점처럼 보여줄 데이터가 정말 없을 때만 실패 처리한다.
+        if self.data is None:
+            if status.get("village_forecast", "").startswith("error"):
+                raise UpdateFailed("동네예보 API 호출이 실패했습니다.")
+            if status and all(isinstance(v, str) and v.startswith("error") for v in status.values()):
+                raise UpdateFailed("모든 기상청 API 호출이 실패했습니다.")
+        elif status.get("village_forecast", "").startswith("error"):
+            _LOGGER.warning(
+                "동네예보 API 호출이 일시적으로 실패하여 이전 값을 유지합니다: %s", last_error,
+            )
 
         self._refresh_meta = refresh_meta
         return data
