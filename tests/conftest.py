@@ -13,17 +13,29 @@ class _MockBase:
         return cls
 
 
+class _MockCoordinatorEntity(_MockBase):
+    pass
+
+
+class _MockImageEntity(_MockBase):
+    pass
+
+
 class _MockUpdateFailed(Exception):
     """UpdateFailed mock — raise UpdateFailed(...) 구문을 허용."""
 
 
 # homeassistant.helpers.update_coordinator
-# DataUpdateCoordinator / CoordinatorEntity 는 실제로 서브클래싱되므로 _MockBase 사용
 _mock_ha_coordinator = MagicMock()
 _mock_ha_coordinator.DataUpdateCoordinator = _MockBase
-_mock_ha_coordinator.CoordinatorEntity = _MockBase
+_mock_ha_coordinator.CoordinatorEntity = _MockCoordinatorEntity
 _mock_ha_coordinator.UpdateFailed = _MockUpdateFailed
 sys.modules["homeassistant.helpers.update_coordinator"] = _mock_ha_coordinator
+
+# homeassistant.components.image
+_mock_ha_image = MagicMock()
+_mock_ha_image.ImageEntity = _MockImageEntity
+sys.modules["homeassistant.components.image"] = _mock_ha_image
 
 # homeassistant 나머지 모듈 (MagicMock으로 충분)
 for _mod in [
