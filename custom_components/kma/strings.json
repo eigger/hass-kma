@@ -23,7 +23,6 @@
   },
   "config_subentries": {
     "zone": {
-      "title": "Add Zone",
       "step": {
         "user": {
           "title": "Add a Zone",
