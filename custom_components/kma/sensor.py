@@ -13,9 +13,9 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import (
-    CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
     PERCENTAGE,
     EntityCategory,
+    UnitOfDensity,
     UnitOfLength,
     UnitOfSpeed,
     UnitOfTemperature,
@@ -326,7 +326,7 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         key="pm10",
         translation_key="pm10",
         device_class=SensorDeviceClass.PM10,
-        native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
@@ -458,7 +458,7 @@ SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
         key="pm10_hourly_avg",
         translation_key="pm10_hourly_avg",
         device_class=SensorDeviceClass.PM10,
-        native_unit_of_measurement=CONCENTRATION_MICROGRAMS_PER_CUBIC_METER,
+        native_unit_of_measurement=UnitOfDensity.MICROGRAMS_PER_CUBIC_METER,
         state_class=SensorStateClass.MEASUREMENT,
     ),
 ]
