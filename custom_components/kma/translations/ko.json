@@ -23,7 +23,6 @@
   },
   "config_subentries": {
     "zone": {
-      "title": "지역(Zone) 추가",
       "step": {
         "user": {
           "title": "지역(Zone) 추가",
