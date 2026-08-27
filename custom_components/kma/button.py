@@ -52,7 +52,7 @@ class KmaRefreshButton(CoordinatorEntity[KmaForecastCoordinator], ButtonEntity):
             name=zone_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
-            via_device=(DOMAIN, coordinator.config_entry.entry_id),
+            via_device_id=coordinator.hub_device_id,
         )
 
     async def async_press(self) -> None:

@@ -71,7 +71,7 @@ async def async_setup_entry(
             name=zone_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
-            via_device=(DOMAIN, entry.entry_id),
+            via_device_id=store["hub_device_id"],
         )
         
         entities = []

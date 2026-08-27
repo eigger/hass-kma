@@ -9,7 +9,9 @@ import logging
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.device_registry import DeviceEntryType
 
 from .api import KmaApiClient
 from .const import DOMAIN
@@ -33,18 +35,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     session = async_get_clientsession(hass)
     client = KmaApiClient(session, entry.data["auth_key"])
 
+    # Zone 디바이스들이 via_device_id로 참조할 허브 디바이스를 플랫폼 셋업 전에
+    # 미리 등록해둔다. 플랫폼들은 async_forward_entry_setups로 동시에 셋업되므로,
+    # 허브 디바이스가 각 플랫폼의 진단 엔티티를 통해 뒤늦게 생성되는 것에 기대면
+    # via_device_id가 아직 없는 디바이스 id를 참조해 DeviceInfoError가 날 수 있다.
+    hub_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name="기상청 APIhub",
+        manufacturer="Korea Meteorological Administration",
+        model="API Hub",
+        entry_type=DeviceEntryType.SERVICE,
+    )
+
     coordinators: dict[str, KmaForecastCoordinator] = {}
     for subentry_id, subentry in entry.subentries.items():
         if subentry.subentry_type != SUBENTRY_TYPE_ZONE:
             continue
         coordinator = KmaForecastCoordinator(hass, client, entry, subentry)
+        coordinator.hub_device_id = hub_device.id
         await coordinator.async_config_entry_first_refresh()
         coordinators[subentry_id] = coordinator
 
     image_coordinator = KmaImageCoordinator(hass, client, entry)
+    image_coordinator.hub_device_id = hub_device.id
     await image_coordinator.async_config_entry_first_refresh()
 
     hub_coordinator = KmaHubCoordinator(hass, client, entry)
+    hub_coordinator.hub_device_id = hub_device.id
     await hub_coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})
@@ -53,6 +71,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "coordinators": coordinators,
         "image_coordinator": image_coordinator,
         "hub_coordinator": hub_coordinator,
+        "hub_device_id": hub_device.id,
     }
 
     # 옵션/서브엔트리 변경 시 리로드
