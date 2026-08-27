@@ -272,7 +272,7 @@ class KmaWeather(CoordinatorEntity[KmaForecastCoordinator], WeatherEntity):
             name=zone_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
-            via_device=(DOMAIN, coordinator.config_entry.entry_id),
+            via_device_id=coordinator.hub_device_id,
         )
 
     def _is_night(self) -> bool:

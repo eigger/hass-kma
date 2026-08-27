@@ -520,7 +520,7 @@ async def async_setup_entry(
             name=zone_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
-            via_device=(DOMAIN, entry.entry_id),
+            via_device_id=store["hub_device_id"],
         )
         zone_entities: list[SensorEntity] = [
             *[KmaSensor(coordinator, subentry, desc) for desc in SENSOR_DESCRIPTIONS],
@@ -589,7 +589,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
             name=zone_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
-            via_device=(DOMAIN, coordinator.config_entry.entry_id),
+            via_device_id=coordinator.hub_device_id,
         )
 
         # 오늘 최고/최저기온 누적값. 동네예보(village)는 이미 지난 시각의 예보를
@@ -1404,7 +1404,7 @@ class KmaCurrentDataSourceSensor(CoordinatorEntity[KmaForecastCoordinator], Sens
             name=zone_name,
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub Forecast",
-            via_device=(DOMAIN, coordinator.config_entry.entry_id),
+            via_device_id=coordinator.hub_device_id,
         )
 
     @property
