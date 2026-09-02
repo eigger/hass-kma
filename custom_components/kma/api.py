@@ -527,13 +527,48 @@ def _parse_pm10_hourly_line(line: str) -> Pm10HourlyStats | None:
     return Pm10HourlyStats(stn=stn, tm=tm, avg=_to_float(avg_str), min=_to_float(min_v), max=_to_float(max_v))
 
 
+def _parse_station_bulletins_json(text: str) -> list[StationBulletin] | None:
+    """기상정보/날씨해설의 JSON 배열 응답을 파싱. JSON이 아니면 None.
+
+    disp=1 응답이 `[{"STN_ID": ..., "TM_FC": ..., "SUB_TITLE_NAME": ...,
+    "CAL": ...}, ...]` 형태의 JSON 배열로 오는 경우가 있다. [실측 확인 2026-09-02]
+    """
+    stripped = text.lstrip()
+    if not stripped.startswith("["):
+        return None
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(payload, list):
+        return None
+    bulletins: list[StationBulletin] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        bulletins.append(
+            StationBulletin(
+                stn=str(item.get("STN_ID", "")),
+                issued_at=str(item.get("TM_FC", "")),
+                title=str(item.get("SUB_TITLE_NAME", "")),
+                body=str(item.get("CAL", "")).strip(),
+            )
+        )
+    return bulletins
+
+
 def _parse_station_bulletins(text: str) -> list[StationBulletin]:
     """기상정보(wrn_inf_rpt.php)/날씨해설(wthr_cmt_rpt.php) 공통 "$0 헤더 + $1 본문"
     포맷을 파싱한다.
 
     헤더 라인: "$0#STN#TM_FC#TM_SEQ#TM_IN#CNT#MAN_FC#MAN_ID#SUBCD#TITLE#"
     본문은 "$1#"로 시작해 "=" 단독 라인까지 이어지는 여러 줄.
+    같은 엔드포인트가 JSON 배열로 응답하는 경우도 함께 처리한다.
     """
+    json_bulletins = _parse_station_bulletins_json(text)
+    if json_bulletins is not None:
+        return json_bulletins
+
     bulletins: list[StationBulletin] = []
     stn = tm_fc = title = None
     body_lines: list[str] = []
@@ -673,17 +708,26 @@ def parse_header_columns(text: str) -> list[str]:
 
 
 def _raise_for_error_payload(status: int, body: str, endpoint: str) -> None:
-    """JSON 오류 본문(UTF-8)을 파싱해 적절한 예외를 발생.
+    """JSON 본문(UTF-8)을 파싱해 오류라면 적절한 예외를 발생.
 
-    이 함수는 content-type이 JSON일 때만 호출된다(typ01 텍스트 API에서
-    JSON 본문은 항상 오류 응답).
+    이 함수는 content-type이 JSON일 때 호출된다. typ01 텍스트 API의 JSON
+    본문은 대부분 `{"result": {...}}` 형태의 오류 응답이지만, 자료가 없을 때
+    빈 배열 `[]`처럼 오류가 아닌 JSON이 오는 엔드포인트도 있으므로
+    (예: wrn_inf_rpt.php) 오류 구조가 아니면 예외 없이 반환한다.
     """
     try:
-        payload: dict[str, Any] = json.loads(body)
+        payload: Any = json.loads(body)
     except json.JSONDecodeError:
         raise KmaApiError(f"{endpoint}: HTTP {status}: {body[:200]}")
 
-    result = payload.get("result", payload)
+    result = payload.get("result", payload) if isinstance(payload, dict) else payload
+    if not isinstance(result, dict):
+        # 오류 구조가 아닌 JSON(예: 자료 없음일 때의 빈 배열 `[]`).
+        # HTTP 상태로만 판단하고, 정상 응답이면 예외 없이 반환한다.
+        if status != 200:
+            raise KmaApiError(f"{endpoint}: HTTP {status}: {body[:200]}")
+        return
+
     code = result.get("status", status)
     message = result.get("message", "")
 
@@ -821,7 +865,7 @@ class KmaApiClient:
                 # 에러 구조인지 먼저 체크
                 try:
                     payload = json.loads(body_str)
-                    if "result" in payload:
+                    if isinstance(payload, dict) and "result" in payload:
                         _raise_for_error_payload(status, body_str, endpoint)
                 except json.JSONDecodeError:
                     pass
