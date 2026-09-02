@@ -248,6 +248,14 @@ class TestRaiseForErrorPayload:
         with pytest.raises(KmaApiError):
             _raise_for_error_payload(401, self._body(401, "인증 오류"), "ep")
 
+    def test_json_list_body_is_not_an_error(self):
+        # 자료가 없을 때 빈 배열을 돌려주는 엔드포인트(wrn_inf_rpt.php 등)
+        _raise_for_error_payload(200, "[]", "ep")
+
+    def test_json_list_body_with_error_status_raises(self):
+        with pytest.raises(KmaApiError):
+            _raise_for_error_payload(500, "[]", "ep")
+
 
 # ---------------------------------------------------------------------------
 # _parse_pm10_line (kma_pm10.php)
