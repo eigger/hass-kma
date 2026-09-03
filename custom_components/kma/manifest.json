@@ -9,6 +9,7 @@
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/eigger/hass-kma/issues",
+  "min_ha_version": "2026.9.0",
   "requirements": [],
-  "version": "1.7.1"
+  "version": "2.0.0"
 }
