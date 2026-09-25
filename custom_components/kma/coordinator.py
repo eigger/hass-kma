@@ -35,6 +35,7 @@ from .helpers import parse_pcp, parse_sno
 _LOGGER = logging.getLogger(__name__)
 
 API_COOLDOWN = timedelta(minutes=5)
+MAX_TRANSIENT_RETRIES = 3
 
 
 @dataclass(frozen=True)
@@ -83,7 +84,9 @@ class _ApiStatusMixin:
         self._api_error_counts: dict[str, int] = {k: 0 for k in keys}
         self._api_last_error_time: dict[str, datetime.datetime | None] = {k: None for k in keys}
         self._api_cooldown_until: dict[str, datetime.datetime] = {}
+        self._transient_retries: dict[str, int] = {}
         self._cooldown_unsub: Callable[[], None] | None = None
+        self._cooldown_refresh = False
 
     def _bind_cooldown(self, config_entry: ConfigEntry) -> None:
         """엔트리 언로드 시 예약된 재시도를 취소한다."""
@@ -93,10 +96,36 @@ class _ApiStatusMixin:
         until = self._api_cooldown_until.get(api_key)
         return until is not None and datetime.datetime.now(datetime.timezone.utc) < until
 
-    def _arm_transient_cooldown(self, api_key: str) -> None:
-        """일시 오류가 난 API는 쿨다운이 끝날 때 한 번만 다시 갱신한다."""
+    def _begin_update(self) -> None:
+        """수집 주기·재시작 조회는 재시도 횟수를 새로 센다. 5분 재시도 갱신은 이어서 센다."""
+        if self._cooldown_refresh:
+            self._cooldown_refresh = False
+            return
+        self._transient_retries.clear()
+
+    def _arm_transient_cooldown(self, api_key: str, label: str, err: Exception) -> None:
+        """일시 오류 API를 5분간 건너뛴다. 추가 재시도는 MAX_TRANSIENT_RETRIES회까지."""
+        minutes = int(API_COOLDOWN.total_seconds() // 60)
         self._api_cooldown_until[api_key] = (
             datetime.datetime.now(datetime.timezone.utc) + API_COOLDOWN
+        )
+        count = self._transient_retries.get(api_key, 0) + 1
+        self._transient_retries[api_key] = count
+        if count > MAX_TRANSIENT_RETRIES:
+            _LOGGER.warning(
+                "%s 일시 오류 재시도가 %d회에 도달해 다음 수집 주기까지 기다립니다: %s",
+                label,
+                MAX_TRANSIENT_RETRIES,
+                err,
+            )
+            return
+        _LOGGER.warning(
+            "%s 일시 오류로 %d분 뒤 재시도합니다 (%d/%d): %s",
+            label,
+            minutes,
+            count,
+            MAX_TRANSIENT_RETRIES,
+            err,
         )
         if self._cooldown_unsub is not None:
             return
@@ -108,6 +137,7 @@ class _ApiStatusMixin:
 
     def _handle_cooldown_refresh(self, _now: datetime.datetime) -> None:
         self._cooldown_unsub = None
+        self._cooldown_refresh = True
         self.hass.async_create_task(self.async_request_refresh())
 
     def _cancel_cooldown_refresh(self) -> None:
@@ -128,22 +158,18 @@ class _ApiStatusMixin:
             _LOGGER.debug("%s 쿨다운 중이라 호출을 건너뜁니다.", label)
             return default, "cooldown"
         try:
-            return await factory(), "ok"
+            result = await factory()
         except KmaActivationRequiredError:
             _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
             return default, "not_applied"
         except KmaTransientError as err:
-            self._arm_transient_cooldown(api_key)
-            _LOGGER.warning(
-                "%s 일시 오류로 %d분간 재시도를 멈춥니다: %s",
-                label,
-                int(API_COOLDOWN.total_seconds() // 60),
-                err,
-            )
+            self._arm_transient_cooldown(api_key, label, err)
             return default, f"error: {err}"
         except KmaApiError as err:
             _LOGGER.warning("%s 업데이트 경고: %s", label, err)
             return default, f"error: {err}"
+        self._transient_retries.pop(api_key, None)
+        return result, "ok"
 
     def _record_api_status(self, status: dict[str, str]) -> None:
         """status 딕셔너리("ok"/"not_applied"/"error: ...")를 보고 에러 카운트를 갱신."""
@@ -250,12 +276,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
                 break
             except KmaTransientError as err:
                 last_error = str(err)
-                self._arm_transient_cooldown("village_forecast")
-                _LOGGER.warning(
-                    "동네예보 일시 오류로 %d분간 재시도를 멈춥니다: %s",
-                    int(API_COOLDOWN.total_seconds() // 60),
-                    err,
-                )
+                self._arm_transient_cooldown("village_forecast", "동네예보", err)
                 break
             except KmaApiError as err:
                 last_error = str(err)
@@ -263,6 +284,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
                 break
             village_status = "ok"
             last_error = None
+            self._transient_retries.pop("village_forecast", None)
             if village_forecasts:
                 break
         status = (
@@ -277,6 +299,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         허브 단위 진단 센서가 활용신청 상태를 표시할 수 있도록 한다.
         활용신청 미완료(403)는 통합 실패로 처리하지 않고 해당 데이터만 비운다.
         """
+        self._begin_update()
         data: dict[str, Any] = {}
         status: dict[str, str] = {}
         refresh_meta = {key: False for key in self._refresh_meta}
@@ -715,13 +738,13 @@ class KmaImageCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]
             image = await factory()
             if image is not None:
                 data[key] = image
+            self._transient_retries.pop(key, None)
             return "ok"
         except KmaActivationRequiredError:
             _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
             return "not_applied"
         except KmaTransientError as err:
-            self._arm_transient_cooldown(key)
-            _LOGGER.debug("%s 일시 오류로 재시도를 멈춥니다: %s", label, err)
+            self._arm_transient_cooldown(key, label, err)
             return f"error: {err}"
         except KmaApiError as err:
             _LOGGER.debug("%s 갱신 실패: %s", label, err)
@@ -729,6 +752,7 @@ class KmaImageCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]
 
     async def _async_update_data(self) -> dict[str, Any]:
         """레이더/위성/강수예측 최신 이미지를 조회. 실패/미게시 시 이전 값을 유지."""
+        self._begin_update()
         data: dict[str, Any] = dict(self.data or dict.fromkeys(API_STATUS_IMAGE_KEYS))
         status: dict[str, str] = {}
 
@@ -792,6 +816,7 @@ class KmaHubCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
 
     async def _async_update_data(self) -> dict[str, Any]:
         """최근 지진정보/태풍정보를 조회. 실패 시 이전 값을 유지."""
+        self._begin_update()
         data: dict[str, Any] = dict(self.data or dict.fromkeys(API_STATUS_HUB_KEYS))
         status: dict[str, str] = {}
 
