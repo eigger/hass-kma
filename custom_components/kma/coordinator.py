@@ -10,7 +10,7 @@ from datetime import timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .api import (
@@ -87,6 +87,7 @@ class _ApiStatusMixin:
         self._transient_retries: dict[str, int] = {}
         self._cooldown_unsub: Callable[[], None] | None = None
         self._cooldown_refresh = False
+        self._retry_keys: set[str] | None = None
 
     def _bind_cooldown(self, config_entry: ConfigEntry) -> None:
         """엔트리 언로드 시 예약된 재시도를 취소한다."""
@@ -100,8 +101,14 @@ class _ApiStatusMixin:
         """수집 주기·재시작 조회는 재시도 횟수를 새로 센다. 5분 재시도 갱신은 이어서 센다."""
         if self._cooldown_refresh:
             self._cooldown_refresh = False
+            self._retry_keys = set(self._api_cooldown_until)
             return
+        self._retry_keys = None
         self._transient_retries.clear()
+
+    def _skip_healthy(self, api_key: str) -> bool:
+        """5분 재시도에서는 직전에 일시 오류가 난 API만 다시 호출한다."""
+        return self._retry_keys is not None and api_key not in self._retry_keys
 
     def _arm_transient_cooldown(self, api_key: str, label: str, err: Exception) -> None:
         """일시 오류 API를 5분간 건너뛴다. 추가 재시도는 MAX_TRANSIENT_RETRIES회까지."""
@@ -135,6 +142,7 @@ class _ApiStatusMixin:
             self.hass, API_COOLDOWN.total_seconds(), self._handle_cooldown_refresh
         )
 
+    @callback
     def _handle_cooldown_refresh(self, _now: datetime.datetime) -> None:
         self._cooldown_unsub = None
         self._cooldown_refresh = True
@@ -152,8 +160,12 @@ class _ApiStatusMixin:
         factory: Callable[[], Awaitable[Any]],
         *,
         default: Any = None,
+        previous: Any = None,
     ) -> tuple[Any, str]:
         """선택적 API 호출. 상태: ok | not_applied | cooldown | error: 메시지."""
+        if self._skip_healthy(api_key):
+            prev_status = (self.data or {}).get("api_status", {}).get(api_key, "ok")
+            return previous, prev_status
         if self._in_cooldown(api_key):
             _LOGGER.debug("%s 쿨다운 중이라 호출을 건너뜁니다.", label)
             return default, "cooldown"
@@ -169,12 +181,15 @@ class _ApiStatusMixin:
             _LOGGER.warning("%s 업데이트 경고: %s", label, err)
             return default, f"error: {err}"
         self._transient_retries.pop(api_key, None)
+        self._api_cooldown_until.pop(api_key, None)
         return result, "ok"
 
     def _record_api_status(self, status: dict[str, str]) -> None:
         """status 딕셔너리("ok"/"not_applied"/"error: ...")를 보고 에러 카운트를 갱신."""
         now_utc = datetime.datetime.now(datetime.timezone.utc)
         for api_key, api_stat in status.items():
+            if self._retry_keys is not None and api_key not in self._retry_keys:
+                continue
             if isinstance(api_stat, str) and api_stat.startswith("error"):
                 self._api_error_counts[api_key] = self._api_error_counts.get(api_key, 0) + 1
                 self._api_last_error_time[api_key] = now_utc
@@ -257,6 +272,9 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
 
         504·타임아웃 같은 일시 오류는 바로 멈추고 쿨다운한다.
         """
+        if self._skip_healthy("village_forecast"):
+            prev_status = (self.data or {}).get("api_status", {}).get("village_forecast", "ok")
+            return (self.data or {}).get("village", []), prev_status, None
         if self._in_cooldown("village_forecast"):
             _LOGGER.debug("동네예보 쿨다운 중이라 호출을 건너뜁니다.")
             return [], "cooldown", None
@@ -281,10 +299,11 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
             except KmaApiError as err:
                 last_error = str(err)
                 _LOGGER.debug("동네예보 base_time=%s%s 호출 실패: %s", base_date, base_time, err)
-                break
+                continue
             village_status = "ok"
             last_error = None
             self._transient_retries.pop("village_forecast", None)
+            self._api_cooldown_until.pop("village_forecast", None)
             if village_forecasts:
                 break
         status = (
@@ -331,83 +350,102 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         ) = await asyncio.gather(
             self._fetch_village(now),
             self._fetch_optional(
-                "ncst", "초단기실황", lambda: self.client.async_get_ultra_ncst(self.nx, self.ny)
+                "ncst", "초단기실황", lambda: self.client.async_get_ultra_ncst(self.nx, self.ny),
+                previous=(self.data or {}).get("ncst"),
             ),
             self._fetch_optional(
                 "ultra", "초단기예보",
                 lambda: self.client.async_get_ultra_fcst(self.nx, self.ny),
                 default=[],
+                previous=(self.data or {}).get("ultra", []),
             ),
             self._fetch_optional(
                 "land_forecast", "육상예보",
                 lambda: self.client.async_get_land_forecast(self.land_reg),
                 default=[],
+                previous=(self.data or {}).get("land", []),
             ),
             self._fetch_optional(
                 "marine_forecast", "해상예보",
                 lambda: self.client.async_get_marine_forecast(self.marine_reg),
                 default=[],
+                previous=(self.data or {}).get("marine", []),
             ),
             self._fetch_optional(
                 "pm10", "미세먼지(PM10)",
                 lambda: self.client.async_get_pm10_now(stn=self.stn),
+                previous=(self.data or {}).get("pm10"),
             ),
             self._fetch_optional(
                 "uv_index", "자외선지수",
                 lambda: self.client.async_get_uv_index(area_no=self.area_no),
+                previous=(self.data or {}).get("uv_index"),
             ),
             self._fetch_optional(
                 "air_stagnation", "대기정체지수",
                 lambda: self.client.async_get_air_stagnation_index(area_no=self.area_no),
+                previous=(self.data or {}).get("air_stagnation"),
             ),
             self._fetch_optional(
                 "oak_pollen", "꽃가루(참나무)",
                 lambda: self.client.async_get_oak_pollen_risk(area_no=self.area_no),
+                previous=(self.data or {}).get("oak_pollen"),
             ),
             self._fetch_optional(
                 "pine_pollen", "꽃가루(소나무)",
                 lambda: self.client.async_get_pine_pollen_risk(area_no=self.area_no),
+                previous=(self.data or {}).get("pine_pollen"),
             ),
             self._fetch_optional(
                 "weed_pollen", "꽃가루(잡초류)",
                 lambda: self.client.async_get_weed_pollen_risk(area_no=self.area_no),
+                previous=(self.data or {}).get("weed_pollen"),
             ),
             self._fetch_optional(
                 "radar_precipitation", "레이더 강수강도",
                 lambda: self.client.async_get_radar_precipitation(dong_code=self.area_no),
+                previous=(self.data or {}).get("radar_precipitation"),
             ),
             self._fetch_optional(
                 "sfc_observation", "고해상도 지상관측",
                 lambda: self.client.async_get_sfc_observation(lat=self.lat, lon=self.lon),
+                previous=(self.data or {}).get("sfc_observation"),
             ),
             self._fetch_optional(
                 "heat_wave_risk", "영향예보(폭염)",
                 lambda: self.client.async_get_heat_wave_risk(stn=self.office_stn),
+                previous=(self.data or {}).get("heat_wave_risk"),
             ),
             self._fetch_optional(
                 "cold_wave_risk", "영향예보(한파)",
                 lambda: self.client.async_get_cold_wave_risk(stn=self.office_stn),
+                previous=(self.data or {}).get("cold_wave_risk"),
             ),
             self._fetch_optional(
                 "hazard_info", "기상정보",
                 lambda: self.client.async_get_hazard_info(stn=self.office_stn),
+                previous=(self.data or {}).get("hazard_info"),
             ),
             self._fetch_optional(
                 "weather_commentary", "날씨해설",
                 lambda: self.client.async_get_weather_commentary(stn=self.office_stn),
+                previous=(self.data or {}).get("weather_commentary"),
             ),
             self._fetch_optional(
                 "snow_depth", "적설관측",
                 lambda: self.client.async_get_snow_depth(stn=self.stn),
+                previous=(self.data or {}).get("snow_depth"),
             ),
             self._fetch_optional(
                 "pm10_hourly", "미세먼지 시간통계",
                 lambda: self.client.async_get_pm10_hourly_stats(stn=self.stn),
+                previous=(self.data or {}).get("pm10_hourly"),
             ),
             self._fetch_optional(
                 "warning_now", "기상특보",
                 lambda: self.client.async_get_warning_now(),
                 default=[],
+                previous=(self.data or {}).get("warnings", []),
             ),
         )
         ncst = ncst[0]
@@ -529,7 +567,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         self._record_api_status(status)
 
         # 일시 오류로 셋업 전체를 실패시키지 않는다. 받은 값(또는 이전 값)을 올리고
-        # 쿨다운이 끝나면 해당 API만 다시 조회한다.
+        # 5분 재시도에서는 일시 오류가 났던 API만 다시 조회한다.
         if str(status.get("village_forecast", "")).startswith("error"):
             if self.data is not None:
                 _LOGGER.warning(
@@ -731,6 +769,8 @@ class KmaImageCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]
         factory: Callable[[], Awaitable[Any]],
     ) -> str:
         """이미지를 조회해 data[key]에 저장하고, 활용신청 상태 문자열을 반환한다."""
+        if self._skip_healthy(key):
+            return (self.data or {}).get("api_status", {}).get(key, "ok")
         if self._in_cooldown(key):
             _LOGGER.debug("%s 쿨다운 중이라 호출을 건너뜁니다.", label)
             return "cooldown"
@@ -739,6 +779,7 @@ class KmaImageCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]
             if image is not None:
                 data[key] = image
             self._transient_retries.pop(key, None)
+            self._api_cooldown_until.pop(key, None)
             return "ok"
         except KmaActivationRequiredError:
             _LOGGER.warning("%s API 미신청(403). 활용신청이 필요합니다.", label)
@@ -822,10 +863,12 @@ class KmaHubCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
 
         (eq_obs, status["earthquake"]), (typhoon_obs, status["typhoon"]) = await asyncio.gather(
             self._fetch_optional(
-                "earthquake", "지진정보", self.client.async_get_earthquake_recent
+                "earthquake", "지진정보", self.client.async_get_earthquake_recent,
+                previous=(self.data or {}).get("earthquake"),
             ),
             self._fetch_optional(
-                "typhoon", "태풍정보", self.client.async_get_typhoon_now
+                "typhoon", "태풍정보", self.client.async_get_typhoon_now,
+                previous=(self.data or {}).get("typhoon"),
             ),
         )
         if eq_obs is not None:

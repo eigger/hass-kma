@@ -61,3 +61,11 @@ for _mod in [
     "aiohttp",
 ]:
     sys.modules[_mod] = MagicMock()
+
+
+def _callback(func):
+    """@callback 이 메서드를 MagicMock으로 바꾸지 않도록 그대로 둔다."""
+    return func
+
+
+sys.modules["homeassistant.core"].callback = _callback
