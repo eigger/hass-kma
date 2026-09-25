@@ -57,8 +57,11 @@ import aiohttp
 _LOGGER = logging.getLogger(__name__)
 
 BASE_URL = "https://apihub.kma.go.kr/api/typ01/url"
-DEFAULT_TIMEOUT = 30
+CONNECT_TIMEOUT = 5
+DEFAULT_TIMEOUT = 10
+REQUEST_CONCURRENCY = 5
 ENCODING = "euc-kr"
+_TRANSIENT_HTTP = frozenset({502, 503, 504})
 
 
 # ---------------------------------------------------------------------------
@@ -70,6 +73,10 @@ class KmaApiError(Exception):
 
 class KmaAuthError(KmaApiError):
     """authKey가 유효하지 않음."""
+
+
+class KmaTransientError(KmaApiError):
+    """502/503/504 또는 연결·타임아웃. 곧바로 다시 치지 않고 잠시 뒤 재시도한다."""
 
 
 class KmaActivationRequiredError(KmaApiError):
@@ -707,6 +714,16 @@ def parse_header_columns(text: str) -> list[str]:
     return []
 
 
+def _http_error(endpoint: str, status: int, detail: str = "") -> KmaApiError:
+    """HTTP 상태 코드에 맞는 예외를 만든다. 502/503/504는 일시 오류."""
+    message = f"{endpoint}: HTTP {status}"
+    if detail:
+        message = f"{message}: {detail}"
+    if status in _TRANSIENT_HTTP:
+        return KmaTransientError(message)
+    return KmaApiError(message)
+
+
 def _raise_for_error_payload(status: int, body: str, endpoint: str) -> None:
     """JSON 본문(UTF-8)을 파싱해 오류라면 적절한 예외를 발생.
 
@@ -718,14 +735,14 @@ def _raise_for_error_payload(status: int, body: str, endpoint: str) -> None:
     try:
         payload: Any = json.loads(body)
     except json.JSONDecodeError:
-        raise KmaApiError(f"{endpoint}: HTTP {status}: {body[:200]}")
+        raise _http_error(endpoint, status, body[:200]) from None
 
     result = payload.get("result", payload) if isinstance(payload, dict) else payload
     if not isinstance(result, dict):
         # 오류 구조가 아닌 JSON(예: 자료 없음일 때의 빈 배열 `[]`).
         # HTTP 상태로만 판단하고, 정상 응답이면 예외 없이 반환한다.
         if status != 200:
-            raise KmaApiError(f"{endpoint}: HTTP {status}: {body[:200]}")
+            raise _http_error(endpoint, status, body[:200])
         return
 
     code = result.get("status", status)
@@ -736,6 +753,8 @@ def _raise_for_error_payload(status: int, body: str, endpoint: str) -> None:
     if code in (401, 400) or "인증" in message or "유효하지 않은" in message:
         # 잘못된 키 / 유효하지 않은 API 등
         raise KmaAuthError(f"{endpoint}: {message or code}")
+    if status in _TRANSIENT_HTTP or code in _TRANSIENT_HTTP:
+        raise KmaTransientError(f"{endpoint}: status={code} {message}")
     raise KmaApiError(f"{endpoint}: status={code} {message}")
 
 
@@ -794,7 +813,12 @@ class KmaApiClient:
         self._session = session
         self._auth_key = auth_key
         self._base_url = base_url.rstrip("/")
-        self._timeout = aiohttp.ClientTimeout(total=timeout)
+        self._timeout = aiohttp.ClientTimeout(
+            total=timeout,
+            connect=min(CONNECT_TIMEOUT, timeout),
+            sock_read=timeout,
+        )
+        self._concurrency = asyncio.Semaphore(REQUEST_CONCURRENCY)
 
     async def _do_request(
         self, endpoint: str, params: dict[str, Any]
@@ -816,13 +840,14 @@ class KmaApiClient:
 
         _LOGGER.debug("KMA GET %s params=%s", endpoint, params)
         try:
-            async with self._session.get(
-                url, params=query, timeout=self._timeout
-            ) as resp:
-                raw = await resp.read()
-                return raw, resp.status, (resp.content_type or "")
+            async with self._concurrency:
+                async with self._session.get(
+                    url, params=query, timeout=self._timeout
+                ) as resp:
+                    raw = await resp.read()
+                    return raw, resp.status, (resp.content_type or "")
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            raise KmaApiError(f"{endpoint}: 연결 오류: {err}") from err
+            raise KmaTransientError(f"{endpoint}: 연결 오류: {err}") from err
 
     async def _request_binary(
         self, endpoint: str, params: dict[str, Any]
@@ -837,7 +862,7 @@ class KmaApiClient:
             body_str = raw.decode("utf-8", errors="replace")
             _raise_for_error_payload(status, body_str, endpoint)
         if status != 200:
-            raise KmaApiError(f"{endpoint}: HTTP {status}")
+            raise _http_error(endpoint, status)
         return raw, content_type
 
     async def _request(
@@ -877,7 +902,7 @@ class KmaApiClient:
                 return body_str
 
         if status != 200:
-            raise KmaApiError(f"{endpoint}: HTTP {status}")
+            raise _http_error(endpoint, status)
         return raw.decode(encoding, errors="replace")
 
     # -- seqApi=10 예·특보 --------------------------------------------------

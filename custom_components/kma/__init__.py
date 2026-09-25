@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -49,21 +50,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     coordinators: dict[str, KmaForecastCoordinator] = {}
+    refreshes = []
     for subentry_id, subentry in entry.subentries.items():
         if subentry.subentry_type != SUBENTRY_TYPE_ZONE:
             continue
         coordinator = KmaForecastCoordinator(hass, client, entry, subentry)
         coordinator.hub_device_id = hub_device.id
-        await coordinator.async_config_entry_first_refresh()
         coordinators[subentry_id] = coordinator
+        refreshes.append(coordinator.async_config_entry_first_refresh())
 
     image_coordinator = KmaImageCoordinator(hass, client, entry)
     image_coordinator.hub_device_id = hub_device.id
-    await image_coordinator.async_config_entry_first_refresh()
-
     hub_coordinator = KmaHubCoordinator(hass, client, entry)
     hub_coordinator.hub_device_id = hub_device.id
-    await hub_coordinator.async_config_entry_first_refresh()
+    refreshes.append(image_coordinator.async_config_entry_first_refresh())
+    refreshes.append(hub_coordinator.async_config_entry_first_refresh())
+    await asyncio.gather(*refreshes)
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
