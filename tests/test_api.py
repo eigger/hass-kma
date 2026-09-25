@@ -6,6 +6,7 @@ import pytest
 from custom_components.kma.api import (
     KmaActivationRequiredError,
     KmaApiError,
+    KmaTransientError,
     KmaAuthError,
     Pm10Observation,
     Pm10HourlyStats,
@@ -233,6 +234,10 @@ class TestRaiseForErrorPayload:
     def test_500_raises_api_error(self):
         with pytest.raises(KmaApiError):
             _raise_for_error_payload(500, self._body(500, "서버 오류"), "ep")
+
+    def test_504_raises_transient_error(self):
+        with pytest.raises(KmaTransientError):
+            _raise_for_error_payload(504, self._body(504, "Gateway Timeout"), "ep")
 
     def test_invalid_json_raises_api_error(self):
         with pytest.raises(KmaApiError):
