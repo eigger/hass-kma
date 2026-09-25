@@ -36,6 +36,21 @@ _LOGGER = logging.getLogger(__name__)
 
 API_COOLDOWN = timedelta(minutes=5)
 MAX_TRANSIENT_RETRIES = 3
+_STALE_FOR_API = {
+    "village_forecast": "village_stale",
+    "ncst": "ncst_stale",
+    "ultra": "ultra_stale",
+    "land_forecast": "land_stale",
+    "marine_forecast": "marine_stale",
+    "pm10": "pm10_stale",
+    "uv_index": "uv_index_stale",
+    "air_stagnation": "air_stagnation_stale",
+    "radar_precipitation": "radar_precipitation_stale",
+    "sfc_observation": "sfc_observation_stale",
+    "snow_depth": "snow_depth_stale",
+    "pm10_hourly": "pm10_hourly_stale",
+    "warning_now": "warnings_stale",
+}
 
 
 @dataclass(frozen=True)
@@ -88,6 +103,7 @@ class _ApiStatusMixin:
         self._cooldown_unsub: Callable[[], None] | None = None
         self._cooldown_refresh = False
         self._retry_keys: set[str] | None = None
+        self._next_full_refresh_at: float | None = None
 
     def _bind_cooldown(self, config_entry: ConfigEntry) -> None:
         """엔트리 언로드 시 예약된 재시도를 취소한다."""
@@ -101,10 +117,36 @@ class _ApiStatusMixin:
         """수집 주기·재시작 조회는 재시도 횟수를 새로 센다. 5분 재시도 갱신은 이어서 센다."""
         if self._cooldown_refresh:
             self._cooldown_refresh = False
+            if self._regular_refresh_due():
+                self._retry_keys = None
+                self._transient_retries.clear()
+                return
             self._retry_keys = set(self._api_cooldown_until)
+            self._preserve_regular_schedule()
             return
         self._retry_keys = None
         self._transient_retries.clear()
+
+    def _regular_refresh_due(self) -> bool:
+        nxt = self._next_full_refresh_at
+        return nxt is None or nxt - self.hass.loop.time() <= 1
+
+    def _preserve_regular_schedule(self) -> None:
+        """재시도 갱신이 끝난 뒤 정기 수집 시각을 원래 시점으로 되돌린다."""
+        nxt = self._next_full_refresh_at
+        if nxt is None:
+            return
+        remaining = nxt - self.hass.loop.time()
+        if remaining > 1:
+            self._retry_after = remaining
+
+    @callback
+    def _schedule_refresh(self) -> None:
+        holding = self._retry_after is not None
+        super()._schedule_refresh()
+        if holding or not getattr(self, "_update_interval_seconds", None):
+            return
+        self._next_full_refresh_at = self.hass.loop.time() + self._update_interval_seconds
 
     def _skip_healthy(self, api_key: str) -> bool:
         """5분 재시도에서는 직전에 일시 오류가 난 API만 다시 호출한다."""
@@ -562,6 +604,11 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
                     for kw in keywords
                 )
             ]
+
+        if self._retry_keys is not None:
+            for api_key, stale_key in _STALE_FOR_API.items():
+                if api_key not in self._retry_keys:
+                    refresh_meta[stale_key] = self._refresh_meta.get(stale_key, False)
 
         data["api_status"] = status
         self._record_api_status(status)
