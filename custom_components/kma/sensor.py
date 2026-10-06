@@ -501,119 +501,43 @@ SENSOR_DESCRIPTIONS += [
 # 허용하므로 MEASUREMENT를 쓰면 런타임 경고가 뜬다(센티널인 360은 파서에서 None 처리).
 # 강수(15분/60분/12시간/오늘) 창은 값이 줄어드는 롤링 창이므로 반드시 MEASUREMENT —
 # TOTAL_INCREASING을 쓰지 않는다(창이 넘어갈 때 음수 급증 + 통계 오염 방지).
+# AWS 센서 16종 스펙: (key, AwsObservation 필드, device_class, 단위, state_class, icon).
+_AWS_SENSOR_SPECS: tuple[
+    tuple[str, str, SensorDeviceClass | None, str | None, SensorStateClass | None, str | None],
+    ...,
+] = (
+    ("aws_observation_time", "observed_at", SensorDeviceClass.TIMESTAMP, None, None, "mdi:clock-outline"),
+    ("aws_temperature", "temperature", SensorDeviceClass.TEMPERATURE, UnitOfTemperature.CELSIUS, SensorStateClass.MEASUREMENT, None),
+    ("aws_humidity", "humidity", SensorDeviceClass.HUMIDITY, PERCENTAGE, SensorStateClass.MEASUREMENT, None),
+    ("aws_dew_point", "dew_point", SensorDeviceClass.TEMPERATURE, UnitOfTemperature.CELSIUS, SensorStateClass.MEASUREMENT, None),
+    ("aws_wind_direction_1m", "wind_dir_1m", SensorDeviceClass.WIND_DIRECTION, DEGREE, SensorStateClass.MEASUREMENT_ANGLE, None),
+    ("aws_wind_speed_1m", "wind_speed_1m", SensorDeviceClass.WIND_SPEED, UnitOfSpeed.METERS_PER_SECOND, SensorStateClass.MEASUREMENT, None),
+    ("aws_gust_direction", "gust_dir", SensorDeviceClass.WIND_DIRECTION, DEGREE, SensorStateClass.MEASUREMENT_ANGLE, None),
+    ("aws_gust_speed", "gust_speed", SensorDeviceClass.WIND_SPEED, UnitOfSpeed.METERS_PER_SECOND, SensorStateClass.MEASUREMENT, None),
+    ("aws_wind_direction_10m", "wind_dir_10m", SensorDeviceClass.WIND_DIRECTION, DEGREE, SensorStateClass.MEASUREMENT_ANGLE, None),
+    ("aws_wind_speed_10m", "wind_speed_10m", SensorDeviceClass.WIND_SPEED, UnitOfSpeed.METERS_PER_SECOND, SensorStateClass.MEASUREMENT, None),
+    ("aws_rain_15m", "rain_15m", SensorDeviceClass.PRECIPITATION, UnitOfLength.MILLIMETERS, SensorStateClass.MEASUREMENT, None),
+    ("aws_rain_60m", "rain_60m", SensorDeviceClass.PRECIPITATION, UnitOfLength.MILLIMETERS, SensorStateClass.MEASUREMENT, None),
+    ("aws_rain_12h", "rain_12h", SensorDeviceClass.PRECIPITATION, UnitOfLength.MILLIMETERS, SensorStateClass.MEASUREMENT, None),
+    ("aws_rain_today", "rain_day", SensorDeviceClass.PRECIPITATION, UnitOfLength.MILLIMETERS, SensorStateClass.MEASUREMENT, None),
+    ("aws_pressure", "pressure", SensorDeviceClass.PRESSURE, UnitOfPressure.HPA, SensorStateClass.MEASUREMENT, None),
+    ("aws_sea_level_pressure", "sea_level_pressure", SensorDeviceClass.PRESSURE, UnitOfPressure.HPA, SensorStateClass.MEASUREMENT, None),
+)
+
 AWS_SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     SensorEntityDescription(
-        key="aws_observation_time",
-        translation_key="aws_observation_time",
-        device_class=SensorDeviceClass.TIMESTAMP,
-        icon="mdi:clock-outline",
-    ),
-    SensorEntityDescription(
-        key="aws_temperature",
-        translation_key="aws_temperature",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_humidity",
-        translation_key="aws_humidity",
-        device_class=SensorDeviceClass.HUMIDITY,
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_dew_point",
-        translation_key="aws_dew_point",
-        device_class=SensorDeviceClass.TEMPERATURE,
-        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_wind_direction_1m",
-        translation_key="aws_wind_direction_1m",
-        device_class=SensorDeviceClass.WIND_DIRECTION,
-        native_unit_of_measurement=DEGREE,
-        state_class=SensorStateClass.MEASUREMENT_ANGLE,
-    ),
-    SensorEntityDescription(
-        key="aws_wind_speed_1m",
-        translation_key="aws_wind_speed_1m",
-        device_class=SensorDeviceClass.WIND_SPEED,
-        native_unit_of_measurement=UnitOfSpeed.METERS_PER_SECOND,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_gust_direction",
-        translation_key="aws_gust_direction",
-        device_class=SensorDeviceClass.WIND_DIRECTION,
-        native_unit_of_measurement=DEGREE,
-        state_class=SensorStateClass.MEASUREMENT_ANGLE,
-    ),
-    SensorEntityDescription(
-        key="aws_gust_speed",
-        translation_key="aws_gust_speed",
-        device_class=SensorDeviceClass.WIND_SPEED,
-        native_unit_of_measurement=UnitOfSpeed.METERS_PER_SECOND,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_wind_direction_10m",
-        translation_key="aws_wind_direction_10m",
-        device_class=SensorDeviceClass.WIND_DIRECTION,
-        native_unit_of_measurement=DEGREE,
-        state_class=SensorStateClass.MEASUREMENT_ANGLE,
-    ),
-    SensorEntityDescription(
-        key="aws_wind_speed_10m",
-        translation_key="aws_wind_speed_10m",
-        device_class=SensorDeviceClass.WIND_SPEED,
-        native_unit_of_measurement=UnitOfSpeed.METERS_PER_SECOND,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_rain_15m",
-        translation_key="aws_rain_15m",
-        device_class=SensorDeviceClass.PRECIPITATION,
-        native_unit_of_measurement=UnitOfLength.MILLIMETERS,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_rain_60m",
-        translation_key="aws_rain_60m",
-        device_class=SensorDeviceClass.PRECIPITATION,
-        native_unit_of_measurement=UnitOfLength.MILLIMETERS,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_rain_12h",
-        translation_key="aws_rain_12h",
-        device_class=SensorDeviceClass.PRECIPITATION,
-        native_unit_of_measurement=UnitOfLength.MILLIMETERS,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_rain_today",
-        translation_key="aws_rain_today",
-        device_class=SensorDeviceClass.PRECIPITATION,
-        native_unit_of_measurement=UnitOfLength.MILLIMETERS,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_pressure",
-        translation_key="aws_pressure",
-        device_class=SensorDeviceClass.PRESSURE,
-        native_unit_of_measurement=UnitOfPressure.HPA,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    SensorEntityDescription(
-        key="aws_sea_level_pressure",
-        translation_key="aws_sea_level_pressure",
-        device_class=SensorDeviceClass.PRESSURE,
-        native_unit_of_measurement=UnitOfPressure.HPA,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
+        key=key,
+        translation_key=key,
+        device_class=device_class,
+        native_unit_of_measurement=unit,
+        state_class=state_class,
+        icon=icon,
+    )
+    for key, _field, device_class, unit, state_class, icon in _AWS_SENSOR_SPECS
 ]
+
+# key -> AwsObservation 필드. KmaAwsSensor.native_value 가 이 매핑만 참조한다.
+AWS_VALUE_ATTRS: dict[str, str] = {key: field for key, field, *_ in _AWS_SENSOR_SPECS}
 
 
 def _resolve_bulletin_section_key(key: str) -> tuple[str, int, int] | None:
@@ -1711,27 +1635,6 @@ class KmaApiErrorCountSensor(
         }
 
 
-# AWS 센서 키 -> AwsObservation 필드 매핑. 16개 센서가 모두 여기서 한 번에 정의되므로
-# 새 센서를 넣을 때 native_value 분기를 새로 만들 필요가 없다.
-AWS_VALUE_ATTRS: dict[str, str] = {
-    "aws_temperature": "temperature",
-    "aws_humidity": "humidity",
-    "aws_dew_point": "dew_point",
-    "aws_wind_direction_1m": "wind_dir_1m",
-    "aws_wind_speed_1m": "wind_speed_1m",
-    "aws_gust_direction": "gust_dir",
-    "aws_gust_speed": "gust_speed",
-    "aws_wind_direction_10m": "wind_dir_10m",
-    "aws_wind_speed_10m": "wind_speed_10m",
-    "aws_rain_15m": "rain_15m",
-    "aws_rain_60m": "rain_60m",
-    "aws_rain_12h": "rain_12h",
-    "aws_rain_today": "rain_day",
-    "aws_pressure": "pressure",
-    "aws_sea_level_pressure": "sea_level_pressure",
-}
-
-
 class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
     """AWS(관측소 1분 자료) 센서. `aws_station_id`가 설정된 Zone 전용.
 
@@ -1777,13 +1680,7 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
         obs = self._observation
         if obs is None:
             return None
-        key = self.entity_description.key
-        if key == "aws_observation_time":
-            return obs.observed_at
-        field = AWS_VALUE_ATTRS.get(key)
-        if field is None:
-            return None
-        return getattr(obs, field)
+        return getattr(obs, AWS_VALUE_ATTRS[self.entity_description.key])
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

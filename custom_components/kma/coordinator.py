@@ -796,11 +796,10 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     예보 코디네이터(KmaForecastCoordinator)와 완전히 분리되어, AWS의 실패/정체가
     예보 갱신 결과를 실패시키지 않는다. 자동 폴링 주기는 예보 scan_interval
-    (5~180분)을 상속하지 않고 301초 고정이다(요청 가드 300초보다 1초 길게 —
-    HA의 int(loop.time()) 절삭+지터 때문에 정확히 300초면 가드를 비껴가 폴링을
-    건너뛸 수 있다). 실제 네트워크 시도는 성공·실패·수동 갱신을 모두 포함해
-    300초에 한 번을 넘기지 않는다(마지막 "시도" 기준 — 마지막 "성공" 시각과는
-    별도로 추적한다).
+    (5~180분)을 상속하지 않고 `AWS_POLL_INTERVAL_SECONDS`(301초) 고정이며(여유의
+    근거는 const.py 주석 참고), 실제 네트워크 시도는 성공·실패·수동 갱신을 모두
+    포함해 300초에 한 번을 넘기지 않는다(마지막 "시도" 기준 — 마지막 "성공"
+    시각과는 별도로 추적).
 
     상태는 data의 `status`로만 다루며 기존 API_STATUS_* 목록에는 넣지 않는다
     (AWS 미설정 Zone에 항상 꺼진 활용신청/에러 진단 엔티티가 생기지 않도록).
@@ -832,11 +831,6 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # 신선도 만료콜백(관측시각+15분) — 언로드/비활성화 시 반드시 취소되어야 한다.
         self._expiry_unsub: Callable[[], None] | None = None
         self._expiry_at: datetime.datetime | None = None
-        # 실제 DataUpdateCoordinator.__init__도 같은 값을 설정하지만, 단위 테스트가
-        # 모의 기반으로 초기화할 때도 self.data/last_update_success가 존재하도록
-        # super() 이전에 명시적으로 둔다.
-        self.data: dict[str, Any] | None = None
-        self.last_update_success = True
         super().__init__(
             hass,
             _LOGGER,

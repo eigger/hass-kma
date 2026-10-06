@@ -11,6 +11,7 @@ homeassistant 패키지는 전부 모의 모듈로 대체한다. 모의를 키�
   `__init_subclass__`가 `domain` 키워드를 받아야 한다.
 * `native_unit_of_measurement` 같은 상수를 실제 문자열로 두어야 센서 단위를 검증할 수 있다.
 """
+import datetime
 import sys
 from types import ModuleType
 from typing import Any
@@ -32,6 +33,9 @@ class _MockBase:
             self.hass = args[0]
         self._shutdown_requested = False
         self._listeners: dict = {}
+        # 실제 HA DataUpdateCoordinator 가 __init__ 에서 두는 기본값.
+        self.data = None
+        self.last_update_success = True
 
     def __class_getitem__(cls, item):
         return cls
@@ -402,3 +406,33 @@ sys.modules["homeassistant"].config_entries = _mock_ha_config_entries
 # `from homeassistant import config_entries` 는 속성 조회로 풀리므로 명시적으로 연결한다.
 sys.modules["homeassistant"].core = sys.modules["homeassistant.core"]
 sys.modules["homeassistant.core"].callback = _callback
+
+
+def make_aws_observation(**overrides):
+    """AWS 테스트 공용 합성 관측 1건. 각 테스트는 기대값을 독립적으로 검증한다."""
+    from custom_components.kma.api import AwsObservation
+
+    kst = datetime.timezone(datetime.timedelta(hours=9))
+    values = dict(
+        stn="108",
+        tm="202607031431",
+        observed_at=datetime.datetime(2026, 7, 3, 14, 31, tzinfo=kst),
+        wind_dir_1m=225.0,
+        wind_speed_1m=1.8,
+        gust_dir=180.0,
+        gust_speed=6.2,
+        wind_dir_10m=190.0,
+        wind_speed_10m=2.4,
+        temperature=23.1,
+        rain_flag=0,
+        rain_15m=0.5,
+        rain_60m=2.0,
+        rain_12h=8.5,
+        rain_day=14.0,
+        humidity=71.0,
+        pressure=1013.4,
+        sea_level_pressure=1015.8,
+        dew_point=17.7,
+    )
+    values.update(overrides)
+    return AwsObservation(**values)

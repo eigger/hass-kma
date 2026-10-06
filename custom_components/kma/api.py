@@ -1947,24 +1947,19 @@ class KmaApiClient:
 
     # -- AWS 관측소 1분 자료 -------------------------------------------------
 
-    async def async_get_aws_observation(
-        self, *, stn: int, tm1: str | None = None, tm2: str | None = None
-    ) -> AwsObservation:
+    async def async_get_aws_observation(self, *, stn: int) -> AwsObservation:
         """AWS 관측소 1분 자료 조회 (nph-aws2_min, disp=1, help=0).
 
-        tm2는 기본적으로 현재 KST 시각이고 tm1은 tm2에서 10분을 뺀 시각이다
-        (최신 분 자료의 게시 지연을 감안한 조회 창). stn은 1개 지점만 요청한다.
-
-        응답 마커가 없거나(stanby/오류 본문) 요청 지점의 유효 행이 없으면
-        KmaApiError를 발생시킨다 — 빈 응답을 "관측 0"으로 넘기지 않기 위해서다.
+        조회 창은 현재 KST 시각(tm2)과 그 10분 전(tm1)이다 — 최신 분 자료의 게시
+        지연을 감안한 창이며 stn은 1개 지점만 요청한다. 응답 마커가 없거나
+        (stanby/오류 본문) 요청 지점의 유효 행이 없으면 KmaApiError를 발생시킨다
+        — 빈 응답을 "관측 0"으로 넘기지 않기 위해서다.
         """
-        if tm2 is None:
-            tm2 = _now_kst().strftime("%Y%m%d%H%M")
-        if tm1 is None:
-            base = datetime.datetime.strptime(tm2, "%Y%m%d%H%M")  # noqa: DTZ007
-            tm1 = (base - datetime.timedelta(minutes=AWS_REQUEST_WINDOW_MINUTES)).strftime(
-                "%Y%m%d%H%M"
-            )
+        tm2 = _now_kst().strftime("%Y%m%d%H%M")
+        base = datetime.datetime.strptime(tm2, "%Y%m%d%H%M")  # noqa: DTZ007
+        tm1 = (base - datetime.timedelta(minutes=AWS_REQUEST_WINDOW_MINUTES)).strftime(
+            "%Y%m%d%H%M"
+        )
         text = await self._request(
             AWS_ENDPOINT,
             {"tm1": tm1, "tm2": tm2, "stn": stn, "disp": 1, "help": 0},

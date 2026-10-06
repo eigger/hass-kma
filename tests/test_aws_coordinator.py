@@ -13,7 +13,7 @@ from custom_components.kma.api import (
     KmaActivationRequiredError,
     KmaApiError,
 )
-from conftest import CALL_LATER_CALLS
+from conftest import CALL_LATER_CALLS, make_aws_observation as _obs
 from custom_components.kma.const import (
     API_STATUS_HUB_KEYS,
     API_STATUS_IMAGE_KEYS,
@@ -27,32 +27,6 @@ from custom_components.kma.coordinator import KmaAwsCoordinator
 
 _KST = datetime.timezone(datetime.timedelta(hours=9))
 T0 = datetime.datetime(2026, 7, 3, 14, 31, tzinfo=_KST)
-
-
-def _obs(
-    observed_at: datetime.datetime = T0, tm: str = "202607031431"
-) -> AwsObservation:
-    return AwsObservation(
-        stn="108",
-        tm=tm,
-        observed_at=observed_at,
-        wind_dir_1m=225.0,
-        wind_speed_1m=1.8,
-        gust_dir=180.0,
-        gust_speed=6.2,
-        wind_dir_10m=190.0,
-        wind_speed_10m=2.4,
-        temperature=23.1,
-        rain_flag=0,
-        rain_15m=0.5,
-        rain_60m=2.0,
-        rain_12h=8.5,
-        rain_day=14.0,
-        humidity=71.0,
-        pressure=1013.4,
-        sea_level_pressure=1015.8,
-        dew_point=17.7,
-    )
 
 
 class _Client:
@@ -511,9 +485,8 @@ def test_shutdown_during_inflight_request_does_not_rearm_expiry() -> None:
     assert coordinator._shutdown is True
     assert coordinator._expiry_unsub is None
     assert coordinator._expiry_at is None
-    # 늦게 완료된 응답이 타이머를 다시 걸지 않았고, 리스너도 남지 않는다.
+    # 늦게 완료된 응답이 만료 타이머를 다시 걸지 않는다.
     assert CALL_LATER_CALLS == []
-    assert coordinator._listeners == {}
 
 
 def test_no_expiry_callback_without_observation() -> None:

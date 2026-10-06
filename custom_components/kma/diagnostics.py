@@ -1,12 +1,14 @@
 """KMA 통합 구성요소 진단 정보."""
 from __future__ import annotations
 
+from dataclasses import fields as dataclass_fields
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
+from .api import AwsObservation
 from .const import API_STATUS_HUB_KEYS, API_STATUS_IMAGE_KEYS, DOMAIN
 from .coordinator import (
     KmaAwsCoordinator,
@@ -17,6 +19,13 @@ from .coordinator import (
 from .helpers import redact_auth_key
 
 REDACT_KEYS = ("auth_key", "authKey")
+
+# 진단 observation 스키마: stn/tm/observed_at 은 따로 다루고 내부 rain_flag 는 노출하지 않는다.
+_AWS_OBSERVATION_DIAG_FIELDS = tuple(
+    field.name
+    for field in dataclass_fields(AwsObservation)
+    if field.name not in ("stn", "tm", "observed_at", "rain_flag")
+)
 
 
 def _image_diagnostics(coordinator: KmaImageCoordinator) -> dict[str, Any]:
@@ -123,33 +132,20 @@ def _aws_diagnostics(
     data = coordinator.data or {}
     obs = coordinator.aws_observation
     last_error = data.get("last_error")
+    observation = None
+    if obs is not None:
+        observation = {
+            "stn": obs.stn,
+            "tm": obs.tm,
+            "observed_at": obs.observed_at.isoformat(),
+            **{name: getattr(obs, name) for name in _AWS_OBSERVATION_DIAG_FIELDS},
+        }
     return {
         "subentry_id": subentry_id,
         "station_id": coordinator.aws_station_id,
         "status": redact_auth_key(coordinator.aws_status),
         "observation_fresh": coordinator.aws_observation_fresh,
-        "observation": None
-        if obs is None
-        else {
-            "stn": obs.stn,
-            "tm": obs.tm,
-            "observed_at": obs.observed_at.isoformat(),
-            "temperature": obs.temperature,
-            "humidity": obs.humidity,
-            "dew_point": obs.dew_point,
-            "wind_dir_1m": obs.wind_dir_1m,
-            "wind_speed_1m": obs.wind_speed_1m,
-            "gust_dir": obs.gust_dir,
-            "gust_speed": obs.gust_speed,
-            "wind_dir_10m": obs.wind_dir_10m,
-            "wind_speed_10m": obs.wind_speed_10m,
-            "rain_15m": obs.rain_15m,
-            "rain_60m": obs.rain_60m,
-            "rain_12h": obs.rain_12h,
-            "rain_day": obs.rain_day,
-            "pressure": obs.pressure,
-            "sea_level_pressure": obs.sea_level_pressure,
-        },
+        "observation": observation,
         "last_attempt": (
             dt_util.as_local(data["last_attempt"]).isoformat()
             if data.get("last_attempt") is not None

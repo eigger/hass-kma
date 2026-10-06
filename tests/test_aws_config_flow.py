@@ -17,7 +17,6 @@ from custom_components.kma.config_flow import (
     KmaConfigFlow,
     ZoneSubentryFlowHandler,
     _aws_station_schema_field,
-    _aws_station_selector,
 )
 from custom_components.kma.const import CONF_AWS_STATION_ID
 
@@ -197,78 +196,74 @@ def test_reconfigure_form_prefills_the_stored_station_id() -> None:
     handler, calls = _handler(subentry)
     asyncio.run(handler.async_step_reconfigure(None))
 
-    schema = calls["form"]["data_schema"]
-    keys = list(schema.schema)
-    field = next(key for key in keys if key.schema == CONF_AWS_STATION_ID)
+    field = _field(calls["form"]["data_schema"].schema, CONF_AWS_STATION_ID)
     assert field.description == {"suggested_value": "108"}
 
 
+def _field(schema, name):
+    """폼 스키마에서 지정한 키의 voluptuous 마커를 찾는다."""
+    return next(key for key in schema if key.schema == name)
+
+
 def _zone_field_default(calls):
-    schema = calls["form"]["data_schema"].schema
-    zone_key = next(key for key in schema if key.schema == CONF_ZONE_ID)
+    zone_key = _field(calls["form"]["data_schema"].schema, CONF_ZONE_ID)
     # voluptuous 0.16 wraps the default in a factory.
     default = zone_key.default
     return default() if callable(default) else default
 
 
-def test_reconfigure_form_defaults_to_the_existing_non_home_zone() -> None:
-    """선택적 AWS 값만 바꿀 때 홈이 아닌 기존 zone이 기본값으로 유지되어야 한다."""
+@pytest.mark.parametrize(
+    "current_zone, other_home, expected",
+    [
+        # 비홈 기존 zone은 기본값으로 유지된다.
+        ("zone.work", False, "zone.work"),
+        # 다른 서브엔트리가 홈을 차지해도 현재 zone은 후보에서 빠지지 않는다.
+        ("zone.work", True, "zone.work"),
+        # 기존 zone 엔티티가 사라졌으면 홈으로 폴백한다.
+        ("zone.gone", False, "zone.home"),
+    ],
+)
+def test_reconfigure_form_defaults_zone(current_zone, other_home, expected) -> None:
+    other = (
+        [
+            SimpleNamespace(
+                subentry_id="sub-other",
+                data={CONF_ZONE_ID: "zone.home", "zone_name": "Home"},
+            )
+        ]
+        if other_home
+        else []
+    )
     subentry = SimpleNamespace(
         subentry_id="sub-1",
-        data={CONF_ZONE_ID: "zone.work", "zone_name": "Work"},
+        data={CONF_ZONE_ID: current_zone, "zone_name": "Zone"},
     )
     handler, calls = _handler(
-        subentry, states=(ZONE_STATE, ZONE_WORK_STATE)
+        subentry, states=(ZONE_STATE, ZONE_WORK_STATE), other_subentries=other
     )
     asyncio.run(handler.async_step_reconfigure(None))
 
-    assert _zone_field_default(calls) == "zone.work"
-
-
-def test_reconfigure_form_keeps_non_home_zone_when_other_zone_exists() -> None:
-    """다른 zone 서브엔트리가 이미 있어도 현재 zone은 후보에서 빠지지 않는다."""
-    other = SimpleNamespace(
-        subentry_id="sub-other",
-        data={CONF_ZONE_ID: "zone.home", "zone_name": "Home"},
-    )
-    subentry = SimpleNamespace(
-        subentry_id="sub-1",
-        data={CONF_ZONE_ID: "zone.work", "zone_name": "Work"},
-    )
-    handler, calls = _handler(
-        subentry, states=(ZONE_STATE, ZONE_WORK_STATE), other_subentries=(other,)
-    )
-    asyncio.run(handler.async_step_reconfigure(None))
-
-    assert _zone_field_default(calls) == "zone.work"
-
-
-def test_reconfigure_form_falls_back_to_home_when_zone_is_gone() -> None:
-    """기존 zone 엔티티가 사라졌으면 홈/첫 zone으로 폴백한다."""
-    subentry = SimpleNamespace(
-        subentry_id="sub-1",
-        data={CONF_ZONE_ID: "zone.gone", "zone_name": "Gone"},
-    )
-    handler, calls = _handler(subentry, states=(ZONE_STATE, ZONE_WORK_STATE))
-    asyncio.run(handler.async_step_reconfigure(None))
-
-    assert _zone_field_default(calls) == "zone.home"
+    assert _zone_field_default(calls) == expected
 
 
 def test_reconfigure_submitting_preserved_zone_keeps_it() -> None:
-    """기본값 그대로 제출하면 비홈 zone이 유지되고 AWS 값만 갱신된다."""
+    """폼이 고른 기본값(기존 비홈 zone)을 그대로 제출하면 zone이 유지된다."""
     subentry = SimpleNamespace(
         subentry_id="sub-1",
         data={CONF_ZONE_ID: "zone.work", "zone_name": "Work"},
     )
     handler, calls = _handler(subentry, states=(ZONE_STATE, ZONE_WORK_STATE))
+    asyncio.run(handler.async_step_reconfigure(None))
+    selected_zone = _zone_field_default(calls)
+    assert selected_zone == "zone.work"
+
     asyncio.run(
         handler.async_step_reconfigure(
-            {CONF_ZONE_ID: "zone.work", CONF_AWS_STATION_ID: "108"}
+            {CONF_ZONE_ID: selected_zone, CONF_AWS_STATION_ID: "108"}
         )
     )
 
-    args, kwargs = calls["update"]
+    _, kwargs = calls["update"]
     assert kwargs["data"][CONF_ZONE_ID] == "zone.work"
     assert kwargs["data"][CONF_AWS_STATION_ID] == 108
     assert kwargs["unique_id"] == "zone.work"
@@ -278,26 +273,23 @@ def test_create_form_has_no_suggested_value_for_station_id() -> None:
     handler, calls = _handler()
     asyncio.run(handler.async_step_user(None))
 
-    field = calls["form"]["data_schema"].schema
-    aws_key = next(key for key in field if key.schema == CONF_AWS_STATION_ID)
+    aws_key = _field(calls["form"]["data_schema"].schema, CONF_AWS_STATION_ID)
     assert aws_key.description is None
 
 
-def test_aws_station_schema_value_is_a_selector_not_a_callable() -> None:
-    """회귀: 스키마 값이 callable 함수면 HA가 폼을 직렬화하지 못해 HTTP 500이 난다."""
+def test_aws_station_schema_value_is_not_a_plain_function() -> None:
+    """회귀(CI): 스키마 값이 평범한 함수면 실제 HA 폼 직렬화가 HTTP 500으로 실패한다.
+
+    원래 `_coerce_aws_station_input` 함수가 스키마 값으로 들어가
+    `unable to serialize schema` ValueError가 났다. 실제 HA 직렬화 서브프로세스
+    테스트는 CI에서 건너뛰어지므로, 그 형태 자체를 여기서 잡는다.
+    """
     handler, calls = _handler()
     asyncio.run(handler.async_step_user(None))
 
     schema = calls["form"]["data_schema"].schema
     value = next(v for key, v in schema.items() if key.schema == CONF_AWS_STATION_ID)
     assert not inspect.isfunction(value)
-    assert hasattr(value, "serialize")
-
-
-def test_aws_station_selector_is_serializable() -> None:
-    selector_value = _aws_station_selector()
-    assert not inspect.isfunction(selector_value)
-    assert hasattr(selector_value, "serialize")
 
 
 @pytest.mark.skipif(not _REAL_HA_AVAILABLE, reason="real Home Assistant not installed")

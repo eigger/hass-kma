@@ -10,9 +10,9 @@ import pytest
 
 from custom_components.kma.api import AwsObservation
 from custom_components.kma.const import DOMAIN
+from conftest import make_aws_observation as _obs
 from custom_components.kma.sensor import (
     AWS_SENSOR_DESCRIPTIONS,
-    AWS_VALUE_ATTRS,
     KmaAwsSensor,
     async_setup_entry,
 )
@@ -38,32 +38,6 @@ EXPECTED_KEYS = [
     "aws_pressure",
     "aws_sea_level_pressure",
 ]
-
-
-def _obs(**overrides) -> AwsObservation:
-    values = dict(
-        stn="108",
-        tm="202607031431",
-        observed_at=OBSERVED_AT,
-        wind_dir_1m=225.0,
-        wind_speed_1m=1.8,
-        gust_dir=180.0,
-        gust_speed=6.2,
-        wind_dir_10m=190.0,
-        wind_speed_10m=2.4,
-        temperature=23.1,
-        rain_flag=0,
-        rain_15m=0.5,
-        rain_60m=2.0,
-        rain_12h=8.5,
-        rain_day=14.0,
-        humidity=71.0,
-        pressure=1013.4,
-        sea_level_pressure=1015.8,
-        dew_point=17.7,
-    )
-    values.update(overrides)
-    return AwsObservation(**values)
 
 
 def _coordinator(
@@ -149,14 +123,22 @@ def test_wind_direction_uses_measurement_angle_state_class() -> None:
 
 
 def test_all_numeric_sensors_are_measurement_except_directions() -> None:
-    direction_keys = {
-        "aws_wind_direction_1m",
-        "aws_gust_direction",
-        "aws_wind_direction_10m",
-    }
-    for key in AWS_VALUE_ATTRS:
-        if key in direction_keys:
-            continue
+    # 방향(measurement_angle)과 관측 시각(timestamp)을 뺀 나머지는 measurement.
+    numeric_keys = [
+        "aws_temperature",
+        "aws_humidity",
+        "aws_dew_point",
+        "aws_wind_speed_1m",
+        "aws_gust_speed",
+        "aws_wind_speed_10m",
+        "aws_rain_15m",
+        "aws_rain_60m",
+        "aws_rain_12h",
+        "aws_rain_today",
+        "aws_pressure",
+        "aws_sea_level_pressure",
+    ]
+    for key in numeric_keys:
         assert _by_key(key).state_class == "measurement", key
 
 
