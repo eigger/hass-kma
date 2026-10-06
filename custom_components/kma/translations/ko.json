@@ -26,21 +26,24 @@
       "step": {
         "user": {
           "title": "지역(Zone) 추가",
-          "description": "날씨·특보를 추적할 Home Assistant 지역(Zone)을 선택하십시오.",
+          "description": "날씨·특보를 추적할 Home Assistant 지역(Zone)을 선택하십시오.\n\n**선택:** AWS 관측소 번호(양의 정수)를 입력하면 해당 관측소의 1분 자료 센서가 추가됩니다. 비워두면 AWS 센서를 만들지 않습니다.",
           "data": {
-            "zone_id": "지역 (Zone)"
+            "zone_id": "지역 (Zone)",
+            "aws_station_id": "AWS 관측소 번호"
           }
         },
         "reconfigure": {
           "title": "지역(Zone) 재구성",
-          "description": "다른 Home Assistant 지역(Zone)을 선택하십시오.",
+          "description": "다른 Home Assistant 지역(Zone)을 선택하십시오.\n\n**선택:** AWS 관측소 번호(양의 정수)를 입력하면 1분 자료 센서가 활성화됩니다. 비워두면 AWS 센서가 비활성화됩니다.",
           "data": {
-            "zone_id": "지역 (Zone)"
+            "zone_id": "지역 (Zone)",
+            "aws_station_id": "AWS 관측소 번호"
           }
         }
       },
       "error": {
-        "invalid_zone_coords": "선택한 지역의 위/경도 좌표 정보를 읽을 수 없습니다."
+        "invalid_zone_coords": "선택한 지역의 위/경도 좌표 정보를 읽을 수 없습니다.",
+        "invalid_aws_station": "AWS 관측소 번호는 양의 정수여야 합니다. 비워두면 AWS 센서가 비활성화됩니다."
       },
       "abort": {
         "already_configured": "해당 지역은 이미 구성되어 있습니다.",
@@ -512,6 +515,54 @@
       },
       "error_count_typhoon": {
         "name": "태풍정보 API 오류 수"
+      },
+      "aws_observation_time": {
+        "name": "관측 시각"
+      },
+      "aws_temperature": {
+        "name": "기온"
+      },
+      "aws_humidity": {
+        "name": "습도"
+      },
+      "aws_dew_point": {
+        "name": "이슬점 온도"
+      },
+      "aws_wind_direction_1m": {
+        "name": "1분 평균 풍향"
+      },
+      "aws_wind_speed_1m": {
+        "name": "1분 평균 풍속"
+      },
+      "aws_gust_direction": {
+        "name": "돌풍 풍향"
+      },
+      "aws_gust_speed": {
+        "name": "돌풍 풍속"
+      },
+      "aws_wind_direction_10m": {
+        "name": "10분 평균 풍향"
+      },
+      "aws_wind_speed_10m": {
+        "name": "10분 평균 풍속"
+      },
+      "aws_rain_15m": {
+        "name": "15분 강수량"
+      },
+      "aws_rain_60m": {
+        "name": "60분 강수량"
+      },
+      "aws_rain_12h": {
+        "name": "12시간 강수량"
+      },
+      "aws_rain_today": {
+        "name": "오늘 강수량"
+      },
+      "aws_pressure": {
+        "name": "현지기압"
+      },
+      "aws_sea_level_pressure": {
+        "name": "해면기압"
       }
     },
     "binary_sensor": {

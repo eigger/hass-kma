@@ -13,10 +13,12 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.const import (
+    DEGREE,
     PERCENTAGE,
     EntityCategory,
     UnitOfDensity,
     UnitOfLength,
+    UnitOfPressure,
     UnitOfSpeed,
     UnitOfTemperature,
 )
@@ -28,7 +30,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .api import VillageForecast, bulletin_section, split_bulletin_sections
+from .api import AwsObservation, VillageForecast, bulletin_section, split_bulletin_sections
 from .const import (
     API_STATUS_HUB_KEYS,
     API_STATUS_IMAGE_KEYS,
@@ -37,6 +39,7 @@ from .const import (
 )
 from .coordinator import (
     CurrentWeather,
+    KmaAwsCoordinator,
     KmaForecastCoordinator,
     KmaHubCoordinator,
     KmaImageCoordinator,
@@ -490,6 +493,129 @@ SENSOR_DESCRIPTIONS += [
 ]
 
 
+# ---------------------------------------------------------------------------
+# AWS(관측소 1분 자료) 센서 — Zone에 aws_station_id가 설정된 경우에만 생성된다.
+# ---------------------------------------------------------------------------
+# 키는 전부 `aws_` 접두어이고 고유ID는 `{subentry_id}_{key}` 로 만든다.
+# 풍향은 HA가 device_class=WIND_DIRECTION에 대해 state_class=MEASUREMENT_ANGLE만
+# 허용하므로 MEASUREMENT를 쓰면 런타임 경고가 뜬다(센티널인 360은 파서에서 None 처리).
+# 강수(15분/60분/12시간/오늘) 창은 값이 줄어드는 롤링 창이므로 반드시 MEASUREMENT —
+# TOTAL_INCREASING을 쓰지 않는다(창이 넘어갈 때 음수 급증 + 통계 오염 방지).
+AWS_SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
+    SensorEntityDescription(
+        key="aws_observation_time",
+        translation_key="aws_observation_time",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        icon="mdi:clock-outline",
+    ),
+    SensorEntityDescription(
+        key="aws_temperature",
+        translation_key="aws_temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_humidity",
+        translation_key="aws_humidity",
+        device_class=SensorDeviceClass.HUMIDITY,
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_dew_point",
+        translation_key="aws_dew_point",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_wind_direction_1m",
+        translation_key="aws_wind_direction_1m",
+        device_class=SensorDeviceClass.WIND_DIRECTION,
+        native_unit_of_measurement=DEGREE,
+        state_class=SensorStateClass.MEASUREMENT_ANGLE,
+    ),
+    SensorEntityDescription(
+        key="aws_wind_speed_1m",
+        translation_key="aws_wind_speed_1m",
+        device_class=SensorDeviceClass.WIND_SPEED,
+        native_unit_of_measurement=UnitOfSpeed.METERS_PER_SECOND,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_gust_direction",
+        translation_key="aws_gust_direction",
+        device_class=SensorDeviceClass.WIND_DIRECTION,
+        native_unit_of_measurement=DEGREE,
+        state_class=SensorStateClass.MEASUREMENT_ANGLE,
+    ),
+    SensorEntityDescription(
+        key="aws_gust_speed",
+        translation_key="aws_gust_speed",
+        device_class=SensorDeviceClass.WIND_SPEED,
+        native_unit_of_measurement=UnitOfSpeed.METERS_PER_SECOND,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_wind_direction_10m",
+        translation_key="aws_wind_direction_10m",
+        device_class=SensorDeviceClass.WIND_DIRECTION,
+        native_unit_of_measurement=DEGREE,
+        state_class=SensorStateClass.MEASUREMENT_ANGLE,
+    ),
+    SensorEntityDescription(
+        key="aws_wind_speed_10m",
+        translation_key="aws_wind_speed_10m",
+        device_class=SensorDeviceClass.WIND_SPEED,
+        native_unit_of_measurement=UnitOfSpeed.METERS_PER_SECOND,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_rain_15m",
+        translation_key="aws_rain_15m",
+        device_class=SensorDeviceClass.PRECIPITATION,
+        native_unit_of_measurement=UnitOfLength.MILLIMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_rain_60m",
+        translation_key="aws_rain_60m",
+        device_class=SensorDeviceClass.PRECIPITATION,
+        native_unit_of_measurement=UnitOfLength.MILLIMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_rain_12h",
+        translation_key="aws_rain_12h",
+        device_class=SensorDeviceClass.PRECIPITATION,
+        native_unit_of_measurement=UnitOfLength.MILLIMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_rain_today",
+        translation_key="aws_rain_today",
+        device_class=SensorDeviceClass.PRECIPITATION,
+        native_unit_of_measurement=UnitOfLength.MILLIMETERS,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_pressure",
+        translation_key="aws_pressure",
+        device_class=SensorDeviceClass.PRESSURE,
+        native_unit_of_measurement=UnitOfPressure.HPA,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    SensorEntityDescription(
+        key="aws_sea_level_pressure",
+        translation_key="aws_sea_level_pressure",
+        device_class=SensorDeviceClass.PRESSURE,
+        native_unit_of_measurement=UnitOfPressure.HPA,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+]
+
+
 def _resolve_bulletin_section_key(key: str) -> tuple[str, int, int] | None:
     """'weather_commentary_section_3' 같은 키를 (기반 bulletin 키, 슬롯, 총 슬롯수)로 분해.
 
@@ -539,6 +665,28 @@ async def async_setup_entry(
                 ),
             ]
         async_add_entities(zone_entities, config_subentry_id=subentry_id)
+
+    # AWS(관측소 1분 자료) 센서 — aws_station_id를 설정한 Zone에만 추가된다.
+    # 별도 코디네이터·별도 디바이스를 쓰므로 기존 Zone 센서의 디바이스 소속/고유ID는
+    # 손대지 않는다. AWS 미설정 Zone에서는 이 블록이 아예 건너뛴다.
+    aws_coordinators: dict[str, KmaAwsCoordinator] = store.get("aws_coordinators") or {}
+    for subentry_id, aws_coordinator in aws_coordinators.items():
+        subentry = entry.subentries[subentry_id]
+        zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
+        aws_device = DeviceInfo(
+            identifiers={(DOMAIN, f"{subentry_id}_aws")},
+            name=f"{zone_name} (AWS)",
+            manufacturer="Korea Meteorological Administration",
+            model="KMA APIhub AWS",
+            via_device_id=store["hub_device_id"],
+        )
+        async_add_entities(
+            [
+                KmaAwsSensor(aws_coordinator, subentry, desc, aws_device)
+                for desc in AWS_SENSOR_DESCRIPTIONS
+            ],
+            config_subentry_id=subentry_id,
+        )
 
     # 허브(통합) 기기: API별 에러 카운트 진단 센서.
     # Zone별 예·특보 API는 대표(첫) Zone 코디네이터, Zone 무관 이미지/허브 데이터
@@ -1560,4 +1708,91 @@ class KmaApiErrorCountSensor(
                 dt_util.as_local(last_time).isoformat() if last_time is not None else None
             ),
             "current_status": self.coordinator.api_status.get(self._api_key, "unknown"),
+        }
+
+
+# AWS 센서 키 -> AwsObservation 필드 매핑. 16개 센서가 모두 여기서 한 번에 정의되므로
+# 새 센서를 넣을 때 native_value 분기를 새로 만들 필요가 없다.
+AWS_VALUE_ATTRS: dict[str, str] = {
+    "aws_temperature": "temperature",
+    "aws_humidity": "humidity",
+    "aws_dew_point": "dew_point",
+    "aws_wind_direction_1m": "wind_dir_1m",
+    "aws_wind_speed_1m": "wind_speed_1m",
+    "aws_gust_direction": "gust_dir",
+    "aws_gust_speed": "gust_speed",
+    "aws_wind_direction_10m": "wind_dir_10m",
+    "aws_wind_speed_10m": "wind_speed_10m",
+    "aws_rain_15m": "rain_15m",
+    "aws_rain_60m": "rain_60m",
+    "aws_rain_12h": "rain_12h",
+    "aws_rain_today": "rain_day",
+    "aws_pressure": "pressure",
+    "aws_sea_level_pressure": "sea_level_pressure",
+}
+
+
+class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
+    """AWS(관측소 1분 자료) 센서. `aws_station_id`가 설정된 Zone 전용.
+
+    예보 센서(KmaSensor)와 코디네이터·디바이스·고유ID가 전부 분리되어 있어
+    AWS의 실패/해제가 기존 날씨 엔티티에 영향을 주지 않는다.
+    """
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: KmaAwsCoordinator,
+        subentry: ConfigSubentry,
+        description: SensorEntityDescription,
+        device_info: DeviceInfo,
+    ) -> None:
+        """AWS 센서 초기화. 고유ID는 `{subentry_id}_{aws_key}`."""
+        super().__init__(coordinator)
+        self.entity_description = description
+        self._attr_unique_id = f"{subentry.subentry_id}_{description.key}"
+        self._attr_device_info = device_info
+
+    @property
+    def _observation(self) -> AwsObservation | None:
+        """신선한 관측 스냅샷. 신선하지 않으면(미관측/지나친 지연/미래 시각) None."""
+        coordinator = self.coordinator
+        if not coordinator.aws_observation_fresh:
+            return None
+        return coordinator.aws_observation
+
+    @property
+    def available(self) -> bool:
+        """신선한 관측만 사용 가능. 신선도는 매 평가 시각으로 다시 계산된다.
+
+        API가 계속 실패해도 관측 나이가 15분 미만(미래 5분 허용) 범위를 벗어나는
+        순간 엔티티가 자동으로 unavailable가 된다(오래된 스냅샷을 계속 띄우지 않기 위해).
+        """
+        return super().available and self.coordinator.aws_observation_fresh
+
+    @property
+    def native_value(self) -> Any:
+        """관측값. 관측시각 센서는 KST aware datetime, 나머지는 숫자/None."""
+        obs = self._observation
+        if obs is None:
+            return None
+        key = self.entity_description.key
+        if key == "aws_observation_time":
+            return obs.observed_at
+        field = AWS_VALUE_ATTRS.get(key)
+        if field is None:
+            return None
+        return getattr(obs, field)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """지점번호·관측시각·최근 AWS 상태를 공개 속성으로 노출한다."""
+        obs = self.coordinator.aws_observation
+        data = self.coordinator.data or {}
+        return {
+            "station_id": self.coordinator.aws_station_id,
+            "observation_time": obs.observed_at if obs is not None else None,
+            "status": self.coordinator.aws_status,
+            "error_count": data.get("error_count", 0),
         }

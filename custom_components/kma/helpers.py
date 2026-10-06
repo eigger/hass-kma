@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+import re
+from typing import Any
 
 from .const import (
     AIR_STAGNATION_GRADE_MAP,
@@ -304,6 +306,43 @@ def get_nearest_marine_zone(lat: float, lon: float) -> str:
             nearest_code = code
 
     return nearest_code
+
+
+def parse_aws_station_id(value: Any) -> int | None:
+    """Zone 서브엔트리의 `aws_station_id` 입력값을 양의 정수 지점번호로 정규화.
+
+    공백/None/빈 문자열은 AWS 비활성화(None)를 뜻한다 — 재구성 흐름에서 빈 값이
+    들어오면 기존 설정이 지워지도록 data에 키 자체를 쓰지 않는다.
+
+    반환: 양의 정수(활성화) | None(비활성화)
+    예외: ValueError — 공백이 아닌데 양의 정수가 아닌 값(0, 음수, "abc", "12.5")
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        # bool은 int의 subclass라서 아래 분기에서 1/0으로 통과해 버린다.
+        raise ValueError("aws_station_id must be a positive integer")
+    if isinstance(value, int):
+        number = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            number = int(text, 10)
+        except ValueError:
+            raise ValueError("aws_station_id must be a positive integer") from None
+    if number <= 0:
+        raise ValueError("aws_station_id must be a positive integer")
+    return number
+
+
+_AUTH_KEY_RE = re.compile(r"authKey=[^&\s'\"]*")
+
+
+def redact_auth_key(text: str) -> str:
+    """문자열에 섞인 authKey 값을 마스킹. 로그/진단/상태문구에 공유 전에 사용."""
+    return _AUTH_KEY_RE.sub("authKey=***", text)
 
 
 if __name__ == "__main__":

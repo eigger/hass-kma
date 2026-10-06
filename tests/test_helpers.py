@@ -17,8 +17,10 @@ from custom_components.kma.helpers import (
     get_uv_index_grade,
     haversine_distance,
     latlon_to_grid,
+    parse_aws_station_id,
     parse_pcp,
     parse_sno,
+    redact_auth_key,
 )
 
 
@@ -480,3 +482,48 @@ class TestGetFoodPoisoningGrade:
 
     def test_danger_boundary(self):
         assert get_food_poisoning_grade(86) == "danger"
+
+
+# ---------------------------------------------------------------------------
+# parse_aws_station_id
+# ---------------------------------------------------------------------------
+class TestParseAwsStationId:
+    @pytest.mark.parametrize("value", [108, "108", "  108  ", 1, 159])
+    def test_positive_integers(self, value):
+        assert parse_aws_station_id(value) == int(str(value).strip())
+
+    @pytest.mark.parametrize("value", [None, "", "   "])
+    def test_blank_means_disabled(self, value):
+        assert parse_aws_station_id(value) is None
+
+    @pytest.mark.parametrize("value", [0, -1, "0", "-12", "abc", "12.5", "10.0"])
+    def test_rejects_non_positive_or_non_integer(self, value):
+        with pytest.raises(ValueError):
+            parse_aws_station_id(value)
+
+    @pytest.mark.parametrize("value", [True, False])
+    def test_rejects_bool(self, value):
+        # bool 은 int 의 subclass라 양의 정수로 착각되지 않도록 명시적으로 거부한다.
+        with pytest.raises(ValueError):
+            parse_aws_station_id(value)
+
+
+# ---------------------------------------------------------------------------
+# redact_auth_key
+# ---------------------------------------------------------------------------
+class TestRedactAuthKey:
+    def test_masks_auth_key_value(self):
+        assert redact_auth_key("403 authKey=abcdef123456 rejected") == (
+            "403 authKey=*** rejected"
+        )
+
+    def test_masks_auth_key_in_query_string(self):
+        redacted = redact_auth_key(
+            "GET ...?disp=1&authKey=TOPSECRET&help=0"
+        )
+        assert "TOPSECRET" not in redacted
+        assert "authKey=***" in redacted
+        assert "disp=1" in redacted
+
+    def test_leaves_unrelated_text_alone(self):
+        assert redact_auth_key("활용신청 필요 (403)") == "활용신청 필요 (403)"

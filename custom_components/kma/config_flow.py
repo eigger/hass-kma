@@ -16,11 +16,17 @@ from homeassistant.config_entries import (
     SubentryFlowResult,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import KmaApiClient, KmaApiError, KmaAuthError
-from .const import DOMAIN
-from .helpers import get_nearest_land_zone, get_nearest_marine_zone, latlon_to_grid
+from .const import CONF_AWS_STATION_ID, DOMAIN
+from .helpers import (
+    get_nearest_land_zone,
+    get_nearest_marine_zone,
+    latlon_to_grid,
+    parse_aws_station_id,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -30,6 +36,28 @@ SUBENTRY_TYPE_ZONE = "zone"
 
 # 인증키 발급(회원가입/마이페이지) 페이지
 APIHUB_URL = "https://apihub.kma.go.kr"
+
+
+def _aws_station_selector() -> selector.TextSelector:
+    """`aws_station_id` 입력용 HA 직렬화 가능 selector.
+
+    폼 스키마는 프론트엔드로 JSON 직렬화되므로(HA 2026.9.x), callable 검증기를
+    스키마 값으로 쓰면 `unable to serialize schema` ValueError(HTTP 500)가 난다.
+    따라서 숫자 입력을 유도하는 텍스트 selector만 두고, 실제 검증은 서버에서
+    parse_aws_station_id가 수행한다(빈 값=비활성화, 양의 정수, bool 거부).
+    """
+    return selector.TextSelector(
+        selector.TextSelectorConfig(type=selector.TextSelectorType.NUMBER)
+    )
+
+
+def _aws_station_schema_field(current: Any = None) -> vol.Optional:
+    """`aws_station_id` 스키마 필드. 재구성 시 기존값을 suggested_value로 노출."""
+    if current is None:
+        return vol.Optional(CONF_AWS_STATION_ID)
+    return vol.Optional(
+        CONF_AWS_STATION_ID, description={"suggested_value": str(current)}
+    )
 
 
 def _get_zone_options(
@@ -147,6 +175,16 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
         if user_input is not None:
             zone_id = user_input[CONF_ZONE_ID]
 
+            # AWS 지점번호는 선택 사항이다 — 양의 정수만 허용, 공백/None은 비활성화.
+            # 부모 설정(API 키)에는 영향을 주지 않으므로 미설정 Zone도 그대로 동작한다.
+            aws_station_id: int | None = None
+            try:
+                aws_station_id = parse_aws_station_id(
+                    user_input.get(CONF_AWS_STATION_ID)
+                )
+            except ValueError:
+                errors["base"] = "invalid_aws_station"
+
             zone_state = self.hass.states.get(zone_id)
             if zone_state is None:
                 latitude = self.hass.config.latitude
@@ -158,10 +196,10 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
                 title = zone_state.name or zone_id
 
             if latitude is None or longitude is None:
-                errors["base"] = "invalid_zone_coords"
-            else:
+                errors.setdefault("base", "invalid_zone_coords")
+            elif not errors:
                 nx, ny = latlon_to_grid(latitude, longitude)
-                data = {
+                data: dict[str, Any] = {
                     CONF_ZONE_ID: zone_id,
                     "zone_name": title,
                     "latitude": latitude,
@@ -171,6 +209,9 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
                     "land_reg": get_nearest_land_zone(latitude, longitude),
                     "marine_reg": get_nearest_marine_zone(latitude, longitude),
                 }
+                if aws_station_id is not None:
+                    # 비활성화(None)면 키 자체를 쓰지 않는다 — 기존 설정이 지워진다.
+                    data[CONF_AWS_STATION_ID] = aws_station_id
 
                 if reconfigure:
                     return self.async_update_and_abort(
@@ -187,11 +228,27 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
         if not zone_options:
             return self.async_abort(reason="no_zones_available")
 
-        default_zone = (
-            "zone.home" if "zone.home" in zone_options else next(iter(zone_options))
-        )
+        # 재구성 시에는 기존 서브엔트리의 zone을 기본값으로 유지한다. 그러지 않으면
+        # 선택적 AWS 지점번호만 바꾸려는 사용자가 홈/첫 zone으로 조용히 옮겨진다.
+        default_zone: str | None = None
+        current_aws_station: Any = None
+        if reconfigure:
+            subentry = self._get_reconfigure_subentry()
+            current_zone = subentry.data.get(CONF_ZONE_ID)
+            if current_zone in zone_options:
+                default_zone = current_zone
+            current_aws_station = subentry.data.get(CONF_AWS_STATION_ID)
+        if default_zone is None:
+            default_zone = (
+                "zone.home" if "zone.home" in zone_options else next(iter(zone_options))
+            )
         schema = vol.Schema(
-            {vol.Required(CONF_ZONE_ID, default=default_zone): vol.In(zone_options)}
+            {
+                vol.Required(CONF_ZONE_ID, default=default_zone): vol.In(zone_options),
+                _aws_station_schema_field(current_aws_station): (
+                    _aws_station_selector()
+                ),
+            }
         )
         return self.async_show_form(
             step_id="reconfigure" if reconfigure else "user",

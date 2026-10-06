@@ -8,7 +8,13 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 
 from .const import API_STATUS_HUB_KEYS, API_STATUS_IMAGE_KEYS, DOMAIN
-from .coordinator import KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
+from .coordinator import (
+    KmaAwsCoordinator,
+    KmaForecastCoordinator,
+    KmaHubCoordinator,
+    KmaImageCoordinator,
+)
+from .helpers import redact_auth_key
 
 REDACT_KEYS = ("auth_key", "authKey")
 
@@ -106,6 +112,70 @@ def _zone_diagnostics(
     }
 
 
+def _aws_diagnostics(
+    coordinator: KmaAwsCoordinator, subentry_id: str
+) -> dict[str, Any]:
+    """AWS(관측소 1분 자료) 코디네이터 진단 스냅샷을 구성한다.
+
+    오류 문구·상태 문자열은 authKey= 값을 마스킹한 뒤 내보낸다(진단 파일이 외부로
+    나갈 수 있기 때문). API 응답 본문·요청 URL·API 키는 절대 담지 않는다.
+    """
+    data = coordinator.data or {}
+    obs = coordinator.aws_observation
+    last_error = data.get("last_error")
+    return {
+        "subentry_id": subentry_id,
+        "station_id": coordinator.aws_station_id,
+        "status": redact_auth_key(coordinator.aws_status),
+        "observation_fresh": coordinator.aws_observation_fresh,
+        "observation": None
+        if obs is None
+        else {
+            "stn": obs.stn,
+            "tm": obs.tm,
+            "observed_at": obs.observed_at.isoformat(),
+            "temperature": obs.temperature,
+            "humidity": obs.humidity,
+            "dew_point": obs.dew_point,
+            "wind_dir_1m": obs.wind_dir_1m,
+            "wind_speed_1m": obs.wind_speed_1m,
+            "gust_dir": obs.gust_dir,
+            "gust_speed": obs.gust_speed,
+            "wind_dir_10m": obs.wind_dir_10m,
+            "wind_speed_10m": obs.wind_speed_10m,
+            "rain_15m": obs.rain_15m,
+            "rain_60m": obs.rain_60m,
+            "rain_12h": obs.rain_12h,
+            "rain_day": obs.rain_day,
+            "pressure": obs.pressure,
+            "sea_level_pressure": obs.sea_level_pressure,
+        },
+        "last_attempt": (
+            dt_util.as_local(data["last_attempt"]).isoformat()
+            if data.get("last_attempt") is not None
+            else None
+        ),
+        "last_success": (
+            dt_util.as_local(data["last_success"]).isoformat()
+            if data.get("last_success") is not None
+            else None
+        ),
+        "error_count": data.get("error_count", 0),
+        "last_error": redact_auth_key(last_error) if last_error else None,
+        "last_error_time": (
+            dt_util.as_local(data["last_error_time"]).isoformat()
+            if data.get("last_error_time") is not None
+            else None
+        ),
+        "coordinator": {
+            "last_update_success": coordinator.last_update_success,
+            "last_exception": (
+                str(coordinator.last_exception) if coordinator.last_exception else None
+            ),
+        },
+    }
+
+
 async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
@@ -114,6 +184,7 @@ async def async_get_config_entry_diagnostics(
 
     store = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
     coordinators: dict[str, KmaForecastCoordinator] = store.get("coordinators", {})
+    aws_coordinators: dict[str, KmaAwsCoordinator] = store.get("aws_coordinators", {})
     image_coordinator: KmaImageCoordinator | None = store.get("image_coordinator")
     hub_coordinator: KmaHubCoordinator | None = store.get("hub_coordinator")
 
@@ -125,6 +196,11 @@ async def async_get_config_entry_diagnostics(
         )
         for subentry_id, coordinator in coordinators.items()
     }
+    # AWS는 opt-in이라 미설정 Zone은 애초에 코디네이터 자체가 없다(빈 dict 유지).
+    aws = {
+        subentry_id: _aws_diagnostics(coordinator, subentry_id)
+        for subentry_id, coordinator in aws_coordinators.items()
+    }
 
     return async_redact_data(
         {
@@ -134,6 +210,7 @@ async def async_get_config_entry_diagnostics(
                 "zone_count": len(zones),
             },
             "zones": zones,
+            "aws": aws,
             "images": _image_diagnostics(image_coordinator) if image_coordinator else None,
             "hub": _hub_diagnostics(hub_coordinator) if hub_coordinator else None,
         },

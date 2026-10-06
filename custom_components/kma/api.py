@@ -47,6 +47,7 @@ import asyncio
 import datetime
 import json
 import logging
+import math
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
@@ -57,6 +58,17 @@ import aiohttp
 _LOGGER = logging.getLogger(__name__)
 
 BASE_URL = "https://apihub.kma.go.kr/api/typ01/url"
+# AWS(관측소 1분 자료)는 typ01/url이 아니라 cgi-bin/nph 경로라 BASE_URL을 쓰지 않고
+# 완전 URL로 요청한다(_do_request의 endpoint.startswith("http") 분기).
+AWS_ENDPOINT = "https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-aws2_min"
+# 응답 CSV 컬럼 순서(고정 18개):
+# YYMMDDHHMI STN WD1 WS1 WDS WSS WD10 WS10 TA RE
+# RN-15m RN-60m RN-12H RN-DAY HM PA PS TD
+AWS_COLUMN_COUNT = 18
+# 조회 창: 현재 KST 시각을 끝으로(tm2) 10분 전(tm1) — 최신 분 자료의 게시 지연 대비.
+AWS_REQUEST_WINDOW_MINUTES = 10
+_AWS_START_MARKER = re.compile(r"^#START\d+$")
+_AWS_END_MARKER = re.compile(r"^#\d+END$")
 CONNECT_TIMEOUT = 5
 DEFAULT_TIMEOUT = 10
 REQUEST_CONCURRENCY = 5
@@ -403,6 +415,42 @@ class Pm10HourlyStats:
     max: float | None
 
 
+@dataclass(frozen=True)
+class AwsObservation:
+    """AWS(관측소 1분 자료, nph-aws2_min) 1건. [미실측: 문서/합성 응답 기준 형식]
+
+    원시 18컬럼(쉼표구분, 선택적 트레일링 '=' 토큰):
+    YYMMDDHHMI STN WD1 WS1 WDS WSS WD10 WS10 TA RE
+    RN-15m RN-60m RN-12H RN-DAY HM PA PS TD
+
+    결측 센티널(-99.9 및 대체 -99/-99.0)과 비유한 실수는 모두 None이다.
+    풍향 360(무풍 표기)은 북풍이 아니므로 None으로 두고 풍속은 그대로 둔다.
+    RE(강수감지 플래그)는 원시값만 보관하며 강수 유무/조건을 여기서 유도하지 않는다.
+    압력은 PA(현지기압)와 PS(해면기압) 두 컬럼으로 나뉘며, 두 값 모두 위의 일반
+    결측/비유한 변환을 그대로 적용한다 — 압력 전용 QC 규칙은 따로 두지 않는다.
+    """
+
+    stn: str
+    tm: str                     # 원시 관측시각(문자열, KST)
+    observed_at: datetime.datetime  # KST timezone-aware 관측시각
+    wind_dir_1m: float | None       # WD1 (deg)
+    wind_speed_1m: float | None     # WS1 (m/s)
+    gust_dir: float | None          # WDS (deg)
+    gust_speed: float | None        # WSS (m/s)
+    wind_dir_10m: float | None      # WD10 (deg)
+    wind_speed_10m: float | None    # WS10 (m/s)
+    temperature: float | None       # TA (℃)
+    rain_flag: int | None           # RE (0/1) — 상태 파생에는 사용하지 않음
+    rain_15m: float | None          # RN-15m (mm)
+    rain_60m: float | None          # RN-60m (mm)
+    rain_12h: float | None          # RN-12H (mm)
+    rain_day: float | None          # RN-DAY (mm)
+    humidity: float | None          # HM (%)
+    pressure: float | None          # PA (hPa, 현지기압)
+    sea_level_pressure: float | None  # PS (hPa, 해면기압)
+    dew_point: float | None         # TD (℃)
+
+
 # 하늘상태코드
 SKY_CODES: dict[str, str] = {
     "DB01": "맑음",
@@ -532,6 +580,166 @@ def _parse_pm10_hourly_line(line: str) -> Pm10HourlyStats | None:
     tm, _org, stn, avg_cnt, min_v, max_v = parts[:6]
     avg_str = avg_cnt.split("(")[0]
     return Pm10HourlyStats(stn=stn, tm=tm, avg=_to_float(avg_str), min=_to_float(min_v), max=_to_float(max_v))
+
+
+# ---------------------------------------------------------------------------
+# AWS(관측소 1분 자료) 파서
+# ---------------------------------------------------------------------------
+# 기존 _to_float는 -99/-99.0만 결측으로 본다. AWS는 -99.9를 주 센티널로 쓰므로
+# 별도 변환기를 쓴다(NaN/Inf도 결측 처리, -9.0/-9.9 같은 음수 온도는 보존).
+_AWS_MISSING = (-99.9, -99.0, -99)
+
+
+def _to_aws_float(value: str) -> float | None:
+    """AWS 실수 컬럼 변환. 비유한 수치·결측 센티널(-99.9/-99.0/-99)은 None."""
+    try:
+        num = float(value)
+    except (ValueError, TypeError):
+        return None
+    if not math.isfinite(num):
+        return None
+    if num in _AWS_MISSING:
+        return None
+    return num
+
+
+def _to_wind_dir(value: str) -> float | None:
+    """풍향 컬럼 변환. 360(무풍 표기)은 북풍이 아니므로 None, 0(북)은 보존."""
+    num = _to_aws_float(value)
+    if num is None or num == 360.0:
+        return None
+    return num
+
+
+def _to_aws_flag(value: str) -> int | None:
+    """RE(강수감지 플래그)처럼 정수로 오는 컬럼. 원시값만 보관한다."""
+    num = _to_aws_float(value)
+    if num is None:
+        return None
+    return int(num)
+
+
+def _is_aws_timestamp(token: str) -> bool:
+    """관측시각 토큰이 정확히 12자리 ASCII 숫자(YYYYMMDDHHMM)인지 검사한다.
+
+    strptime 은 11자리처럼 길이가 다른 토큰도 허용하고, 정규식의 \\d 가 유니코드
+    숫자도 매칭하므로 파싱 전에 길이·ASCII·숫자를 명시적으로 확인한다(이상은 행 단위 거절).
+    """
+    return len(token) == 12 and token.isascii() and token.isdigit()
+
+
+def _parse_aws_line(line: str) -> AwsObservation | None:
+    """nph-aws2_min 원시 라인(쉼표구분, 선택적 트레일링 '=') 1건을 파싱.
+
+    컬럼 수가 정확히 18개가 아니거나 관측시각이 12자리 ASCII 숫자/YYYYMMDDHHMM
+    로 해석되지 않는 라인은 구조적으로 무효로 보고 None(행 단위 거절)이다.
+    """
+    parts = [p.strip() for p in line.split(",")]
+    if parts and parts[-1] == "=":
+        parts = parts[:-1]
+    if len(parts) != AWS_COLUMN_COUNT:
+        return None
+    tm = parts[0]
+    if not _is_aws_timestamp(tm):
+        return None
+    try:
+        observed = datetime.datetime.strptime(tm, "%Y%m%d%H%M")  # noqa: DTZ007
+    except ValueError:
+        return None
+    return AwsObservation(
+        stn=parts[1],
+        tm=tm,
+        observed_at=observed.replace(tzinfo=_KST),
+        wind_dir_1m=_to_wind_dir(parts[2]),
+        wind_speed_1m=_to_aws_float(parts[3]),
+        gust_dir=_to_wind_dir(parts[4]),
+        gust_speed=_to_aws_float(parts[5]),
+        wind_dir_10m=_to_wind_dir(parts[6]),
+        wind_speed_10m=_to_aws_float(parts[7]),
+        temperature=_to_aws_float(parts[8]),
+        rain_flag=_to_aws_flag(parts[9]),
+        rain_15m=_to_aws_float(parts[10]),
+        rain_60m=_to_aws_float(parts[11]),
+        rain_12h=_to_aws_float(parts[12]),
+        rain_day=_to_aws_float(parts[13]),
+        humidity=_to_aws_float(parts[14]),
+        pressure=_to_aws_float(parts[15]),
+        sea_level_pressure=_to_aws_float(parts[16]),
+        dew_point=_to_aws_float(parts[17]),
+    )
+
+
+# 실측 판정 대상 컬럼 16개(tm/stn 제외). 한 개라도 값이 있으면 그 행은 실측 행이다.
+_AWS_MEASUREMENT_FIELDS = (
+    "wind_dir_1m",
+    "wind_speed_1m",
+    "gust_dir",
+    "gust_speed",
+    "wind_dir_10m",
+    "wind_speed_10m",
+    "temperature",
+    "rain_flag",
+    "rain_15m",
+    "rain_60m",
+    "rain_12h",
+    "rain_day",
+    "humidity",
+    "pressure",
+    "sea_level_pressure",
+    "dew_point",
+)
+
+
+def aws_row_has_measurement(obs: AwsObservation) -> bool:
+    """16개 측정 컬럼 중 하나라도 실측값이 있으면 True.
+
+    전부 결측 센티널(-99.9 등)인 행은 "실측 0건"이므로 선택 대상에서 제외한다.
+    반대로 0 같은 진짜 실측값이나 일부 컬럼만 결측인 행은 그대로 살린다.
+    """
+    return any(getattr(obs, name) is not None for name in _AWS_MEASUREMENT_FIELDS)
+
+
+def _parse_aws_response(text: str, stn: int | str) -> AwsObservation:
+    """완결된 AWS 응답(#START…#END)에서 요청 지점의 최신 실측 행을 고른다.
+
+    빈 응답·오류 본문·START만 있는 잘린 응답을 "관측 0"으로 위장하지 않도록
+    마커를 엄격히 검사하고, 실측값을 하나도 담지 않은 행은 건너뛰며,
+    실측 행이 하나도 없으면 KmaApiError를 발생시킨다.
+    """
+    lines = text.splitlines()
+    start: int | None = None
+    end: int | None = None
+    for index, raw in enumerate(lines):
+        line = raw.strip()
+        if start is None:
+            if _AWS_START_MARKER.match(line):
+                start = index
+            continue
+        if _AWS_END_MARKER.match(line):
+            end = index
+            break
+    if start is None:
+        raise KmaApiError("aws2_min: 응답에 START 마커가 없습니다")
+    if end is None:
+        raise KmaApiError("aws2_min: 응답에 END 마커가 없습니다(잘린/미완 응답)")
+
+    target = str(stn)
+    newest: AwsObservation | None = None
+    for raw in lines[start + 1:end]:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        obs = _parse_aws_line(line)
+        if obs is None or obs.stn != target:
+            continue
+        if not aws_row_has_measurement(obs):
+            # 전부 미측정 행은 최신이어도 선택하지 않는다(빈 행이 실측을 덮지 않게).
+            continue
+        if newest is None or obs.observed_at > newest.observed_at:
+            newest = obs
+    if newest is None:
+        raise KmaApiError(f"aws2_min: 지점 {target}의 실측 관측 자료가 없습니다")
+    return newest
 
 
 def _parse_station_bulletins_json(text: str) -> list[StationBulletin] | None:
@@ -1736,6 +1944,32 @@ class KmaApiClient:
             if stats is not None and stats.stn == str(stn):
                 return stats
         return None
+
+    # -- AWS 관측소 1분 자료 -------------------------------------------------
+
+    async def async_get_aws_observation(
+        self, *, stn: int, tm1: str | None = None, tm2: str | None = None
+    ) -> AwsObservation:
+        """AWS 관측소 1분 자료 조회 (nph-aws2_min, disp=1, help=0).
+
+        tm2는 기본적으로 현재 KST 시각이고 tm1은 tm2에서 10분을 뺀 시각이다
+        (최신 분 자료의 게시 지연을 감안한 조회 창). stn은 1개 지점만 요청한다.
+
+        응답 마커가 없거나(stanby/오류 본문) 요청 지점의 유효 행이 없으면
+        KmaApiError를 발생시킨다 — 빈 응답을 "관측 0"으로 넘기지 않기 위해서다.
+        """
+        if tm2 is None:
+            tm2 = _now_kst().strftime("%Y%m%d%H%M")
+        if tm1 is None:
+            base = datetime.datetime.strptime(tm2, "%Y%m%d%H%M")  # noqa: DTZ007
+            tm1 = (base - datetime.timedelta(minutes=AWS_REQUEST_WINDOW_MINUTES)).strftime(
+                "%Y%m%d%H%M"
+            )
+        text = await self._request(
+            AWS_ENDPOINT,
+            {"tm1": tm1, "tm2": tm2, "stn": stn, "disp": 1, "help": 0},
+        )
+        return _parse_aws_response(text, stn)
 
     # -- 헬스체크 -----------------------------------------------------------
 

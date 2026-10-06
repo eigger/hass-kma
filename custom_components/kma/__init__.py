@@ -15,8 +15,14 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceEntryType
 
 from .api import KmaApiClient
-from .const import DOMAIN
-from .coordinator import KmaForecastCoordinator, KmaHubCoordinator, KmaImageCoordinator
+from .const import CONF_AWS_STATION_ID, DOMAIN
+from .coordinator import (
+    KmaAwsCoordinator,
+    KmaForecastCoordinator,
+    KmaHubCoordinator,
+    KmaImageCoordinator,
+)
+from .helpers import parse_aws_station_id
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,6 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
 
     coordinators: dict[str, KmaForecastCoordinator] = {}
+    aws_coordinators: dict[str, KmaAwsCoordinator] = {}
     refreshes = []
     for subentry_id, subentry in entry.subentries.items():
         if subentry.subentry_type != SUBENTRY_TYPE_ZONE:
@@ -58,6 +65,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator.hub_device_id = hub_device.id
         coordinators[subentry_id] = coordinator
         refreshes.append(coordinator.async_config_entry_first_refresh())
+
+        # AWS는 opt-in 전용. aws_station_id가 없거나 유효하지 않으면 코디네이터·센서를
+        # 아예 만들지 않으므로 AWS 미설정 Zone의 기존 동작/엔티티는 변하지 않는다.
+        try:
+            aws_station_id = parse_aws_station_id(subentry.data.get(CONF_AWS_STATION_ID))
+        except ValueError:
+            aws_station_id = None
+            _LOGGER.warning(
+                "Zone %s의 aws_station_id가 양의 정수가 아니라 AWS 센서를 비활성화합니다.",
+                subentry_id,
+            )
+        if aws_station_id is not None:
+            aws_coordinator = KmaAwsCoordinator(hass, client, entry, subentry)
+            aws_coordinator.hub_device_id = hub_device.id
+            aws_coordinators[subentry_id] = aws_coordinator
+            refreshes.append(aws_coordinator.async_config_entry_first_refresh())
 
     image_coordinator = KmaImageCoordinator(hass, client, entry)
     image_coordinator.hub_device_id = hub_device.id
@@ -71,6 +94,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
         "coordinators": coordinators,
+        "aws_coordinators": aws_coordinators,
         "image_coordinator": image_coordinator,
         "hub_coordinator": hub_coordinator,
         "hub_device_id": hub_device.id,

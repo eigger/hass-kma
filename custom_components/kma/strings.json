@@ -26,21 +26,24 @@
       "step": {
         "user": {
           "title": "Add a Zone",
-          "description": "Select a Home Assistant Zone to track weather and warnings for.",
+          "description": "Select a Home Assistant Zone to track weather and warnings for.\n\n**Optional:** Enter an AWS station ID (positive integer) to add 1-minute observation sensors for that station. Leave the field empty to skip AWS.",
           "data": {
-            "zone_id": "Zone"
+            "zone_id": "Zone",
+            "aws_station_id": "AWS Station ID"
           }
         },
         "reconfigure": {
           "title": "Reconfigure Zone",
-          "description": "Select a different Home Assistant Zone.",
+          "description": "Select a different Home Assistant Zone.\n\n**Optional:** Enter an AWS station ID (positive integer) to enable 1-minute observation sensors. Clear the field to disable AWS.",
           "data": {
-            "zone_id": "Zone"
+            "zone_id": "Zone",
+            "aws_station_id": "AWS Station ID"
           }
         }
       },
       "error": {
-        "invalid_zone_coords": "Failed to read coordinates from the selected zone."
+        "invalid_zone_coords": "Failed to read coordinates from the selected zone.",
+        "invalid_aws_station": "Enter a positive integer for the AWS station ID, or leave it empty to disable AWS sensors."
       },
       "abort": {
         "already_configured": "This zone is already configured.",
@@ -512,6 +515,54 @@
       },
       "error_count_typhoon": {
         "name": "Typhoon API Error Count"
+      },
+      "aws_observation_time": {
+        "name": "Observation Time"
+      },
+      "aws_temperature": {
+        "name": "Temperature"
+      },
+      "aws_humidity": {
+        "name": "Humidity"
+      },
+      "aws_dew_point": {
+        "name": "Dew Point"
+      },
+      "aws_wind_direction_1m": {
+        "name": "Wind Direction (1 min)"
+      },
+      "aws_wind_speed_1m": {
+        "name": "Wind Speed (1 min)"
+      },
+      "aws_gust_direction": {
+        "name": "Gust Direction"
+      },
+      "aws_gust_speed": {
+        "name": "Gust Speed"
+      },
+      "aws_wind_direction_10m": {
+        "name": "Wind Direction (10 min)"
+      },
+      "aws_wind_speed_10m": {
+        "name": "Wind Speed (10 min)"
+      },
+      "aws_rain_15m": {
+        "name": "Rain (15 min)"
+      },
+      "aws_rain_60m": {
+        "name": "Rain (60 min)"
+      },
+      "aws_rain_12h": {
+        "name": "Rain (12 h)"
+      },
+      "aws_rain_today": {
+        "name": "Rain (Today)"
+      },
+      "aws_pressure": {
+        "name": "Station Pressure"
+      },
+      "aws_sea_level_pressure": {
+        "name": "Sea-Level Pressure"
       }
     },
     "binary_sensor": {
