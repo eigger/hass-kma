@@ -308,13 +308,32 @@ def get_nearest_marine_zone(lat: float, lon: float) -> str:
     return nearest_code
 
 
+def aws_station_key(entry_id: str, station: int) -> str:
+    """AWS 관측소의 안정 식별 키 = 부모 엔트리 ID + 지점번호.
+
+    서브엔트리 ID(ULID)는 삭제/재추가 시 바뀌지만 이 키는 고정이므로, 같은
+    부모 엔트리에 같은 지점번호를 다시 추가하면 디바이스/엔티티 정체성이 재사용된다.
+    부모 엔트리가 다르면 키도 달라 서로 충돌하지 않는다.
+    """
+    return f"{entry_id}_aws_{station}"
+
+
+def aws_station_title(station: int) -> str:
+    """AWS 관측소 서브엔트리/디바이스 표시 이름.
+
+    지점번호를 그대로 노출해 사용자가 어느 관측소인지 바로 알 수 있게 하고,
+    생성되는 엔티티 ID(`sensor.aws_<지점>_<센서>`)도 간결하게 유지한다.
+    """
+    return f"AWS {station}"
+
+
 def parse_aws_station_id(value: Any) -> int | None:
-    """Zone 서브엔트리의 `aws_station_id` 입력값을 양의 정수 지점번호로 정규화.
+    """AWS 지점번호 입력값을 양의 정수로 정규화.
 
-    공백/None/빈 문자열은 AWS 비활성화(None)를 뜻한다 — 재구성 흐름에서 빈 값이
-    들어오면 기존 설정이 지워지도록 data에 키 자체를 쓰지 않는다.
+    공백/None/빈 문자열은 비활성화(None)를 뜻한다(서브엔트리 필드에서는 필수라
+    별도로 거부한다). "0108"이나 앞뒤 공백은 정규화되어 같은 지점번호로 취급된다.
 
-    반환: 양의 정수(활성화) | None(비활성화)
+    반환: 양의 정수 | None(빈 값)
     예외: ValueError — 공백이 아닌데 양의 정수가 아닌 값(0, 음수, "abc", "12.5")
     """
     if value is None:

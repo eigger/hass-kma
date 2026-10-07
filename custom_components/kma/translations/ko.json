@@ -26,24 +26,21 @@
       "step": {
         "user": {
           "title": "지역(Zone) 추가",
-          "description": "날씨·특보를 추적할 Home Assistant 지역(Zone)을 선택하십시오.\n\n**선택:** AWS 관측소 번호(양의 정수)를 입력하면 해당 관측소의 1분 자료 센서가 추가됩니다. 비워두면 AWS 센서를 만들지 않습니다.",
+          "description": "날씨·특보를 추적할 Home Assistant 지역(Zone)을 선택하십시오.",
           "data": {
-            "zone_id": "지역 (Zone)",
-            "aws_station_id": "AWS 관측소 번호"
+            "zone_id": "지역 (Zone)"
           }
         },
         "reconfigure": {
           "title": "지역(Zone) 재구성",
-          "description": "다른 Home Assistant 지역(Zone)을 선택하십시오.\n\n**선택:** AWS 관측소 번호(양의 정수)를 입력하면 1분 자료 센서가 활성화됩니다. 비워두면 AWS 센서가 비활성화됩니다.",
+          "description": "다른 Home Assistant 지역(Zone)을 선택하십시오.",
           "data": {
-            "zone_id": "지역 (Zone)",
-            "aws_station_id": "AWS 관측소 번호"
+            "zone_id": "지역 (Zone)"
           }
         }
       },
       "error": {
-        "invalid_zone_coords": "선택한 지역의 위/경도 좌표 정보를 읽을 수 없습니다.",
-        "invalid_aws_station": "AWS 관측소 번호는 양의 정수여야 합니다. 비워두면 AWS 센서가 비활성화됩니다."
+        "invalid_zone_coords": "선택한 지역의 위/경도 좌표 정보를 읽을 수 없습니다."
       },
       "abort": {
         "already_configured": "해당 지역은 이미 구성되어 있습니다.",
@@ -54,6 +51,28 @@
         "reconfigure": "지역 재구성"
       },
       "entry_type": "지역(Zone)"
+    },
+    "aws_station": {
+      "step": {
+        "user": {
+          "title": "AWS 관측소 추가",
+          "description": "기상청 AWS 관측소 번호(양의 정수)를 입력하십시오. 관측소 목록은 README의 안내 링크를 참고하세요. 센서는 약 5분마다 갱신됩니다.",
+          "data": {
+            "aws_station_id": "AWS 관측소 번호"
+          }
+        }
+      },
+      "error": {
+        "invalid_aws_station": "관측소 번호는 양의 정수여야 합니다.",
+        "already_configured": "이미 추가된 관측소입니다."
+      },
+      "abort": {
+        "already_configured": "이미 추가된 관측소입니다."
+      },
+      "initiate_flow": {
+        "user": "AWS 관측소 추가"
+      },
+      "entry_type": "AWS 관측소"
     }
   },
   "options": {

@@ -41,27 +41,40 @@ EXPECTED_KEYS = [
 
 
 def _coordinator(
-    obs: AwsObservation | None = None, *, fresh: bool = True, status: str = "ok"
+    obs: AwsObservation | None = None,
+    *,
+    fresh: bool = True,
+    status: str = "ok",
+    station: int = 108,
+    entry_id: str = "entry-1",
 ):
     coordinator = MagicMock()
     coordinator.aws_observation = obs
     coordinator.aws_observation_fresh = fresh
     coordinator.aws_status = status
-    coordinator.aws_station_id = 108
+    coordinator.aws_station_id = station
+    coordinator.aws_unique_key = f"{entry_id}_aws_{station}"
     coordinator.last_update_success = True
     coordinator.data = {"error_count": 2}
     return coordinator
 
 
-def _sensor(description, coordinator=None, subentry_id: str = "sub-1") -> KmaAwsSensor:
-    subentry = SimpleNamespace(subentry_id=subentry_id, data={"zone_name": "Home"})
-    device = {(DOMAIN, f"{subentry_id}_aws")}
-    return KmaAwsSensor(
-        coordinator or _coordinator(_obs()),
-        subentry,
-        description,
-        {"identifiers": device},
+def _sensor(description, coordinator=None) -> KmaAwsSensor:
+    coordinator = coordinator or _coordinator(_obs())
+    device = {(DOMAIN, coordinator.aws_unique_key)}
+    return KmaAwsSensor(coordinator, description, {"identifiers": device})
+
+
+def _real_aws_coordinator(*, entry_id: str, station: int, subentry_id: str):
+    """실제 `KmaAwsCoordinator`를 만든다(부모 엔트리/지점/서브엔트리 ID 지정)."""
+    from custom_components.kma.const import CONF_AWS_STATION_ID
+    from custom_components.kma.coordinator import KmaAwsCoordinator
+
+    entry = SimpleNamespace(entry_id=entry_id)
+    subentry = SimpleNamespace(
+        subentry_id=subentry_id, data={CONF_AWS_STATION_ID: station}
     )
+    return KmaAwsCoordinator(MagicMock(), MagicMock(), entry, subentry)
 
 
 def _by_key(key: str):
@@ -144,12 +157,47 @@ def test_all_numeric_sensors_are_measurement_except_directions() -> None:
 
 def test_unique_id_and_device_are_isolated_from_existing_sensors() -> None:
     desc = _by_key("aws_temperature")
-    sensor = _sensor(desc, subentry_id="sub-9")
+    sensor = _sensor(desc, _coordinator(_obs(), entry_id="entry-9"))
 
-    assert sensor._attr_unique_id == "sub-9_aws_temperature"
+    # 고유ID/디바이스 식별자 = 부모 엔트리 ID + 지점번호 기반(서브엔트리 ID 무관).
+    assert sensor._attr_unique_id == "entry-9_aws_108_temperature"
     assert sensor.entity_description.key == desc.key
     # AWS 전용 디바이스 — 기존 Zone 디바이스 식별자와 섞이지 않는다.
-    assert sensor._attr_device_info["identifiers"] == {(DOMAIN, "sub-9_aws")}
+    assert sensor._attr_device_info["identifiers"] == {(DOMAIN, "entry-9_aws_108")}
+
+
+def test_unique_id_is_stable_across_subentry_recreation() -> None:
+    """서브엔트리 ID가 달라도 같은 부모 엔트리+지점이면 고유 키/ID가 동일하다.
+
+    실제 `KmaAwsCoordinator`를 같은 부모 엔트리/지점, 다른 서브엔트리 ID로 만들어
+    정체성이 일시적인 subentry_id가 아니라 부모 엔트리 ID + 지점번호에서 나오는지
+    확인한다(서브엔트리 ID에 의존하면 이 테스트가 실패한다).
+    """
+    desc = _by_key("aws_temperature")
+    first = _real_aws_coordinator(entry_id="entry-1", station=108, subentry_id="sub-old")
+    second = _real_aws_coordinator(entry_id="entry-1", station=108, subentry_id="sub-new")
+
+    assert first.subentry.subentry_id != second.subentry.subentry_id
+    assert first.aws_unique_key == second.aws_unique_key == "entry-1_aws_108"
+
+    sensor1 = _sensor(desc, first)
+    sensor2 = _sensor(desc, second)
+    assert sensor1._attr_unique_id == sensor2._attr_unique_id == "entry-1_aws_108_temperature"
+    assert (
+        sensor1._attr_device_info["identifiers"]
+        == sensor2._attr_device_info["identifiers"]
+    )
+
+
+def test_unique_id_differs_for_different_parent_entries() -> None:
+    desc = _by_key("aws_temperature")
+    a = _sensor(desc, _coordinator(_obs(), entry_id="entry-a", station=108))
+    b = _sensor(desc, _coordinator(_obs(), entry_id="entry-b", station=108))
+
+    assert a._attr_unique_id != b._attr_unique_id
+    assert (
+        a._attr_device_info["identifiers"] != b._attr_device_info["identifiers"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -255,7 +303,7 @@ def test_setup_adds_sixteen_aws_sensors_when_opted_in() -> None:
     assert len(entities) == 16
     assert all(isinstance(entity, KmaAwsSensor) for entity in entities)
     assert {entity._attr_unique_id for entity in entities} == {
-        f"sub-1_{key}" for key in EXPECTED_KEYS
+        f"entry-1_aws_108_{key.removeprefix('aws_')}" for key in EXPECTED_KEYS
     }
 
 

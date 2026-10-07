@@ -74,26 +74,29 @@ def test_aws_sensor_names_are_translated_differently_in_korean() -> None:
 
 
 def test_aws_sensor_names_do_not_repeat_the_device_aws_prefix() -> None:
-    """장치 이름이 이미 `(AWS)`를 포함하므로 표시 이름에서 AWS를 반복하지 않는다.
-
-    그대로 두면 HA 엔티티 ID가 `<지역>_aws_aws_temperature`처럼 중복된다.
-    """
+    """디바이스 이름이 이미 `AWS <지점>`이므로 표시 이름에서 AWS를 반복하지 않는다."""
     for name in ("strings", "en", "ko"):
         sensor = _load(name)["entity"]["sensor"]
         for key in _AWS_SENSOR_KEYS:
             assert "aws" not in sensor[key]["name"].lower(), (name, key)
 
 
-def test_zone_subentry_field_and_error_strings_exist() -> None:
+def test_zone_forms_do_not_ask_for_aws_station() -> None:
+    """AWS 지점번호는 Zone 폼이 아니라 독립 aws_station 서브엔트리에서 받는다."""
     for name in ("strings", "en", "ko"):
         zone = _load(name)["config_subentries"]["zone"]
         for step in ("user", "reconfigure"):
-            assert zone["step"][step]["data"]["aws_station_id"], f"{name}/{step}"
-        assert zone["error"]["invalid_aws_station"], name
+            assert "aws_station_id" not in zone["step"][step]["data"], f"{name}/{step}"
+            assert "AWS" not in zone["step"][step]["description"], f"{name}/{step}"
 
 
-def test_zone_step_descriptions_mention_the_optional_aws_field() -> None:
+def test_aws_station_subentry_strings_exist() -> None:
     for name in ("strings", "en", "ko"):
-        zone = _load(name)["config_subentries"]["zone"]
-        for step in ("user", "reconfigure"):
-            assert "AWS" in zone["step"][step]["description"], f"{name}/{step}"
+        aws = _load(name)["config_subentries"]["aws_station"]
+        assert aws["step"]["user"]["data"]["aws_station_id"], name
+        assert aws["step"]["user"]["description"], name
+        assert aws["error"]["invalid_aws_station"], name
+        assert aws["error"]["already_configured"], name
+        assert aws["abort"]["already_configured"], name
+        assert aws["initiate_flow"]["user"], name
+        assert aws["entry_type"], name

@@ -1,4 +1,4 @@
-"""Zone 서브엔트리 설정 흐름의 aws_station_id 처리 테스트."""
+"""Zone / AWS 관측소 서브엔트리 설정 흐름 테스트."""
 from __future__ import annotations
 
 import asyncio
@@ -11,14 +11,20 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+import voluptuous as vol
 
 from custom_components.kma.config_flow import (
     CONF_ZONE_ID,
+    AwsStationSubentryFlowHandler,
     KmaConfigFlow,
     ZoneSubentryFlowHandler,
-    _aws_station_schema_field,
+    _aws_station_selector,
 )
-from custom_components.kma.const import CONF_AWS_STATION_ID
+from custom_components.kma.const import (
+    CONF_AWS_STATION_ID,
+    SUBENTRY_TYPE_AWS_STATION,
+    SUBENTRY_TYPE_ZONE,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 # 실제 Home Assistant가 설치된 환경에서만 직렬화 회귀 테스트를 돌린다(CI는 미설치).
@@ -86,118 +92,19 @@ def _handler(subentry=None, *, states=(ZONE_STATE,), other_subentries=()):
     return handler, calls
 
 
-def _create(user_input):
-    handler, calls = _handler()
-    result = asyncio.run(handler.async_step_user(user_input))
-    return result, calls
+def _aws_handler(*, existing=()):
+    subentries = {sub.subentry_id: sub for sub in existing}
+    handler = AwsStationSubentryFlowHandler()
+    handler.hass = SimpleNamespace()
+    handler._get_entry = lambda: SimpleNamespace(subentries=subentries)
 
-
-def test_create_entry_stores_positive_integer_station_id() -> None:
-    _, calls = _create({CONF_ZONE_ID: "zone.home", CONF_AWS_STATION_ID: "108"})
-
-    assert "create" in calls
-    assert calls["create"]["data"][CONF_AWS_STATION_ID] == 108
-
-
-@pytest.mark.parametrize("value", ["", None, "   "])
-def test_blank_station_id_disables_aws_without_a_key(value) -> None:
-    user_input = {CONF_ZONE_ID: "zone.home"}
-    if value is not None:
-        user_input[CONF_AWS_STATION_ID] = value
-    _, calls = _create(user_input)
-
-    assert "create" in calls
-    assert CONF_AWS_STATION_ID not in calls["create"]["data"]
-
-
-@pytest.mark.parametrize("value", ["0", "-1", "abc", "12.5", True, "3.5"])
-def test_invalid_station_id_shows_error_and_creates_nothing(value) -> None:
-    _, calls = _create({CONF_ZONE_ID: "zone.home", CONF_AWS_STATION_ID: value})
-
-    assert "create" not in calls
-    assert calls["form"]["errors"]["base"] == "invalid_aws_station"
-    assert calls["form"]["step_id"] == "user"
-
-
-def test_station_id_is_trimmed_before_validation() -> None:
-    _, calls = _create({CONF_ZONE_ID: "zone.home", CONF_AWS_STATION_ID: "  108  "})
-
-    assert calls["create"]["data"][CONF_AWS_STATION_ID] == 108
-
-
-def test_zone_without_coordinates_keeps_the_original_error() -> None:
-    handler, calls = _handler(states=(ZONE_STATE, ZONE_NO_COORDS_STATE))
-    asyncio.run(
-        handler.async_step_user(
-            {CONF_ZONE_ID: "zone.nocoords", CONF_AWS_STATION_ID: "108"}
-        )
+    calls = {}
+    handler.async_show_form = lambda **kw: calls.setdefault("form", kw) or ("form", kw)
+    handler.async_create_entry = lambda **kw: calls.setdefault("create", kw) or (
+        "create",
+        kw,
     )
-
-    # 좌표 오류가 확정되면 AWS 가 정상이어도 엔트리를 만들지 않는다.
-    assert "create" not in calls
-    assert calls["form"]["errors"]["base"] == "invalid_zone_coords"
-
-
-def test_zone_without_coordinates_falls_back_to_home_when_state_missing() -> None:
-    # zone.missing 상태가 없으면 hass.config 좌표로 대체 → 정상 생성
-    handler, calls = _handler(states=())
-    asyncio.run(handler.async_step_user({CONF_ZONE_ID: "zone.missing"}))
-
-    assert "create" in calls
-    assert calls["create"]["data"]["latitude"] == 37.5665
-
-
-def test_invalid_aws_wins_over_other_errors() -> None:
-    handler, calls = _handler(states=(ZONE_STATE, ZONE_NO_COORDS_STATE))
-    asyncio.run(
-        handler.async_step_user({CONF_ZONE_ID: "zone.nocoords", CONF_AWS_STATION_ID: "abc"})
-    )
-
-    assert "create" not in calls
-    assert calls["form"]["errors"]["base"] == "invalid_aws_station"
-
-
-def test_reconfigure_can_enable_station_id() -> None:
-    subentry = SimpleNamespace(
-        subentry_id="sub-1", data={CONF_ZONE_ID: "zone.home", "zone_name": "Home"}
-    )
-    handler, calls = _handler(subentry)
-    asyncio.run(
-        handler.async_step_reconfigure(
-            {CONF_ZONE_ID: "zone.home", CONF_AWS_STATION_ID: "108"}
-        )
-    )
-
-    assert "update" in calls
-    args, kwargs = calls["update"]
-    assert kwargs["data"][CONF_AWS_STATION_ID] == 108
-    assert kwargs["unique_id"] == "zone.home"
-
-
-def test_reconfigure_can_clear_station_id() -> None:
-    subentry = SimpleNamespace(
-        subentry_id="sub-1",
-        data={CONF_ZONE_ID: "zone.home", CONF_AWS_STATION_ID: 108},
-    )
-    handler, calls = _handler(subentry)
-    asyncio.run(
-        handler.async_step_reconfigure({CONF_ZONE_ID: "zone.home", CONF_AWS_STATION_ID: ""})
-    )
-
-    assert "update" in calls
-    assert CONF_AWS_STATION_ID not in calls["update"][1]["data"]
-
-
-def test_reconfigure_form_prefills_the_stored_station_id() -> None:
-    subentry = SimpleNamespace(
-        subentry_id="sub-1",
-        data={CONF_ZONE_ID: "zone.home", CONF_AWS_STATION_ID: 108},
-    )
-    handler, calls = _handler(subentry)
-    asyncio.run(handler.async_step_reconfigure(None))
-
-    field = _field(calls["form"]["data_schema"].schema, CONF_AWS_STATION_ID)
-    assert field.description == {"suggested_value": "108"}
+    return handler, calls
 
 
 def _field(schema, name):
@@ -210,6 +117,57 @@ def _zone_field_default(calls):
     # voluptuous 0.16 wraps the default in a factory.
     default = zone_key.default
     return default() if callable(default) else default
+
+
+def _aws_create(value):
+    handler, calls = _aws_handler()
+    asyncio.run(handler.async_step_user({CONF_AWS_STATION_ID: value}))
+    return calls
+
+
+def _aws_existing(station: int, sub_id: str = "sub-aws"):
+    return SimpleNamespace(
+        subentry_id=sub_id,
+        subentry_type=SUBENTRY_TYPE_AWS_STATION,
+        data={CONF_AWS_STATION_ID: station},
+    )
+
+
+# --- Zone 흐름 -------------------------------------------------------------
+
+
+def test_zone_create_stores_zone_without_any_aws_field() -> None:
+    handler, calls = _handler()
+    asyncio.run(handler.async_step_user({CONF_ZONE_ID: "zone.home"}))
+
+    assert "create" in calls
+    assert calls["create"]["data"][CONF_ZONE_ID] == "zone.home"
+    assert CONF_AWS_STATION_ID not in calls["create"]["data"]
+
+
+def test_zone_form_has_no_aws_field() -> None:
+    handler, calls = _handler()
+    asyncio.run(handler.async_step_user(None))
+
+    keys = [key.schema for key in calls["form"]["data_schema"].schema]
+    assert keys == [CONF_ZONE_ID]
+    assert CONF_AWS_STATION_ID not in keys
+
+
+def test_zone_without_coordinates_keeps_the_original_error() -> None:
+    handler, calls = _handler(states=(ZONE_STATE, ZONE_NO_COORDS_STATE))
+    asyncio.run(handler.async_step_user({CONF_ZONE_ID: "zone.nocoords"}))
+
+    assert "create" not in calls
+    assert calls["form"]["errors"]["base"] == "invalid_zone_coords"
+
+
+def test_zone_without_coordinates_falls_back_to_home_when_state_missing() -> None:
+    handler, calls = _handler(states=())
+    asyncio.run(handler.async_step_user({CONF_ZONE_ID: "zone.missing"}))
+
+    assert "create" in calls
+    assert calls["create"]["data"]["latitude"] == 37.5665
 
 
 @pytest.mark.parametrize(
@@ -228,6 +186,7 @@ def test_reconfigure_form_defaults_zone(current_zone, other_home, expected) -> N
         [
             SimpleNamespace(
                 subentry_id="sub-other",
+                subentry_type=SUBENTRY_TYPE_ZONE,
                 data={CONF_ZONE_ID: "zone.home", "zone_name": "Home"},
             )
         ]
@@ -236,6 +195,7 @@ def test_reconfigure_form_defaults_zone(current_zone, other_home, expected) -> N
     )
     subentry = SimpleNamespace(
         subentry_id="sub-1",
+        subentry_type=SUBENTRY_TYPE_ZONE,
         data={CONF_ZONE_ID: current_zone, "zone_name": "Zone"},
     )
     handler, calls = _handler(
@@ -250,6 +210,7 @@ def test_reconfigure_submitting_preserved_zone_keeps_it() -> None:
     """폼이 고른 기본값(기존 비홈 zone)을 그대로 제출하면 zone이 유지된다."""
     subentry = SimpleNamespace(
         subentry_id="sub-1",
+        subentry_type=SUBENTRY_TYPE_ZONE,
         data={CONF_ZONE_ID: "zone.work", "zone_name": "Work"},
     )
     handler, calls = _handler(subentry, states=(ZONE_STATE, ZONE_WORK_STATE))
@@ -258,38 +219,129 @@ def test_reconfigure_submitting_preserved_zone_keeps_it() -> None:
     assert selected_zone == "zone.work"
 
     asyncio.run(
-        handler.async_step_reconfigure(
-            {CONF_ZONE_ID: selected_zone, CONF_AWS_STATION_ID: "108"}
-        )
+        handler.async_step_reconfigure({CONF_ZONE_ID: selected_zone})
     )
 
     _, kwargs = calls["update"]
     assert kwargs["data"][CONF_ZONE_ID] == "zone.work"
-    assert kwargs["data"][CONF_AWS_STATION_ID] == 108
+    assert CONF_AWS_STATION_ID not in kwargs["data"]
     assert kwargs["unique_id"] == "zone.work"
 
 
-def test_create_form_has_no_suggested_value_for_station_id() -> None:
-    handler, calls = _handler()
+# --- AWS 관측소 흐름 -------------------------------------------------------
+
+
+def test_aws_station_create_stores_canonical_id_and_stable_unique_id() -> None:
+    calls = _aws_create("108")
+
+    assert "create" in calls
+    assert calls["create"]["data"] == {CONF_AWS_STATION_ID: 108}
+    # 서브엔트리 고유ID = 지점번호(문자열) → 중복 방지/불변성의 근거.
+    assert calls["create"]["unique_id"] == "108"
+    assert calls["create"]["title"] == "AWS 108"
+
+
+@pytest.mark.parametrize("value", ["  108  ", "0108", 108, "108"])
+def test_aws_station_canonicalizes_equivalent_inputs(value) -> None:
+    calls = _aws_create(value)
+
+    assert "create" in calls
+    assert calls["create"]["data"] == {CONF_AWS_STATION_ID: 108}
+    assert calls["create"]["unique_id"] == "108"
+
+
+@pytest.mark.parametrize("value", ["", None, "   ", "0", "-1", "abc", "12.5", True, "3.5"])
+def test_aws_station_invalid_input_shows_error_and_creates_nothing(value) -> None:
+    calls = _aws_create(value)
+
+    assert "create" not in calls
+    assert calls["form"]["errors"]["base"] == "invalid_aws_station"
+    assert calls["form"]["step_id"] == "user"
+
+
+def test_aws_station_form_field_is_required_and_not_a_plain_function() -> None:
+    handler, calls = _aws_handler()
     asyncio.run(handler.async_step_user(None))
 
-    aws_key = _field(calls["form"]["data_schema"].schema, CONF_AWS_STATION_ID)
-    assert aws_key.description is None
+    schema = calls["form"]["data_schema"].schema
+    key = _field(schema, CONF_AWS_STATION_ID)
+    # Required(빈 값 불가) + 값은 직렬화 가능한 selector(평범한 함수가 아님).
+    assert isinstance(key, vol.Required)
+    value = next(v for k, v in schema.items() if k.schema == CONF_AWS_STATION_ID)
+    assert not inspect.isfunction(value)
 
 
 def test_aws_station_schema_value_is_not_a_plain_function() -> None:
     """회귀(CI): 스키마 값이 평범한 함수면 실제 HA 폼 직렬화가 HTTP 500으로 실패한다.
 
-    원래 `_coerce_aws_station_input` 함수가 스키마 값으로 들어가
-    `unable to serialize schema` ValueError가 났다. 실제 HA 직렬화 서브프로세스
-    테스트는 CI에서 건너뛰어지므로, 그 형태 자체를 여기서 잡는다.
+    실제 HA 직렬화 서브프로세스 테스트는 CI에서 건너뛰어지므로, 그 형태 자체를
+    여기서 잡는다.
     """
-    handler, calls = _handler()
+    handler, calls = _aws_handler()
     asyncio.run(handler.async_step_user(None))
 
-    schema = calls["form"]["data_schema"].schema
-    value = next(v for key, v in schema.items() if key.schema == CONF_AWS_STATION_ID)
+    value = next(
+        v for key, v in calls["form"]["data_schema"].schema.items()
+        if key.schema == CONF_AWS_STATION_ID
+    )
     assert not inspect.isfunction(value)
+
+
+def test_aws_station_duplicate_within_parent_is_rejected() -> None:
+    handler, calls = _aws_handler(existing=(_aws_existing(108),))
+    asyncio.run(handler.async_step_user({CONF_AWS_STATION_ID: "108"}))
+
+    assert "create" not in calls
+    assert calls["form"]["errors"]["base"] == "already_configured"
+
+
+def test_aws_station_duplicate_detection_canonicalizes() -> None:
+    handler, calls = _aws_handler(existing=(_aws_existing(108),))
+    asyncio.run(handler.async_step_user({CONF_AWS_STATION_ID: "0108"}))
+
+    assert "create" not in calls
+    assert calls["form"]["errors"]["base"] == "already_configured"
+
+
+def test_aws_station_different_number_in_same_parent_is_allowed() -> None:
+    handler, calls = _aws_handler(existing=(_aws_existing(108),))
+    asyncio.run(handler.async_step_user({CONF_AWS_STATION_ID: "400"}))
+
+    assert "create" in calls
+    assert calls["create"]["data"] == {CONF_AWS_STATION_ID: 400}
+
+
+def test_aws_station_ignores_zone_subentries_for_duplicate_check() -> None:
+    """레거시 Zone 서브엔트리의 AWS 필드는 중복 판정에 쓰지 않는다."""
+    legacy_zone = SimpleNamespace(
+        subentry_id="sub-zone",
+        subentry_type=SUBENTRY_TYPE_ZONE,
+        data={CONF_ZONE_ID: "zone.home", CONF_AWS_STATION_ID: 108},
+    )
+    handler, calls = _aws_handler(existing=(legacy_zone,))
+    asyncio.run(handler.async_step_user({CONF_AWS_STATION_ID: "108"}))
+
+    assert "create" in calls
+
+
+def test_aws_station_flow_has_no_reconfigure_step() -> None:
+    """지점번호는 불변 — 재구성 스텝이 없어 HA가 재구성 버튼을 노출하지 않는다."""
+    assert not hasattr(AwsStationSubentryFlowHandler, "async_step_reconfigure")
+    assert not hasattr(AwsStationSubentryFlowHandler, "async_step_user_reconfigure")
+
+
+def test_parent_reports_both_subentry_types_with_expected_reconfigure_support() -> None:
+    entry = SimpleNamespace()
+    supported = KmaConfigFlow.async_get_supported_subentry_types(entry)
+
+    assert supported[SUBENTRY_TYPE_ZONE] is ZoneSubentryFlowHandler
+    assert supported[SUBENTRY_TYPE_AWS_STATION] is AwsStationSubentryFlowHandler
+    assert hasattr(ZoneSubentryFlowHandler, "async_step_reconfigure")
+    assert not hasattr(AwsStationSubentryFlowHandler, "async_step_reconfigure")
+
+
+def test_aws_station_selector_is_serializable_in_isolated_interpreter() -> None:
+    assert hasattr(_aws_station_selector(), "serialize")
 
 
 @pytest.mark.skipif(not _REAL_HA_AVAILABLE, reason="real Home Assistant not installed")
@@ -307,13 +359,11 @@ def test_form_schema_serializes_with_real_ha() -> None:
         import voluptuous as vol
         from probatio import to_field_list
         from homeassistant.helpers import config_validation as cv
-        from custom_components.kma.config_flow import (
-            _aws_station_selector,
-            _aws_station_schema_field,
-        )
+        from custom_components.kma.config_flow import _aws_station_selector
+        from custom_components.kma.const import CONF_AWS_STATION_ID
 
         schema = vol.Schema(
-            {{_aws_station_schema_field(108): _aws_station_selector()}}
+            {{vol.Required(CONF_AWS_STATION_ID): _aws_station_selector()}}
         )
         fields = to_field_list(schema, custom_serializer=cv.custom_serializer)
         aws = next(f for f in fields if f.get("name") == "aws_station_id")
@@ -326,11 +376,6 @@ def test_form_schema_serializes_with_real_ha() -> None:
     )
     assert proc.returncode == 0, proc.stderr
     assert "SERIALIZED_OK" in proc.stdout
-
-
-def test_schema_field_is_optional() -> None:
-    assert _aws_station_schema_field().schema == CONF_AWS_STATION_ID
-    assert _aws_station_schema_field(108).description == {"suggested_value": "108"}
 
 
 def test_parent_setup_form_does_not_ask_for_aws() -> None:

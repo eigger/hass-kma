@@ -26,24 +26,21 @@
       "step": {
         "user": {
           "title": "Add a Zone",
-          "description": "Select a Home Assistant Zone to track weather and warnings for.\n\n**Optional:** Enter an AWS station ID (positive integer) to add 1-minute observation sensors for that station. Leave the field empty to skip AWS.",
+          "description": "Select a Home Assistant Zone to track weather and warnings for.",
           "data": {
-            "zone_id": "Zone",
-            "aws_station_id": "AWS Station ID"
+            "zone_id": "Zone"
           }
         },
         "reconfigure": {
           "title": "Reconfigure Zone",
-          "description": "Select a different Home Assistant Zone.\n\n**Optional:** Enter an AWS station ID (positive integer) to enable 1-minute observation sensors. Clear the field to disable AWS.",
+          "description": "Select a different Home Assistant Zone.",
           "data": {
-            "zone_id": "Zone",
-            "aws_station_id": "AWS Station ID"
+            "zone_id": "Zone"
           }
         }
       },
       "error": {
-        "invalid_zone_coords": "Failed to read coordinates from the selected zone.",
-        "invalid_aws_station": "Enter a positive integer for the AWS station ID, or leave it empty to disable AWS sensors."
+        "invalid_zone_coords": "Failed to read coordinates from the selected zone."
       },
       "abort": {
         "already_configured": "This zone is already configured.",
@@ -54,6 +51,28 @@
         "reconfigure": "Reconfigure zone"
       },
       "entry_type": "Zone"
+    },
+    "aws_station": {
+      "step": {
+        "user": {
+          "title": "Add an AWS Station",
+          "description": "Enter the KMA AWS station ID (positive integer). The station directory is linked from the README. Sensors update every ~5 minutes.",
+          "data": {
+            "aws_station_id": "AWS Station ID"
+          }
+        }
+      },
+      "error": {
+        "invalid_aws_station": "Enter a positive integer station ID.",
+        "already_configured": "This station is already added."
+      },
+      "abort": {
+        "already_configured": "This station is already added."
+      },
+      "initiate_flow": {
+        "user": "Add AWS station"
+      },
+      "entry_type": "AWS Station"
     }
   },
   "options": {

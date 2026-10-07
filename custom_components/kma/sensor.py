@@ -45,6 +45,7 @@ from .coordinator import (
     KmaImageCoordinator,
 )
 from .helpers import (
+    aws_station_title,
     get_air_stagnation_grade,
     get_car_wash_grade,
     get_discomfort_grade,
@@ -590,23 +591,22 @@ async def async_setup_entry(
             ]
         async_add_entities(zone_entities, config_subentry_id=subentry_id)
 
-    # AWS(관측소 1분 자료) 센서 — aws_station_id를 설정한 Zone에만 추가된다.
-    # 별도 코디네이터·별도 디바이스를 쓰므로 기존 Zone 센서의 디바이스 소속/고유ID는
-    # 손대지 않는다. AWS 미설정 Zone에서는 이 블록이 아예 건너뛴다.
+    # AWS(관측소 1분 자료) 센서 — `aws_station` 서브엔트리 하나가 관측소 하나를
+    # 소유한다. 디바이스/고유ID는 부모 엔트리 ID + 지점번호 기반이라 서브엔트리를
+    # 삭제/재추가해도 정체성이 재사용되고, Zone 관리와 완전히 분리된다.
     aws_coordinators: dict[str, KmaAwsCoordinator] = store.get("aws_coordinators") or {}
     for subentry_id, aws_coordinator in aws_coordinators.items():
-        subentry = entry.subentries[subentry_id]
-        zone_name = subentry.title or subentry.data.get("zone_name") or "KMA"
+        station = aws_coordinator.aws_station_id
         aws_device = DeviceInfo(
-            identifiers={(DOMAIN, f"{subentry_id}_aws")},
-            name=f"{zone_name} (AWS)",
+            identifiers={(DOMAIN, aws_coordinator.aws_unique_key)},
+            name=aws_station_title(station),
             manufacturer="Korea Meteorological Administration",
             model="KMA APIhub AWS",
             via_device_id=store["hub_device_id"],
         )
         async_add_entities(
             [
-                KmaAwsSensor(aws_coordinator, subentry, desc, aws_device)
+                KmaAwsSensor(aws_coordinator, desc, aws_device)
                 for desc in AWS_SENSOR_DESCRIPTIONS
             ],
             config_subentry_id=subentry_id,
@@ -1636,7 +1636,7 @@ class KmaApiErrorCountSensor(
 
 
 class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
-    """AWS(관측소 1분 자료) 센서. `aws_station_id`가 설정된 Zone 전용.
+    """AWS(관측소 1분 자료) 센서. `aws_station` 서브엔트리가 소유한다.
 
     예보 센서(KmaSensor)와 코디네이터·디바이스·고유ID가 전부 분리되어 있어
     AWS의 실패/해제가 기존 날씨 엔티티에 영향을 주지 않는다.
@@ -1647,14 +1647,14 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
     def __init__(
         self,
         coordinator: KmaAwsCoordinator,
-        subentry: ConfigSubentry,
         description: SensorEntityDescription,
         device_info: DeviceInfo,
     ) -> None:
-        """AWS 센서 초기화. 고유ID는 `{subentry_id}_{aws_key}`."""
+        """AWS 센서 초기화. 고유ID는 `{부모 엔트리 ID}_aws_{지점번호}_{센서}`."""
         super().__init__(coordinator)
         self.entity_description = description
-        self._attr_unique_id = f"{subentry.subentry_id}_{description.key}"
+        sensor_key = description.key.removeprefix("aws_")
+        self._attr_unique_id = f"{coordinator.aws_unique_key}_{sensor_key}"
         self._attr_device_info = device_info
 
     @property

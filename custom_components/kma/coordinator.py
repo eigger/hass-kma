@@ -37,7 +37,7 @@ from .const import (
     LAND_ZONE_TO_PM10_STN,
     PROVINCE_WARNING_KEYWORDS,
 )
-from .helpers import parse_pcp, parse_sno, redact_auth_key
+from .helpers import aws_station_key, parse_pcp, parse_sno, redact_auth_key
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -792,10 +792,10 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
 
 
 class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """AWS(관측소 1분 자료) 코디네이터 — `aws_station_id`를 설정한 Zone 전용.
+    """AWS(관측소 1분 자료) 코디네이터 — `aws_station` 서브엔트리 하나가 소유한다.
 
-    예보 코디네이터(KmaForecastCoordinator)와 완전히 분리되어, AWS의 실패/정체가
-    예보 갱신 결과를 실패시키지 않는다. 자동 폴링 주기는 예보 scan_interval
+    예보/Zone 코디네이터와 완전히 분리되어, AWS의 실패/정체가 예보 갱신 결과를
+    깨지 않는다. 자동 폴링 주기는 예보 scan_interval
     (5~180분)을 상속하지 않고 `AWS_POLL_INTERVAL_SECONDS`(301초) 고정이며(여유의
     근거는 const.py 주석 참고), 실제 네트워크 시도는 성공·실패·수동 갱신을 모두
     포함해 300초에 한 번을 넘기지 않는다(마지막 "시도" 기준 — 마지막 "성공"
@@ -824,6 +824,11 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.client = client
         self.subentry = subentry
         self.aws_station_id = int(subentry.data[CONF_AWS_STATION_ID])
+        # 부모 엔트리 ID + 지점번호 기반의 안정 식별 키(서브엔트리 ID와 무관).
+        # 삭제/재추가해도 같은 지점이면 디바이스/엔티티 정체성이 재사용된다.
+        self.aws_unique_key = aws_station_key(
+            config_entry.entry_id, self.aws_station_id
+        )
         self._last_attempt: datetime.datetime | None = None
         # 언로드/비활성화 표시 — 진행 중이던 HTTP가 늦게 끝나도 만료콜백을 다시
         # 예약하거나 스냅샷을 되살리지 않도록 한다.
@@ -835,7 +840,7 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             config_entry=config_entry,
-            name=f"{DOMAIN}_{subentry.subentry_id}_aws",
+            name=f"{DOMAIN}_{self.aws_unique_key}",
             update_interval=timedelta(seconds=AWS_POLL_INTERVAL_SECONDS),
         )
 

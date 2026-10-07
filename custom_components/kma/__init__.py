@@ -15,7 +15,12 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.device_registry import DeviceEntryType
 
 from .api import KmaApiClient
-from .const import CONF_AWS_STATION_ID, DOMAIN
+from .const import (
+    CONF_AWS_STATION_ID,
+    DOMAIN,
+    SUBENTRY_TYPE_AWS_STATION,
+    SUBENTRY_TYPE_ZONE,
+)
 from .coordinator import (
     KmaAwsCoordinator,
     KmaForecastCoordinator,
@@ -34,7 +39,6 @@ PLATFORMS = [
     Platform.IMAGE,
 ]
 
-SUBENTRY_TYPE_ZONE = "zone"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """부모 엔트리 셋업: 키 검증 후 Zone 서브엔트리별 코디네이터 생성."""
@@ -59,24 +63,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     aws_coordinators: dict[str, KmaAwsCoordinator] = {}
     refreshes = []
     for subentry_id, subentry in entry.subentries.items():
-        if subentry.subentry_type != SUBENTRY_TYPE_ZONE:
-            continue
-        coordinator = KmaForecastCoordinator(hass, client, entry, subentry)
-        coordinator.hub_device_id = hub_device.id
-        coordinators[subentry_id] = coordinator
-        refreshes.append(coordinator.async_config_entry_first_refresh())
-
-        # AWS는 opt-in 전용. aws_station_id가 없거나 유효하지 않으면 코디네이터·센서를
-        # 아예 만들지 않으므로 AWS 미설정 Zone의 기존 동작/엔티티는 변하지 않는다.
-        try:
-            aws_station_id = parse_aws_station_id(subentry.data.get(CONF_AWS_STATION_ID))
-        except ValueError:
-            aws_station_id = None
-            _LOGGER.warning(
-                "Zone %s의 aws_station_id가 양의 정수가 아니라 AWS 센서를 비활성화합니다.",
-                subentry_id,
-            )
-        if aws_station_id is not None:
+        if subentry.subentry_type == SUBENTRY_TYPE_ZONE:
+            coordinator = KmaForecastCoordinator(hass, client, entry, subentry)
+            coordinator.hub_device_id = hub_device.id
+            coordinators[subentry_id] = coordinator
+            refreshes.append(coordinator.async_config_entry_first_refresh())
+        elif subentry.subentry_type == SUBENTRY_TYPE_AWS_STATION:
+            # AWS 관측소는 Zone과 독립 서브엔트리다. 지점번호는 생성 시 검증되어
+            # 저장되며, 손상된 값은 건너뛴다(셋업을 깨지 않는다).
+            try:
+                station = parse_aws_station_id(subentry.data.get(CONF_AWS_STATION_ID))
+            except ValueError:
+                station = None
+            if station is None:
+                _LOGGER.warning(
+                    "AWS 관측소 서브엔트리 %s의 지점번호가 유효하지 않아 건너뜁니다.",
+                    subentry_id,
+                )
+                continue
             aws_coordinator = KmaAwsCoordinator(hass, client, entry, subentry)
             aws_coordinator.hub_device_id = hub_device.id
             aws_coordinators[subentry_id] = aws_coordinator
