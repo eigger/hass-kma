@@ -28,7 +28,7 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import dt as dt_util
+from homeassistant.util import dt as dt_util, slugify
 
 from .api import AwsObservation, VillageForecast, bulletin_section, split_bulletin_sections
 from .const import (
@@ -538,6 +538,27 @@ AWS_SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
     )
     for key, _field, device_class, unit, state_class, icon in _AWS_SENSOR_SPECS
 ]
+
+# 엔티티 ID 접미어(영문 이름). 기기 이름에 지점명이 들어가도 엔티티 ID가
+# `sensor.aws_<지점번호>_<접미어>`로 유지되도록 entity_id 생성에 쓴다.
+AWS_OBJECT_ID_NAMES: dict[str, str] = {
+    "aws_observation_time": "Observation Time",
+    "aws_temperature": "Temperature",
+    "aws_humidity": "Humidity",
+    "aws_dew_point": "Dew Point",
+    "aws_wind_direction_1m": "Wind Direction (1 min)",
+    "aws_wind_speed_1m": "Wind Speed (1 min)",
+    "aws_gust_direction": "Gust Direction",
+    "aws_gust_speed": "Gust Speed",
+    "aws_wind_direction_10m": "Wind Direction (10 min)",
+    "aws_wind_speed_10m": "Wind Speed (10 min)",
+    "aws_rain_15m": "Rain (15 min)",
+    "aws_rain_60m": "Rain (60 min)",
+    "aws_rain_12h": "Rain (12 h)",
+    "aws_rain_today": "Rain (Today)",
+    "aws_pressure": "Station Pressure",
+    "aws_sea_level_pressure": "Sea-Level Pressure",
+}
 
 # key -> AwsObservation 필드. KmaAwsSensor.native_value 가 이 매핑만 참조한다.
 AWS_VALUE_ATTRS: dict[str, str] = {key: field for key, field, *_ in _AWS_SENSOR_SPECS}
@@ -1664,6 +1685,12 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
         sensor_key = description.key.removeprefix("aws_")
         self._attr_unique_id = f"{coordinator.aws_unique_key}_{sensor_key}"
         self._attr_device_info = device_info
+        # 기기 이름에 지점명이 들어가도 엔티티 ID는 `sensor.aws_<지점번호>_<이름>` 유지.
+        # (entity_id 를 직접 지정하면 HA 가 기기 이름 접두어 없이 suggested id 로 쓴다.
+        # 이미 등록된 엔티티는 unique_id 로 찾아 기존 ID 를 그대로 보존한다.)
+        self.entity_id = "sensor." + slugify(
+            f"AWS {coordinator.aws_station_id} {AWS_OBJECT_ID_NAMES[description.key]}"
+        )
 
     @property
     def _observation(self) -> AwsObservation | None:

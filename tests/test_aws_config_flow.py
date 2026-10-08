@@ -241,10 +241,12 @@ def test_aws_station_create_stores_canonical_id_and_stable_unique_id() -> None:
     assert calls["create"]["data"] == {CONF_AWS_STATION_ID: 108}
     # 서브엔트리 고유ID = 지점번호(문자열) → 중복 방지/불변성의 근거.
     assert calls["create"]["unique_id"] == "108"
-    assert calls["create"]["title"] == "AWS 108"
+    assert calls["create"]["title"] == "서울 (AWS 108)"
 
 
-@pytest.mark.parametrize("value", ["  108  ", "0108", 108, "108"])
+@pytest.mark.parametrize(
+    "value", ["  108  ", "0108", 108, "108", "서울 (서울특별시, 108)"]
+)
 def test_aws_station_canonicalizes_equivalent_inputs(value) -> None:
     calls = _aws_create(value)
 
@@ -253,7 +255,7 @@ def test_aws_station_canonicalizes_equivalent_inputs(value) -> None:
     assert calls["create"]["unique_id"] == "108"
 
 
-@pytest.mark.parametrize("value", ["", None, "   ", "0", "-1", "abc", "12.5", True, "3.5"])
+@pytest.mark.parametrize("value", ["", None, "   ", "0", "-1", "abc", "12.5", True, "3.5", "x (y, 99999)"])
 def test_aws_station_invalid_input_shows_error_and_creates_nothing(value) -> None:
     calls = _aws_create(value)
 
@@ -347,11 +349,11 @@ def test_aws_station_options_have_stable_values_and_named_labels() -> None:
     labels = [label for _, label in options]
 
     assert len(options) == 638
-    assert all(value.isdigit() for value in values)
-    assert len(set(values)) == len(values)  # 지점번호(값)는 고유
+    assert values == labels  # 선택 후에도 이름이 보이도록 값=라벨
+    assert len(set(values)) == len(values)  # 값은 고유
     assert len(set(labels)) == len(labels)  # 라벨도 고유(번호 포함)
-    assert ("108", "서울 (서울특별시, 108)") in options
-    assert ("400", "강남 (서울특별시, 400)") in options
+    assert ("서울 (서울특별시, 108)", "서울 (서울특별시, 108)") in options
+    assert ("강남 (서울특별시, 400)", "강남 (서울특별시, 400)") in options
 
 
 def test_station_label_distinguishes_duplicate_names() -> None:
@@ -431,3 +433,20 @@ def test_parent_setup_form_does_not_ask_for_aws() -> None:
     keys = [getattr(key, "schema", key) for key in result["data_schema"].schema]
     assert keys == ["auth_key"]
     assert CONF_AWS_STATION_ID not in keys
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [("서울 (서울특별시, 108)", "108"), ("관악(레) * (경기도, 116)", "116"), ("108", "108"), (" 12.5 ", " 12.5 ")],
+)
+def test_station_from_input_extracts_number(raw, expected) -> None:
+    from custom_components.kma.config_flow import _station_from_input
+
+    assert _station_from_input(raw) == expected
+
+
+def test_aws_station_title_falls_back_without_catalog_name() -> None:
+    from custom_components.kma.helpers import aws_station_title
+
+    assert aws_station_title(108) == "서울 (AWS 108)"
+    assert aws_station_title(999999) == "AWS 999999"
