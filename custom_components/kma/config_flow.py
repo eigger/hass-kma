@@ -16,20 +16,87 @@ from homeassistant.config_entries import (
     SubentryFlowResult,
 )
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import KmaApiClient, KmaApiError, KmaAuthError
-from .const import DOMAIN
-from .helpers import get_nearest_land_zone, get_nearest_marine_zone, latlon_to_grid
+from .aws_stations import AWS_STATION_CATALOG
+from .const import (
+    CONF_AWS_STATION_ID,
+    DOMAIN,
+    SUBENTRY_TYPE_AWS_STATION,
+    SUBENTRY_TYPE_ZONE,
+)
+from .helpers import (
+    aws_station_title,
+    get_nearest_land_zone,
+    get_nearest_marine_zone,
+    latlon_to_grid,
+    parse_aws_station_id,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 CONF_AUTH_KEY = "auth_key"
 CONF_ZONE_ID = "zone_id"
-SUBENTRY_TYPE_ZONE = "zone"
 
 # 인증키 발급(회원가입/마이페이지) 페이지
 APIHUB_URL = "https://apihub.kma.go.kr"
+
+
+def _station_label(station: int, name: str, region: str) -> str:
+    """지점 라벨 = 이름 (지역, 지점번호). 지점번호가 항상 붙어 동명이인도 구분된다."""
+    return f"{name} ({region}, {station})"
+
+
+def aws_station_options() -> list[tuple[str, str]]:
+    """SelectSelector 옵션 목록 (value=str(지점번호), label=이름·지역·번호)."""
+    return [
+        (str(station), _station_label(station, name, region))
+        for station, (name, region) in sorted(AWS_STATION_CATALOG.items())
+    ]
+
+
+def _aws_station_selector() -> selector.SelectSelector:
+    """`aws_station_id` 선택용 HA 직렬화 가능 SelectSelector.
+
+    번들된 공개 카탈로그(`aws_stations.AWS_STATION_CATALOG`)의 지점번호를 안정
+    값(`value=str(station)`)으로, 이름·지역·번호를 라벨로 노출한다. 검색어
+    입력이 가능한 DROPDOWN 모드는 `custom_value=True`일 때 제공되므로 임의
+    텍스트도 스키마를 통과하지만, 서버에서 기존대로 정식 지점번호 정규화
+    (parse_aws_station_id)와 카탈로그 포함 여부로 검증해 목록 밖 값은 거부한다.
+    저장 데이터 형식은 바뀌지 않는다(숫자 지점번호 단일 값).
+    """
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[
+                selector.SelectOptionDict(value=value, label=label)
+                for value, label in aws_station_options()
+            ],
+            mode=selector.SelectSelectorMode.DROPDOWN,
+            custom_value=True,
+        )
+    )
+
+
+def _aws_station_subentries(entry: ConfigEntry):
+    return [
+        sub
+        for sub in entry.subentries.values()
+        if sub.subentry_type == SUBENTRY_TYPE_AWS_STATION
+    ]
+
+
+def _station_in_use(entry: ConfigEntry, station: int) -> bool:
+    """같은 부모 엔트리에 이미 등록된 지점번호인지(정규화 후) 확인한다."""
+    for sub in _aws_station_subentries(entry):
+        try:
+            existing = parse_aws_station_id(sub.data.get(CONF_AWS_STATION_ID))
+        except ValueError:
+            continue
+        if existing == station:
+            return True
+    return False
 
 
 def _get_zone_options(
@@ -99,8 +166,11 @@ class KmaConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def async_get_supported_subentry_types(
         cls, config_entry: ConfigEntry
     ) -> dict[str, type[ConfigSubentryFlow]]:
-        """이 통합이 지원하는 서브엔트리 유형(Zone)."""
-        return {SUBENTRY_TYPE_ZONE: ZoneSubentryFlowHandler}
+        """이 통합이 지원하는 서브엔트리 유형(Zone + AWS 관측소)."""
+        return {
+            SUBENTRY_TYPE_ZONE: ZoneSubentryFlowHandler,
+            SUBENTRY_TYPE_AWS_STATION: AwsStationSubentryFlowHandler,
+        }
 
     @staticmethod
     @callback
@@ -146,7 +216,6 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
 
         if user_input is not None:
             zone_id = user_input[CONF_ZONE_ID]
-
             zone_state = self.hass.states.get(zone_id)
             if zone_state is None:
                 latitude = self.hass.config.latitude
@@ -161,7 +230,7 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
                 errors["base"] = "invalid_zone_coords"
             else:
                 nx, ny = latlon_to_grid(latitude, longitude)
-                data = {
+                data: dict[str, Any] = {
                     CONF_ZONE_ID: zone_id,
                     "zone_name": title,
                     "latitude": latitude,
@@ -171,7 +240,6 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
                     "land_reg": get_nearest_land_zone(latitude, longitude),
                     "marine_reg": get_nearest_marine_zone(latitude, longitude),
                 }
-
                 if reconfigure:
                     return self.async_update_and_abort(
                         entry,
@@ -187,9 +255,16 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
         if not zone_options:
             return self.async_abort(reason="no_zones_available")
 
-        default_zone = (
-            "zone.home" if "zone.home" in zone_options else next(iter(zone_options))
-        )
+        # 재구성 시에는 기존 서브엔트리의 zone을 기본값으로 유지한다.
+        default_zone: str | None = None
+        if reconfigure:
+            current_zone = self._get_reconfigure_subentry().data.get(CONF_ZONE_ID)
+            if current_zone in zone_options:
+                default_zone = current_zone
+        if default_zone is None:
+            default_zone = (
+                "zone.home" if "zone.home" in zone_options else next(iter(zone_options))
+            )
         schema = vol.Schema(
             {vol.Required(CONF_ZONE_ID, default=default_zone): vol.In(zone_options)}
         )
@@ -198,6 +273,48 @@ class ZoneSubentryFlowHandler(ConfigSubentryFlow):
             data_schema=schema,
             errors=errors,
         )
+
+
+class AwsStationSubentryFlowHandler(ConfigSubentryFlow):
+    """AWS 관측소 서브엔트리 추가 흐름.
+
+    지점번호는 서브엔트리 고유ID이자 안정 식별자라 생성 후 바꿀 수 없다. 그래서
+    재구성 스텝을 두지 않는다 — HA는 `async_step_reconfigure`가 없으면 재구성
+    버튼을 노출하지 않으므로, 잘못된 재구성 동작이 생기지 않는다.
+    """
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> SubentryFlowResult:
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            try:
+                station = parse_aws_station_id(user_input.get(CONF_AWS_STATION_ID))
+            except ValueError:
+                station = None
+                errors["base"] = "invalid_aws_station"
+            if not errors and station is None:
+                # 지점번호는 필수 — 빈 값은 비활성화가 아니라 오류다.
+                errors["base"] = "invalid_aws_station"
+            if not errors:
+                entry = self._get_entry()
+                if station not in AWS_STATION_CATALOG:
+                    # 카탈로그에 없는 지점번호 — 변조/오래된 값 방어.
+                    errors["base"] = "invalid_aws_station"
+                elif _station_in_use(entry, station):
+                    errors["base"] = "already_configured"
+                else:
+                    return self.async_create_entry(
+                        title=aws_station_title(station),
+                        data={CONF_AWS_STATION_ID: station},
+                        unique_id=str(station),
+                    )
+
+        schema = vol.Schema(
+            {vol.Required(CONF_AWS_STATION_ID): _aws_station_selector()}
+        )
+        return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
 
 
 class KmaOptionsFlowHandler(config_entries.OptionsFlow):

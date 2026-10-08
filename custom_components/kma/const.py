@@ -2,6 +2,38 @@
 
 DOMAIN = "kma"
 
+# 서브엔트리 유형. 부모 엔트리는 API 키만 보유하고, Zone과 AWS 관측소가 각각
+# 독립 서브엔트리로 등록된다.
+SUBENTRY_TYPE_ZONE = "zone"
+SUBENTRY_TYPE_AWS_STATION = "aws_station"
+
+# ---------------------------------------------------------------------------
+# AWS(관측소 1분 자료) — 독립 서브엔트리
+# ---------------------------------------------------------------------------
+# `aws_station` 서브엔트리 하나가 관측소 하나(양의 정수 지점번호)를 소유한다.
+# Zone과 분리되어 있어 Zone 재구성/삭제가 AWS 관리·이력에 영향을 주지 않는다.
+CONF_AWS_STATION_ID = "aws_station_id"
+
+# 자동 폴링 주기(초). 예보 scan_interval(5~180분)을 상속하지 않는다.
+#
+# 왜 300이 아니라 301인가: HA DataUpdateCoordinator._schedule_refresh 는
+#   next = int(loop.time()) + _microsecond + update_interval
+# 로 예약한다(int 절삭 + 0.05~0.50s 랜덤 지터). int() 절삭 때문에 다음 자동
+# 갱신은 이전 "시도"로부터 최대 약 1초 이르게 발화할 수 있어, 주기가 정확히
+# 300초면 300초 가드(아래 AWS_ATTEMPT_INTERVAL_MINUTES)를 1초 미만 차이로
+# 비껴가 폴링을 건너뛴다. 1초 여유를 두면 최악의 절삭(≈0.95s)과 지터 하한
+# (0.05s)에서도 경과가 항상 300초를 넘겨 가드가 통과한다.
+AWS_POLL_INTERVAL_SECONDS = 301
+
+# 실제 네트워크 시도 간격 하한(성공·실패·수동 갱신 모두 포함, 마지막 시도 기준).
+AWS_ATTEMPT_INTERVAL_MINUTES = 5
+
+# 신선도 판정: 관측 나이 age 가 [-5분, +15분) 범위여야 AWS 센서를 available로 둔다.
+# 상한은 엄격히 미만(<) — 관측시각+15분 정각이 되는 순간 오래된 값으로 간주하므로,
+# 만료콜백도 인위적 여유 없이 정확히 관측시각+15분에 맞춘다.
+AWS_MAX_OBSERVATION_AGE_MINUTES = 15
+AWS_FUTURE_TOLERANCE_MINUTES = 5
+
 # 허브 단위 활용신청 상태(binary_sensor.activation_*)/에러 카운트(sensor.error_count_*)
 # 진단 센서를 자동 생성하는 데 쓰는 단일 소스. 새 API를 추가할 때 이 목록에만
 # key를 추가하면(+해당 코디네이터의 _async_update_data에서 status 딕셔너리에
@@ -27,6 +59,12 @@ API_STATUS_IMAGE_KEYS = [
 
 # 허브 단위(Zone 무관, 전국 단일 세트) 비-이미지 데이터 API — KmaHubCoordinator가 관리.
 API_STATUS_HUB_KEYS = ["earthquake", "typhoon"]
+
+# AWS 관측소 1분 자료 API 상태 — 허브 코디네이터(KmaHubCoordinator)가 소유.
+# 관측소마다 코디네이터가 따로 있어, 각 코디네이터가 실제 시도 결과를 허브 집계에
+# 보고하면 허브가 모든 관측소를 "최악값"으로 집계해 기존 진단 센서
+# (binary_sensor.activation_aws / sensor.error_count_aws)로 노출한다.
+API_STATUS_AWS_KEYS = ["aws"]
 
 # 대표 육상 예보구역 위경도 좌표 테이블
 # 포맷: { "대표예보구역코드": (위도, 경도) }

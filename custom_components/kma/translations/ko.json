@@ -51,6 +51,28 @@
         "reconfigure": "지역 재구성"
       },
       "entry_type": "지역(Zone)"
+    },
+    "aws_station": {
+      "step": {
+        "user": {
+          "title": "AWS 관측소 추가",
+          "description": "관측소 이름, 지역 또는 번호로 검색한 뒤 목록에서 선택하세요. 센서는 약 5분마다 갱신됩니다.",
+          "data": {
+            "aws_station_id": "관측소"
+          }
+        }
+      },
+      "error": {
+        "invalid_aws_station": "목록에서 관측소를 선택하세요.",
+        "already_configured": "이미 추가된 관측소입니다."
+      },
+      "abort": {
+        "already_configured": "이미 추가된 관측소입니다."
+      },
+      "initiate_flow": {
+        "user": "AWS 관측소 추가"
+      },
+      "entry_type": "AWS 관측소"
     }
   },
   "options": {
@@ -512,6 +534,57 @@
       },
       "error_count_typhoon": {
         "name": "태풍정보 API 오류 수"
+      },
+      "aws_observation_time": {
+        "name": "관측 시각"
+      },
+      "aws_temperature": {
+        "name": "기온"
+      },
+      "aws_humidity": {
+        "name": "습도"
+      },
+      "aws_dew_point": {
+        "name": "이슬점 온도"
+      },
+      "aws_wind_direction_1m": {
+        "name": "1분 평균 풍향"
+      },
+      "aws_wind_speed_1m": {
+        "name": "1분 평균 풍속"
+      },
+      "aws_gust_direction": {
+        "name": "돌풍 풍향"
+      },
+      "aws_gust_speed": {
+        "name": "돌풍 풍속"
+      },
+      "aws_wind_direction_10m": {
+        "name": "10분 평균 풍향"
+      },
+      "aws_wind_speed_10m": {
+        "name": "10분 평균 풍속"
+      },
+      "aws_rain_15m": {
+        "name": "15분 강수량"
+      },
+      "aws_rain_60m": {
+        "name": "60분 강수량"
+      },
+      "aws_rain_12h": {
+        "name": "12시간 강수량"
+      },
+      "aws_rain_today": {
+        "name": "오늘 강수량"
+      },
+      "aws_pressure": {
+        "name": "현지기압"
+      },
+      "aws_sea_level_pressure": {
+        "name": "해면기압"
+      },
+      "error_count_aws": {
+        "name": "AWS 관측소 API 오류 수"
       }
     },
     "binary_sensor": {
@@ -601,6 +674,9 @@
       },
       "activation_typhoon": {
         "name": "태풍정보 API"
+      },
+      "activation_aws": {
+        "name": "AWS 관측소 API"
       }
     },
     "button": {

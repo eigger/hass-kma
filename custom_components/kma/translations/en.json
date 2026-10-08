@@ -51,6 +51,28 @@
         "reconfigure": "Reconfigure zone"
       },
       "entry_type": "Zone"
+    },
+    "aws_station": {
+      "step": {
+        "user": {
+          "title": "Add an AWS Station",
+          "description": "Search by station name, region or number, then select from the list. Sensors update roughly every 5 minutes.",
+          "data": {
+            "aws_station_id": "Station"
+          }
+        }
+      },
+      "error": {
+        "invalid_aws_station": "Select a station from the list.",
+        "already_configured": "This station is already added."
+      },
+      "abort": {
+        "already_configured": "This station is already added."
+      },
+      "initiate_flow": {
+        "user": "Add AWS station"
+      },
+      "entry_type": "AWS Station"
     }
   },
   "options": {
@@ -512,6 +534,57 @@
       },
       "error_count_typhoon": {
         "name": "Typhoon API Error Count"
+      },
+      "aws_observation_time": {
+        "name": "Observation Time"
+      },
+      "aws_temperature": {
+        "name": "Temperature"
+      },
+      "aws_humidity": {
+        "name": "Humidity"
+      },
+      "aws_dew_point": {
+        "name": "Dew Point"
+      },
+      "aws_wind_direction_1m": {
+        "name": "Wind Direction (1 min)"
+      },
+      "aws_wind_speed_1m": {
+        "name": "Wind Speed (1 min)"
+      },
+      "aws_gust_direction": {
+        "name": "Gust Direction"
+      },
+      "aws_gust_speed": {
+        "name": "Gust Speed"
+      },
+      "aws_wind_direction_10m": {
+        "name": "Wind Direction (10 min)"
+      },
+      "aws_wind_speed_10m": {
+        "name": "Wind Speed (10 min)"
+      },
+      "aws_rain_15m": {
+        "name": "Rain (15 min)"
+      },
+      "aws_rain_60m": {
+        "name": "Rain (60 min)"
+      },
+      "aws_rain_12h": {
+        "name": "Rain (12 h)"
+      },
+      "aws_rain_today": {
+        "name": "Rain (Today)"
+      },
+      "aws_pressure": {
+        "name": "Station Pressure"
+      },
+      "aws_sea_level_pressure": {
+        "name": "Sea-Level Pressure"
+      },
+      "error_count_aws": {
+        "name": "AWS Observation API Error Count"
       }
     },
     "binary_sensor": {
@@ -601,6 +674,9 @@
       },
       "activation_typhoon": {
         "name": "Typhoon API"
+      },
+      "activation_aws": {
+        "name": "AWS Observation API"
       }
     },
     "button": {

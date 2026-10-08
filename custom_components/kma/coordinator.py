@@ -11,9 +11,11 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .api import (
+    AwsObservation,
     KmaActivationRequiredError,
     KmaApiClient,
     KmaApiError,
@@ -21,18 +23,28 @@ from .api import (
     VillageForecast,
 )
 from .const import (
+    API_STATUS_AWS_KEYS,
     API_STATUS_HUB_KEYS,
     API_STATUS_IMAGE_KEYS,
     API_STATUS_ZONE_KEYS,
+    AWS_ATTEMPT_INTERVAL_MINUTES,
+    AWS_FUTURE_TOLERANCE_MINUTES,
+    AWS_MAX_OBSERVATION_AGE_MINUTES,
+    AWS_POLL_INTERVAL_SECONDS,
+    CONF_AWS_STATION_ID,
     DOMAIN,
     LAND_ZONE_TO_AREA_NO,
     LAND_ZONE_TO_OFFICE_STN,
     LAND_ZONE_TO_PM10_STN,
     PROVINCE_WARNING_KEYWORDS,
 )
-from .helpers import parse_pcp, parse_sno
+from .helpers import aws_station_key, parse_pcp, parse_sno, redact_auth_key
 
 _LOGGER = logging.getLogger(__name__)
+
+# 허브 진단에 노출하는 AWS 실패 요약. URL/요청 파라미터/토큰/관측값을 담지 않는다.
+# 관측소 자체의 data["status"]/last_error 는 상세(redacted)하게 유지한다.
+_AWS_HUB_ERROR_SUMMARY = "error: AWS 관측 자료 조회 실패"
 
 API_COOLDOWN = timedelta(minutes=5)
 MAX_TRANSIENT_RETRIES = 3
@@ -784,6 +796,244 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         return base_date, base_time
 
 
+class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """AWS(관측소 1분 자료) 코디네이터 — `aws_station` 서브엔트리 하나가 소유한다.
+
+    예보/Zone 코디네이터와 완전히 분리되어, AWS의 실패/정체가 예보 갱신 결과를
+    깨지 않는다. 자동 폴링 주기는 예보 scan_interval
+    (5~180분)을 상속하지 않고 `AWS_POLL_INTERVAL_SECONDS`(301초) 고정이며(여유의
+    근거는 const.py 주석 참고), 실제 네트워크 시도는 성공·실패·수동 갱신을 모두
+    포함해 300초에 한 번을 넘기지 않는다(마지막 "시도" 기준 — 마지막 "성공"
+    시각과는 별도로 추적).
+
+    상태는 data의 `status`로만 다루며 기존 API_STATUS_* 목록에는 넣지 않는다
+    (AWS 미설정 Zone에 항상 꺼진 활용신청/에러 진단 엔티티가 생기지 않도록).
+    일시 오류에서도 이전 스냅샷을 신선한 동안 유지하고, 신선도는 매번 평가 시점의
+    시각으로 다시 계산하므로 API가 계속 실패해도 시간이 지나면 AWS 엔티티가
+    알아서 unavailable가 된다.
+
+    다만 코디네이터 폴링(5분)에만 의존하면 "15분 미만 데이터만 게시한다"는 요구를
+    5분까지 초과할 수 있다. 그래서 수용한 관측의 만료 시각(관측시각+15분)에 정확히
+    한 번 상태를 다시 쓰는 콜백을 예약하고, 언로드/비활성화 시 반드시 정리한다.
+    만료 시각은 관측시각에 고정되므로 오류·스로틀 갱신은 TTL을 늘릴 수 없다.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: KmaApiClient,
+        config_entry: ConfigEntry,
+        subentry: ConfigSubentry,
+    ) -> None:
+        """AWS 코디네이터 초기화. 호출 전에 aws_station_id가 검증되어 있어야 한다."""
+        self.client = client
+        self.subentry = subentry
+        self.aws_station_id = int(subentry.data[CONF_AWS_STATION_ID])
+        # 부모 엔트리 ID + 지점번호 기반의 안정 식별 키(서브엔트리 ID와 무관).
+        # 삭제/재추가해도 같은 지점이면 디바이스/엔티티 정체성이 재사용된다.
+        self.aws_unique_key = aws_station_key(
+            config_entry.entry_id, self.aws_station_id
+        )
+        self._last_attempt: datetime.datetime | None = None
+        # 실제 시도 결과를 보고할 허브 코디네이터(셋업에서 주입). 없으면 집계 생략.
+        self.hub_coordinator: KmaHubCoordinator | None = None
+        # 언로드/비활성화 표시 — 진행 중이던 HTTP가 늦게 끝나도 만료콜백을 다시
+        # 예약하거나 스냅샷을 되살리지 않도록 한다.
+        self._shutdown = False
+        # 신선도 만료콜백(관측시각+15분) — 언로드/비활성화 시 반드시 취소되어야 한다.
+        self._expiry_unsub: Callable[[], None] | None = None
+        self._expiry_at: datetime.datetime | None = None
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=config_entry,
+            name=f"{DOMAIN}_{self.aws_unique_key}",
+            update_interval=timedelta(seconds=AWS_POLL_INTERVAL_SECONDS),
+        )
+
+    async def async_shutdown(self) -> None:
+        """언로드/비활성화 시 폴링과 신선도 만료콜백을 함께 정리한다.
+
+        HA가 `config_entry.async_on_unload(self.async_shutdown)`을 자동 등록하므로
+        엔트리 언로드·재구성(설정 해제 포함) 시 이 경로를 항상 지난다.
+        """
+        # 진행 중인 _async_update_data 가 이후에 완료되어도 만료콜백을 다시
+        # 예약하지 않도록 먼저 표시한다.
+        self._shutdown = True
+        if self.hub_coordinator is not None:
+            # 관측소 제거/언로드 시 허브 집계에서 제거해 고스트 상태를 남기지 않는다.
+            self.hub_coordinator.forget_aws_station(self.aws_station_id)
+        self._cancel_observation_expiry()
+        await super().async_shutdown()
+
+    @callback
+    def _cancel_observation_expiry(self) -> None:
+        """예약된 만료콜백을 취소한다(재예약/만료/언로드/비활성화)."""
+        if self._expiry_unsub is not None:
+            self._expiry_unsub()
+            self._expiry_unsub = None
+        self._expiry_at = None
+
+    @callback
+    def _schedule_observation_expiry(self, observation: AwsObservation | None) -> None:
+        """관측 만료 시각(관측시각+15분 정각)에 엔티티 상태를 다시 쓰도록 예약한다.
+
+        폴링 주기에 기대면 만료 이후 최대 5분간 오래된 값이 게시 상태로 남는다.
+        신선도 상한이 엄격히 15분 미만이므로, 정각에 맞춰 한 번 다시 쓰면 그 시점에
+        오래된 값이 게시 상태에서 내려간다. 인위적 여유 상수는 쓰지 않는다.
+
+        지연 = 남은 시간(음수면 즉시)이다. 관측시각이 지금보다 미래일 수 있으므로
+        지연이 15분을 넘을 수 있다 — 그 경우에도 만료 시각 자체는 관측시각+15분이다.
+        """
+        self._cancel_observation_expiry()
+        if observation is None or self._shutdown:
+            return
+        fire_at = observation.observed_at.astimezone(
+            datetime.timezone.utc
+        ) + timedelta(minutes=AWS_MAX_OBSERVATION_AGE_MINUTES)
+        delay = max(0.0, (fire_at - self._now()).total_seconds())
+        self._expiry_at = fire_at
+        self._expiry_unsub = async_call_later(
+            self.hass, delay, self._handle_observation_expiry
+        )
+
+    @callback
+    def _handle_observation_expiry(self, _fire_time: datetime.datetime) -> None:
+        """만료 시각 도달 — 리스너를 불러 available(게시 상태)를 다시 계산한다."""
+        self._expiry_unsub = None
+        _LOGGER.debug(
+            "AWS 관측소 %s 신선도 만료 — 엔티티 상태를 다시 씁니다.",
+            self.aws_station_id,
+        )
+        self.async_update_listeners()
+
+    def _now(self) -> datetime.datetime:
+        """UTC aware 현재 시각. 스로틀/신선도 판정의 단일 시각 소스(테스트에서 대체 가능)."""
+        return datetime.datetime.now(datetime.timezone.utc)
+
+    @property
+    def aws_observation(self) -> AwsObservation | None:
+        """마지막으로 수용된 AWS 관측 스냅샷. 없으면 None."""
+        return (self.data or {}).get("observation")
+
+    @property
+    def aws_status(self) -> str:
+        """최근 실제 시도의 결과(ok/not_applied/error: …/unknown)."""
+        return (self.data or {}).get("status", "unknown")
+
+    @property
+    def aws_observation_fresh(self) -> bool:
+        """관측 나이 age 가 [-5분, +15분) 이면 True.
+
+        평가 시점의 시각으로 매번 다시 계산하므로, API가 계속 실패하더라도
+        시간이 지나면 자동으로 False가 되어 AWS 엔티티가 unavailable가 된다.
+        상한은 엄격히 미만 — 관측시각+15분 정각부터는 오래된 값으로 본다.
+        """
+        obs = self.aws_observation
+        if obs is None:
+            return False
+        age = self._now() - obs.observed_at.astimezone(datetime.timezone.utc)
+        return -timedelta(minutes=AWS_FUTURE_TOLERANCE_MINUTES) <= age < timedelta(
+            minutes=AWS_MAX_OBSERVATION_AGE_MINUTES
+        )
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        """AWS 최신 관측을 조회한다. 실패해도 예외를 밖으로 전파하지 않는다."""
+        now = self._now()
+        base: dict[str, Any] = dict(self.data or {})
+        base["station_id"] = self.aws_station_id
+        base.setdefault("observation", None)
+        base.setdefault("status", "unknown")
+        base.setdefault("last_attempt", None)
+        base.setdefault("last_success", None)
+        base.setdefault("error_count", 0)
+        base.setdefault("last_error", None)
+        base.setdefault("last_error_time", None)
+
+        # 5분 스로틀: 마지막 네트워크 시도(성공/실패/수동 갱신 포함)로부터
+        # 5분이 지나지 않았으면 호출하지 않고 이전 데이터를 그대로 둔다.
+        last_attempt = self._last_attempt
+        if last_attempt is not None and now - last_attempt < timedelta(
+            minutes=AWS_ATTEMPT_INTERVAL_MINUTES
+        ):
+            _LOGGER.debug(
+                "AWS 코디네이터 %s 스로틀 적용 — 네트워크 시도를 건너뜁니다.",
+                self.aws_station_id,
+            )
+            # 스로틀은 관측을 바꾸지 않으므로 만료콜백도 건드리지 않는다
+            # (기존 관측의 TTL 을 늘릴 수 없도록).
+            return base
+
+        self._last_attempt = now
+        base["last_attempt"] = now
+
+        try:
+            observation = await self.client.async_get_aws_observation(
+                stn=self.aws_station_id
+            )
+            # 셧다운 이후 도착한 응답은 스냅샷을 갱신하거나 만료콜백을 다시
+            # 예약하지 않는다 — 언로드 후 타이머/리스너가 남지 않게 한다.
+            if self._shutdown:
+                return base
+            # 관측시각 없는 잘못된 성공 페이로드는 스냅샷에 넣지 않는다 — 저장 전에
+            # 오류로 떨궈 _async_update_data 가 절대 예외를 밖으로 내보내지 않게 한다.
+            if not hasattr(observation, "observed_at"):
+                raise KmaApiError("AWS 관측 자료에 관측시각(observed_at)이 없습니다.")
+            # 성공 처리도 try 안에서 수행한다 — _async_update_data 는 어떤 경우에도
+            # 예외를 밖으로 내보내지 않는다(셋업/예보 갱신을 깨면 안 되기 때문).
+            base["status"] = "ok"
+            base["last_success"] = now
+            previous = base.get("observation")
+            if previous is not None and observation.observed_at < previous.observed_at:
+                # 이전에 수용한 시각보다 과거인 자료는 새 데이터를 덮어쓰지 않는다.
+                _LOGGER.debug(
+                    "AWS 관측 자료 %s가 이미 수용한 %s보다 과거라 무시합니다.",
+                    observation.tm,
+                    previous.tm,
+                )
+            else:
+                # 스냅샷 통째 교체 — 결측 필드를 예전 스냅샷에서 채우지 않는다.
+                base["observation"] = observation
+                # 새 관측을 수용할 때만 다시 예약한다. 오류/스로틀 갱신은 이 경로를
+                # 지나지 않으므로 기존 만료 시각(관측시각+15분)이 그대로 유지된다.
+                self._schedule_observation_expiry(observation)
+        except KmaActivationRequiredError as err:
+            message = redact_auth_key(str(err))
+            base["status"] = "not_applied"
+            base["error_count"] += 1
+            base["last_error"] = message
+            base["last_error_time"] = now
+            _LOGGER.warning(
+                "AWS 관측 자료 API 미신청(403) — 이전 관측값을 신선한 동안 유지합니다. "
+                "활용신청이 필요합니다: %s",
+                message,
+            )
+        except Exception as err:
+            # AWS의 어떤 실패도 예외로 새지 않게 막는다(예보 코디네이터와 무관하게,
+            # 셋업도 AWS 때문에 깨지면 안 된다).
+            message = redact_auth_key(str(err))
+            base["status"] = f"error: {message}"
+            base["error_count"] += 1
+            base["last_error"] = message
+            base["last_error_time"] = now
+            _LOGGER.warning(
+                "AWS 관측 자료 갱신 실패 — 이전 관측값을 신선한 동안 유지합니다: %s",
+                message,
+            )
+        # 실제 시도 결과만 허브 집계에 보고한다(스로틀 캐시·만료 알림·셧다운 후
+        # 도착한 응답은 위에서 조기 반환되어 여기 오지 않는다). 허브에는 URL/요청
+        # 파라미터/토큰/관측값 없는 짧은 요약만 넘기고, 관측소 자체 상태
+        # (base["status"]/last_error)는 상세(redacted)하게 유지한다.
+        if not self._shutdown and self.hub_coordinator is not None:
+            hub_status = (
+                _AWS_HUB_ERROR_SUMMARY
+                if base["status"].startswith("error")
+                else base["status"]
+            )
+            self.hub_coordinator.record_aws_attempt(self.aws_station_id, hub_status)
+        return base
+
+
 class KmaImageCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
     """레이더/위성/강수예측 이미지 코디네이터 (허브 단위, Zone과 무관한 전국 이미지 세트).
 
@@ -892,7 +1142,10 @@ class KmaHubCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
 
     def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
         self.client = client
-        self._init_api_status(API_STATUS_HUB_KEYS)
+        # AWS 관측소별 "실제 시도" 결과(지점번호 -> ok/not_applied/error: …).
+        # 허브가 모든 관측소를 최악값으로 집계해 기존 진단 센서로 노출한다.
+        self._aws_station_status: dict[int, str] = {}
+        self._init_api_status(API_STATUS_HUB_KEYS + API_STATUS_AWS_KEYS)
         super().__init__(
             hass,
             _LOGGER,
@@ -901,6 +1154,46 @@ class KmaHubCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=10),
         )
         self._bind_cooldown(config_entry)
+
+    @property
+    def api_status(self) -> dict[str, str]:
+        """지진/태풍 상태 + 설정된 AWS 관측소의 집계 상태(최악값).
+
+        AWS 관측소가 하나도 없으면(설정 전/마지막 관측소 제거) 'aws' 키를 넣지
+        않는다 — 사용하지 않는 API를 'ok'로 표시하지 않기 위함이다.
+        """
+        status = dict(super().api_status)
+        if self._aws_station_status:
+            status["aws"] = self._aggregate_aws_status()
+        return status
+
+    def record_aws_attempt(self, station: int, status: str) -> None:
+        """AWS 관측소의 '실제 API 시도' 결과를 집계에 반영한다.
+
+        캐시(스로틀) 갱신·만료 알림은 이 메서드를 부르지 않는다. 실패는 관측소별로
+        남고 집계는 최악값이라, 한 관측소의 성공이 다른 관측소의 실패를 지우지 않는다.
+        """
+        self._aws_station_status[station] = status
+        if status.startswith("error"):
+            self._api_error_counts["aws"] = self._api_error_counts.get("aws", 0) + 1
+            self._api_last_error_time["aws"] = datetime.datetime.now(
+                datetime.timezone.utc
+            )
+        self.async_update_listeners()
+
+    def forget_aws_station(self, station: int) -> None:
+        """관측소 제거/언로드 시 집계에서 제거한다(고스트 상태 방지)."""
+        if self._aws_station_status.pop(station, None) is not None:
+            self.async_update_listeners()
+
+    def _aggregate_aws_status(self) -> str:
+        statuses = list(self._aws_station_status.values())
+        for status in statuses:
+            if status.startswith("error"):
+                return status
+        if "not_applied" in statuses:
+            return "not_applied"
+        return "ok"
 
     async def _async_update_data(self) -> dict[str, Any]:
         """최근 지진정보/태풍정보를 조회. 실패 시 이전 값을 유지."""

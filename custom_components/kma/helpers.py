@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+import re
+from typing import Any
 
 from .const import (
     AIR_STAGNATION_GRADE_MAP,
@@ -304,6 +306,62 @@ def get_nearest_marine_zone(lat: float, lon: float) -> str:
             nearest_code = code
 
     return nearest_code
+
+
+def aws_station_key(entry_id: str, station: int) -> str:
+    """AWS 관측소의 안정 식별 키 = 부모 엔트리 ID + 지점번호.
+
+    서브엔트리 ID(ULID)는 삭제/재추가 시 바뀌지만 이 키는 고정이므로, 같은
+    부모 엔트리에 같은 지점번호를 다시 추가하면 디바이스/엔티티 정체성이 재사용된다.
+    부모 엔트리가 다르면 키도 달라 서로 충돌하지 않는다.
+    """
+    return f"{entry_id}_aws_{station}"
+
+
+def aws_station_title(station: int) -> str:
+    """AWS 관측소 서브엔트리/디바이스 표시 이름.
+
+    지점번호를 그대로 노출해 사용자가 어느 관측소인지 바로 알 수 있게 하고,
+    생성되는 엔티티 ID(`sensor.aws_<지점>_<센서>`)도 간결하게 유지한다.
+    """
+    return f"AWS {station}"
+
+
+def parse_aws_station_id(value: Any) -> int | None:
+    """AWS 지점번호 입력값을 양의 정수로 정규화.
+
+    공백/None/빈 문자열은 비활성화(None)를 뜻한다(서브엔트리 필드에서는 필수라
+    별도로 거부한다). "0108"이나 앞뒤 공백은 정규화되어 같은 지점번호로 취급된다.
+
+    반환: 양의 정수 | None(빈 값)
+    예외: ValueError — 공백이 아닌데 양의 정수가 아닌 값(0, 음수, "abc", "12.5")
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        # bool은 int의 subclass라서 아래 분기에서 1/0으로 통과해 버린다.
+        raise ValueError("aws_station_id must be a positive integer")
+    if isinstance(value, int):
+        number = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return None
+        try:
+            number = int(text, 10)
+        except ValueError:
+            raise ValueError("aws_station_id must be a positive integer") from None
+    if number <= 0:
+        raise ValueError("aws_station_id must be a positive integer")
+    return number
+
+
+_AUTH_KEY_RE = re.compile(r"authKey=[^&\s'\"]*")
+
+
+def redact_auth_key(text: str) -> str:
+    """문자열에 섞인 authKey 값을 마스킹. 로그/진단/상태문구에 공유 전에 사용."""
+    return _AUTH_KEY_RE.sub("authKey=***", text)
 
 
 if __name__ == "__main__":

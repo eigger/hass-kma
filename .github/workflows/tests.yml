@@ -45,7 +45,10 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install pytest
+          # voluptuous 는 Home Assistant가 런타임에 제공하는 의존성이라
+          # manifest requirements에는 없지만, config_flow 스키마를 단위 테스트하기
+          # 위해 테스트 전용으로 설치한다.
+          pip install pytest voluptuous
 
       - name: Run tests
         run: python -m pytest tests/ -v
