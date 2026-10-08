@@ -18,6 +18,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    API_STATUS_AWS_KEYS,
     API_STATUS_HUB_KEYS,
     API_STATUS_IMAGE_KEYS,
     API_STATUS_ZONE_KEYS,
@@ -135,6 +136,13 @@ async def async_setup_entry(
         entities += [
             KmaApiStatusBinarySensor(hub_coordinator, entry, key)
             for key in API_STATUS_HUB_KEYS
+        ]
+    # AWS 관측소가 하나 이상 설정된 경우에만 허브에 AWS API 상태 센서를 만든다
+    # (상태는 허브 코디네이터가 모든 관측소를 집계해 소유).
+    if hub_coordinator is not None and store.get("aws_coordinators"):
+        entities += [
+            KmaApiStatusBinarySensor(hub_coordinator, entry, key)
+            for key in API_STATUS_AWS_KEYS
         ]
     if entities:
         async_add_entities(entities)

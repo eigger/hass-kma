@@ -13,12 +13,15 @@ from unittest.mock import MagicMock
 import pytest
 import voluptuous as vol
 
+from custom_components.kma.aws_stations import AWS_STATION_CATALOG
 from custom_components.kma.config_flow import (
     CONF_ZONE_ID,
     AwsStationSubentryFlowHandler,
     KmaConfigFlow,
     ZoneSubentryFlowHandler,
     _aws_station_selector,
+    _station_label,
+    aws_station_options,
 )
 from custom_components.kma.const import (
     CONF_AWS_STATION_ID,
@@ -330,6 +333,43 @@ def test_aws_station_flow_has_no_reconfigure_step() -> None:
     assert not hasattr(AwsStationSubentryFlowHandler, "async_step_user_reconfigure")
 
 
+def test_aws_station_catalog_is_public_and_complete() -> None:
+    assert len(AWS_STATION_CATALOG) == 638
+    assert AWS_STATION_CATALOG[108] == ("서울", "서울특별시")
+    assert AWS_STATION_CATALOG[400] == ("강남", "서울특별시")
+    assert all(isinstance(stn, int) and stn > 0 for stn in AWS_STATION_CATALOG)
+    assert all(name and region for name, region in AWS_STATION_CATALOG.values())
+
+
+def test_aws_station_options_have_stable_values_and_named_labels() -> None:
+    options = aws_station_options()
+    values = [value for value, _ in options]
+    labels = [label for _, label in options]
+
+    assert len(options) == 638
+    assert all(value.isdigit() for value in values)
+    assert len(set(values)) == len(values)  # 지점번호(값)는 고유
+    assert len(set(labels)) == len(labels)  # 라벨도 고유(번호 포함)
+    assert ("108", "서울 (서울특별시, 108)") in options
+    assert ("400", "강남 (서울특별시, 400)") in options
+
+
+def test_station_label_distinguishes_duplicate_names() -> None:
+    """같은 이름이어도 라벨에 지점번호가 붙어 서로 구분된다."""
+    assert _station_label(108, "동명", "지역") != _station_label(400, "동명", "지역")
+    assert "108" in _station_label(108, "동명", "지역")
+    assert "400" in _station_label(400, "동명", "지역")
+
+
+@pytest.mark.parametrize("value", ["999999", "12345", "7", "1"])
+def test_aws_station_unknown_selection_is_rejected(value) -> None:
+    """카탈로그에 없는 지점번호(변조/오래된 값)는 생성하지 않는다."""
+    calls = _aws_create(value)
+
+    assert "create" not in calls
+    assert calls["form"]["errors"]["base"] == "invalid_aws_station"
+
+
 def test_parent_reports_both_subentry_types_with_expected_reconfigure_support() -> None:
     entry = SimpleNamespace()
     supported = KmaConfigFlow.async_get_supported_subentry_types(entry)
@@ -367,7 +407,11 @@ def test_form_schema_serializes_with_real_ha() -> None:
         )
         fields = to_field_list(schema, custom_serializer=cv.custom_serializer)
         aws = next(f for f in fields if f.get("name") == "aws_station_id")
-        assert aws["selector"]["text"]["type"] == "number", aws
+        sel = aws["selector"]["select"]
+        assert sel["mode"] == "dropdown", aws
+        assert sel["custom_value"] is True, aws
+        values = [o["value"] for o in sel["options"]]
+        assert "108" in values and "400" in values, aws
         print("SERIALIZED_OK")
         """
     )

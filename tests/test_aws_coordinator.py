@@ -15,6 +15,7 @@ from custom_components.kma.api import (
 )
 from conftest import CALL_LATER_CALLS, make_aws_observation as _obs
 from custom_components.kma.const import (
+    API_STATUS_AWS_KEYS,
     API_STATUS_HUB_KEYS,
     API_STATUS_IMAGE_KEYS,
     API_STATUS_ZONE_KEYS,
@@ -272,15 +273,16 @@ def test_newer_observation_replaces_older_one_and_fills_no_fields() -> None:
     assert data["observation"].temperature is None
 
 
-def test_aws_is_kept_out_of_shared_api_status_keys() -> None:
-    """AWS 는 API_STATUS_* 목록에 없어야 한다.
+def test_aws_uses_a_dedicated_hub_status_key() -> None:
+    """AWS 는 zone/image/hub 목록에 없고 전용 AWS 키로만 허브 집계에 노출된다.
 
-    있으면 AWS 미설정 Zone에도 항상 꺼진 activation_*/error_count_* 진단 엔티티가
-    생기기 때문이다(AWS 상태는 별도 코디네이터 data/status 로만 다룬다).
+    zone/image/hub 목록에 넣으면 AWS 미설정 시에도 항상 꺼진 진단 엔티티가 생기므로,
+    관측소가 있을 때만 생성되는 전용 키(API_STATUS_AWS_KEYS)를 쓴다.
     """
     for keys in (API_STATUS_ZONE_KEYS, API_STATUS_IMAGE_KEYS, API_STATUS_HUB_KEYS):
         assert "aws" not in keys
         assert all("aws" not in str(key) for key in keys)
+    assert API_STATUS_AWS_KEYS == ["aws"]
 
 
 def test_poll_interval_is_301s_and_attempt_guard_stays_300s() -> None:
@@ -515,3 +517,44 @@ def test_malformed_observation_is_never_stored_or_scheduled() -> None:
     assert data["observation"] is None
     assert coordinator._expiry_unsub is None
     assert CALL_LATER_CALLS == []
+
+
+def test_expiry_callback_publishes_stale_state_through_listeners() -> None:
+    """만료콜백이 리스너를 통해 게시 상태를 갱신한다(=만료 후 unavailable).
+
+    타이머가 등록한 실제 콜백(CALL_LATER_CALLS[-1]["action"])을 만료 시각에
+    실행하고, 엔티티 역할을 하는 리스너가 게시한 available/값이 stale로 바뀌는지
+    확인한다.
+    """
+    coordinator = _coordinator(_Client())
+    _update(coordinator)
+
+    published: list[dict] = []
+
+    def _record_state() -> None:
+        obs = coordinator.aws_observation
+        published.append(
+            {
+                "available": coordinator.last_update_success
+                and coordinator.aws_observation_fresh,
+                "temperature": obs.temperature if obs is not None else None,
+            }
+        )
+
+    coordinator._listeners["sensor.aws_x"] = (None, _record_state)
+
+    # 만료 직전(+14분): 게시 상태는 fresh + 실측값.
+    coordinator._now = lambda: T0 + datetime.timedelta(minutes=14)  # type: ignore[method-assign]
+    assert coordinator.aws_observation_fresh is True
+
+    # 만료 시각에 타이머가 호출하는 실제 콜백을 실행한다.
+    action = CALL_LATER_CALLS[-1]["action"]
+    coordinator._now = lambda: T0 + datetime.timedelta(minutes=16)  # type: ignore[method-assign]
+    action(datetime.datetime.now(datetime.timezone.utc))
+
+    # 콜백이 리스너를 불러 게시했고, 상태는 stale(unavailable)이 되었다.
+    # 스냅샷 값(온도)은 유지된다 — 게시만 중단되고 진단/이력은 남는다.
+    assert len(published) == 1
+    assert published[0] == {"available": False, "temperature": 23.1}
+    # 콜백이 발화 후 스스로 예약 해제했다.
+    assert coordinator._expiry_unsub is None

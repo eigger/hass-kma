@@ -32,6 +32,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import AwsObservation, VillageForecast, bulletin_section, split_bulletin_sections
 from .const import (
+    API_STATUS_AWS_KEYS,
     API_STATUS_HUB_KEYS,
     API_STATUS_IMAGE_KEYS,
     API_STATUS_ZONE_KEYS,
@@ -495,9 +496,10 @@ SENSOR_DESCRIPTIONS += [
 
 
 # ---------------------------------------------------------------------------
-# AWS(관측소 1분 자료) 센서 — Zone에 aws_station_id가 설정된 경우에만 생성된다.
+# AWS(관측소 1분 자료) 센서 — 독립 `aws_station` 서브엔트리마다 생성된다.
 # ---------------------------------------------------------------------------
-# 키는 전부 `aws_` 접두어이고 고유ID는 `{subentry_id}_{key}` 로 만든다.
+# 키는 전부 `aws_` 접두어이고 고유ID는 `{부모 엔트리 ID}_aws_{지점번호}_{센서}` 로
+# 만든다(서브엔트리 ID와 무관 — 삭제/재추가해도 동일 ID 재사용).
 # 풍향은 HA가 device_class=WIND_DIRECTION에 대해 state_class=MEASUREMENT_ANGLE만
 # 허용하므로 MEASUREMENT를 쓰면 런타임 경고가 뜬다(센티널인 360은 파서에서 None 처리).
 # 강수(15분/60분/12시간/오늘) 창은 값이 줄어드는 롤링 창이므로 반드시 MEASUREMENT —
@@ -634,6 +636,12 @@ async def async_setup_entry(
         entities += [
             KmaApiErrorCountSensor(hub_coordinator, entry, key)
             for key in API_STATUS_HUB_KEYS
+        ]
+    # AWS 관측소가 하나 이상 설정된 경우에만 허브에 AWS 에러 카운트 센서를 만든다.
+    if hub_coordinator is not None and store.get("aws_coordinators"):
+        entities += [
+            KmaApiErrorCountSensor(hub_coordinator, entry, key)
+            for key in API_STATUS_AWS_KEYS
         ]
     if entities:
         async_add_entities(entities)

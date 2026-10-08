@@ -56,14 +56,14 @@
       "step": {
         "user": {
           "title": "Add an AWS Station",
-          "description": "Enter the KMA AWS station ID (positive integer). The station directory is linked from the README. Sensors update every ~5 minutes.",
+          "description": "Search by station name, region or number, then select from the list. Sensors update roughly every 5 minutes.",
           "data": {
-            "aws_station_id": "AWS Station ID"
+            "aws_station_id": "Station"
           }
         }
       },
       "error": {
-        "invalid_aws_station": "Enter a positive integer station ID.",
+        "invalid_aws_station": "Select a station from the list.",
         "already_configured": "This station is already added."
       },
       "abort": {
@@ -582,6 +582,9 @@
       },
       "aws_sea_level_pressure": {
         "name": "Sea-Level Pressure"
+      },
+      "error_count_aws": {
+        "name": "AWS Observation API Error Count"
       }
     },
     "binary_sensor": {
@@ -671,6 +674,9 @@
       },
       "activation_typhoon": {
         "name": "Typhoon API"
+      },
+      "activation_aws": {
+        "name": "AWS Observation API"
       }
     },
     "image": {

@@ -60,6 +60,12 @@ API_STATUS_IMAGE_KEYS = [
 # 허브 단위(Zone 무관, 전국 단일 세트) 비-이미지 데이터 API — KmaHubCoordinator가 관리.
 API_STATUS_HUB_KEYS = ["earthquake", "typhoon"]
 
+# AWS 관측소 1분 자료 API 상태 — 허브 코디네이터(KmaHubCoordinator)가 소유.
+# 관측소마다 코디네이터가 따로 있어, 각 코디네이터가 실제 시도 결과를 허브 집계에
+# 보고하면 허브가 모든 관측소를 "최악값"으로 집계해 기존 진단 센서
+# (binary_sensor.activation_aws / sensor.error_count_aws)로 노출한다.
+API_STATUS_AWS_KEYS = ["aws"]
+
 # 대표 육상 예보구역 위경도 좌표 테이블
 # 포맷: { "대표예보구역코드": (위도, 경도) }
 REPRESENTATIVE_LAND_ZONES = {

@@ -90,6 +90,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     image_coordinator.hub_device_id = hub_device.id
     hub_coordinator = KmaHubCoordinator(hass, client, entry)
     hub_coordinator.hub_device_id = hub_device.id
+    # AWS 관측소 코디네이터가 실제 시도 결과를 허브 집계에 보고하도록 연결한다.
+    # (첫 refresh 전에 연결해야 첫 시도부터 집계에 반영된다.)
+    for aws_coordinator in aws_coordinators.values():
+        aws_coordinator.hub_coordinator = hub_coordinator
     refreshes.append(image_coordinator.async_config_entry_first_refresh())
     refreshes.append(hub_coordinator.async_config_entry_first_refresh())
     await asyncio.gather(*refreshes)

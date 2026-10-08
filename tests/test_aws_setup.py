@@ -146,6 +146,31 @@ def test_setup_creates_one_coordinator_per_aws_station(monkeypatch):
     assert {sub.data[CONF_AWS_STATION_ID] for sub in created["aws"]} == {108, 400}
 
 
+def test_setup_wires_aws_coordinators_to_hub(monkeypatch):
+    """AWS 코디네이터가 허브 집계 코디네이터에 연결된다(실제 시도 결과 보고용)."""
+    _install_fakes(monkeypatch)
+    hass = _hass()
+    entry = _entry([_aws("sub-aws", 108)])
+
+    asyncio.run(async_setup_entry(hass, entry))
+
+    store = hass.data[DOMAIN][entry.entry_id]
+    assert store["aws_coordinators"]["sub-aws"].hub_coordinator is store["hub_coordinator"]
+
+
+def test_setup_loads_saved_station_absent_from_catalog(monkeypatch):
+    """카탈로그에 없는 지점번호로 저장된 서브엔트리도 그대로 로드된다."""
+    created = _install_fakes(monkeypatch)
+    hass = _hass()
+    entry = _entry([_aws("sub-saved", 999999)])
+
+    asyncio.run(async_setup_entry(hass, entry))
+
+    store = hass.data[DOMAIN][entry.entry_id]
+    assert set(store["aws_coordinators"]) == {"sub-saved"}
+    assert created["aws"][0].data[CONF_AWS_STATION_ID] == 999999
+
+
 def test_setup_skips_aws_station_subentry_with_invalid_number(monkeypatch):
     created = _install_fakes(monkeypatch)
     hass = _hass()

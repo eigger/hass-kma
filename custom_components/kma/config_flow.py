@@ -20,6 +20,7 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import KmaApiClient, KmaApiError, KmaAuthError
+from .aws_stations import AWS_STATION_CATALOG
 from .const import (
     CONF_AWS_STATION_ID,
     DOMAIN,
@@ -43,16 +44,38 @@ CONF_ZONE_ID = "zone_id"
 APIHUB_URL = "https://apihub.kma.go.kr"
 
 
-def _aws_station_selector() -> selector.TextSelector:
-    """`aws_station_id` 입력용 HA 직렬화 가능 selector.
+def _station_label(station: int, name: str, region: str) -> str:
+    """지점 라벨 = 이름 (지역, 지점번호). 지점번호가 항상 붙어 동명이인도 구분된다."""
+    return f"{name} ({region}, {station})"
 
-    폼 스키마는 프론트엔드로 JSON 직렬화되므로(HA 2026.9.x), callable 검증기를
-    스키마 값으로 쓰면 `unable to serialize schema` ValueError(HTTP 500)가 난다.
-    따라서 숫자 입력을 유도하는 텍스트 selector만 두고, 실제 검증은 서버에서
-    parse_aws_station_id가 수행한다(양의 정수, bool 거부).
+
+def aws_station_options() -> list[tuple[str, str]]:
+    """SelectSelector 옵션 목록 (value=str(지점번호), label=이름·지역·번호)."""
+    return [
+        (str(station), _station_label(station, name, region))
+        for station, (name, region) in sorted(AWS_STATION_CATALOG.items())
+    ]
+
+
+def _aws_station_selector() -> selector.SelectSelector:
+    """`aws_station_id` 선택용 HA 직렬화 가능 SelectSelector.
+
+    번들된 공개 카탈로그(`aws_stations.AWS_STATION_CATALOG`)의 지점번호를 안정
+    값(`value=str(station)`)으로, 이름·지역·번호를 라벨로 노출한다. 검색어
+    입력이 가능한 DROPDOWN 모드는 `custom_value=True`일 때 제공되므로 임의
+    텍스트도 스키마를 통과하지만, 서버에서 기존대로 정식 지점번호 정규화
+    (parse_aws_station_id)와 카탈로그 포함 여부로 검증해 목록 밖 값은 거부한다.
+    저장 데이터 형식은 바뀌지 않는다(숫자 지점번호 단일 값).
     """
-    return selector.TextSelector(
-        selector.TextSelectorConfig(type=selector.TextSelectorType.NUMBER)
+    return selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[
+                selector.SelectOptionDict(value=value, label=label)
+                for value, label in aws_station_options()
+            ],
+            mode=selector.SelectSelectorMode.DROPDOWN,
+            custom_value=True,
+        )
     )
 
 
@@ -276,7 +299,10 @@ class AwsStationSubentryFlowHandler(ConfigSubentryFlow):
                 errors["base"] = "invalid_aws_station"
             if not errors:
                 entry = self._get_entry()
-                if _station_in_use(entry, station):
+                if station not in AWS_STATION_CATALOG:
+                    # 카탈로그에 없는 지점번호 — 변조/오래된 값 방어.
+                    errors["base"] = "invalid_aws_station"
+                elif _station_in_use(entry, station):
                     errors["base"] = "already_configured"
                 else:
                     return self.async_create_entry(

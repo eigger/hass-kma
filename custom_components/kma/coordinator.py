@@ -23,6 +23,7 @@ from .api import (
     VillageForecast,
 )
 from .const import (
+    API_STATUS_AWS_KEYS,
     API_STATUS_HUB_KEYS,
     API_STATUS_IMAGE_KEYS,
     API_STATUS_ZONE_KEYS,
@@ -40,6 +41,10 @@ from .const import (
 from .helpers import aws_station_key, parse_pcp, parse_sno, redact_auth_key
 
 _LOGGER = logging.getLogger(__name__)
+
+# 허브 진단에 노출하는 AWS 실패 요약. URL/요청 파라미터/토큰/관측값을 담지 않는다.
+# 관측소 자체의 data["status"]/last_error 는 상세(redacted)하게 유지한다.
+_AWS_HUB_ERROR_SUMMARY = "error: AWS 관측 자료 조회 실패"
 
 API_COOLDOWN = timedelta(minutes=5)
 MAX_TRANSIENT_RETRIES = 3
@@ -830,6 +835,8 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             config_entry.entry_id, self.aws_station_id
         )
         self._last_attempt: datetime.datetime | None = None
+        # 실제 시도 결과를 보고할 허브 코디네이터(셋업에서 주입). 없으면 집계 생략.
+        self.hub_coordinator: KmaHubCoordinator | None = None
         # 언로드/비활성화 표시 — 진행 중이던 HTTP가 늦게 끝나도 만료콜백을 다시
         # 예약하거나 스냅샷을 되살리지 않도록 한다.
         self._shutdown = False
@@ -853,6 +860,9 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # 진행 중인 _async_update_data 가 이후에 완료되어도 만료콜백을 다시
         # 예약하지 않도록 먼저 표시한다.
         self._shutdown = True
+        if self.hub_coordinator is not None:
+            # 관측소 제거/언로드 시 허브 집계에서 제거해 고스트 상태를 남기지 않는다.
+            self.hub_coordinator.forget_aws_station(self.aws_station_id)
         self._cancel_observation_expiry()
         await super().async_shutdown()
 
@@ -1010,6 +1020,17 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "AWS 관측 자료 갱신 실패 — 이전 관측값을 신선한 동안 유지합니다: %s",
                 message,
             )
+        # 실제 시도 결과만 허브 집계에 보고한다(스로틀 캐시·만료 알림·셧다운 후
+        # 도착한 응답은 위에서 조기 반환되어 여기 오지 않는다). 허브에는 URL/요청
+        # 파라미터/토큰/관측값 없는 짧은 요약만 넘기고, 관측소 자체 상태
+        # (base["status"]/last_error)는 상세(redacted)하게 유지한다.
+        if not self._shutdown and self.hub_coordinator is not None:
+            hub_status = (
+                _AWS_HUB_ERROR_SUMMARY
+                if base["status"].startswith("error")
+                else base["status"]
+            )
+            self.hub_coordinator.record_aws_attempt(self.aws_station_id, hub_status)
         return base
 
 
@@ -1121,7 +1142,10 @@ class KmaHubCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
 
     def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
         self.client = client
-        self._init_api_status(API_STATUS_HUB_KEYS)
+        # AWS 관측소별 "실제 시도" 결과(지점번호 -> ok/not_applied/error: …).
+        # 허브가 모든 관측소를 최악값으로 집계해 기존 진단 센서로 노출한다.
+        self._aws_station_status: dict[int, str] = {}
+        self._init_api_status(API_STATUS_HUB_KEYS + API_STATUS_AWS_KEYS)
         super().__init__(
             hass,
             _LOGGER,
@@ -1130,6 +1154,46 @@ class KmaHubCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
             update_interval=timedelta(minutes=10),
         )
         self._bind_cooldown(config_entry)
+
+    @property
+    def api_status(self) -> dict[str, str]:
+        """지진/태풍 상태 + 설정된 AWS 관측소의 집계 상태(최악값).
+
+        AWS 관측소가 하나도 없으면(설정 전/마지막 관측소 제거) 'aws' 키를 넣지
+        않는다 — 사용하지 않는 API를 'ok'로 표시하지 않기 위함이다.
+        """
+        status = dict(super().api_status)
+        if self._aws_station_status:
+            status["aws"] = self._aggregate_aws_status()
+        return status
+
+    def record_aws_attempt(self, station: int, status: str) -> None:
+        """AWS 관측소의 '실제 API 시도' 결과를 집계에 반영한다.
+
+        캐시(스로틀) 갱신·만료 알림은 이 메서드를 부르지 않는다. 실패는 관측소별로
+        남고 집계는 최악값이라, 한 관측소의 성공이 다른 관측소의 실패를 지우지 않는다.
+        """
+        self._aws_station_status[station] = status
+        if status.startswith("error"):
+            self._api_error_counts["aws"] = self._api_error_counts.get("aws", 0) + 1
+            self._api_last_error_time["aws"] = datetime.datetime.now(
+                datetime.timezone.utc
+            )
+        self.async_update_listeners()
+
+    def forget_aws_station(self, station: int) -> None:
+        """관측소 제거/언로드 시 집계에서 제거한다(고스트 상태 방지)."""
+        if self._aws_station_status.pop(station, None) is not None:
+            self.async_update_listeners()
+
+    def _aggregate_aws_status(self) -> str:
+        statuses = list(self._aws_station_status.values())
+        for status in statuses:
+            if status.startswith("error"):
+                return status
+        if "not_applied" in statuses:
+            return "not_applied"
+        return "ok"
 
     async def _async_update_data(self) -> dict[str, Any]:
         """최근 지진정보/태풍정보를 조회. 실패 시 이전 값을 유지."""

@@ -56,14 +56,14 @@
       "step": {
         "user": {
           "title": "AWS 관측소 추가",
-          "description": "기상청 AWS 관측소 번호(양의 정수)를 입력하십시오. 관측소 목록은 README의 안내 링크를 참고하세요. 센서는 약 5분마다 갱신됩니다.",
+          "description": "관측소 이름, 지역 또는 번호로 검색한 뒤 목록에서 선택하세요. 센서는 약 5분마다 갱신됩니다.",
           "data": {
-            "aws_station_id": "AWS 관측소 번호"
+            "aws_station_id": "관측소"
           }
         }
       },
       "error": {
-        "invalid_aws_station": "관측소 번호는 양의 정수여야 합니다.",
+        "invalid_aws_station": "목록에서 관측소를 선택하세요.",
         "already_configured": "이미 추가된 관측소입니다."
       },
       "abort": {
@@ -582,6 +582,9 @@
       },
       "aws_sea_level_pressure": {
         "name": "해면기압"
+      },
+      "error_count_aws": {
+        "name": "AWS 관측소 API 오류 수"
       }
     },
     "binary_sensor": {
@@ -671,6 +674,9 @@
       },
       "activation_typhoon": {
         "name": "태풍정보 API"
+      },
+      "activation_aws": {
+        "name": "AWS 관측소 API"
       }
     },
     "button": {
