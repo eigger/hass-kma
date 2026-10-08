@@ -27,7 +27,7 @@ class _MockBase:
         # super().__init__ 에 넘긴 키워드( update_interval, name 등)를 테스트가
         # 검증할 수 있도록 남겨 둔다. (실제 HA 코디네이터가 여기서 저장하는 값.)
         self._mock_init_kwargs = dict(kwargs)
-        # 실제 HA 는 첫 위치인자로 hass 를 받는다 — 만료콜백 예약 등에서 참조하므로
+        # 실제 HA 는 첫 위치인자로 hass 를 받는다 — 쿨다운 재시도 예약 등에서 참조하므로
         # 모의에서도 어트리뷰트가 존재해야 한다.
         if args and not hasattr(self, "hass"):
             self.hass = args[0]
@@ -234,7 +234,7 @@ _mock_ha_coordinator.CoordinatorEntity = _MockCoordinatorEntity
 _mock_ha_coordinator.UpdateFailed = _MockUpdateFailed
 
 # --- homeassistant.helpers.event --------------------------------------------
-# AWS 코디네이터의 만료 타이머를 단위 테스트에서 관찰하기 위한 mock입니다.
+# async_call_later(예보 쿨다운 재시도 등)를 단위 테스트에서 관찰하기 위한 mock입니다.
 # 실제 타이머 대신 지연 시간·동작·취소 여부를 기록합니다.
 _mock_ha_event = _module("homeassistant.helpers.event")
 CALL_LATER_CALLS: list[dict[str, Any]] = []
@@ -261,7 +261,7 @@ _mock_ha_event.async_call_later = _async_call_later
 
 @pytest.fixture(autouse=True)
 def _reset_call_later():
-    """각 테스트마다 만료콜백 예약 기록을 비운다."""
+    """각 테스트마다 async_call_later 예약 기록을 비운다."""
     CALL_LATER_CALLS.clear()
     yield
     CALL_LATER_CALLS.clear()

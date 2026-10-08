@@ -1700,7 +1700,10 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], RestoreSensor):
         await super().async_added_to_hass()
         last = await self.async_get_last_sensor_data()
         if last is not None:
-            self._restored_value = last.native_value
+            # 단위가 바뀐 릴리스 직후에는 이전 단위의 값을 쓰지 않는다.
+            unit = last.native_unit_of_measurement
+            if unit is None or unit == self.entity_description.native_unit_of_measurement:
+                self._restored_value = last.native_value
 
     @property
     def available(self) -> bool:

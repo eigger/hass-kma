@@ -874,7 +874,7 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """관측 나이 age 가 [-5분, +15분) 이면 True.
 
         평가 시점의 시각으로 매번 다시 계산하므로, API가 계속 실패하더라도
-        시간이 지나면 자동으로 False가 되어 AWS 엔티티가 unavailable가 된다.
+        시간이 지나면 자동으로 False가 된다(센서는 마지막 값을 유지하고 관측 시각으로 신선도를 표시한다).
         상한은 엄격히 미만 — 관측시각+15분 정각부터는 오래된 값으로 본다.
         """
         obs = self.aws_observation
@@ -917,8 +917,7 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             observation = await self.client.async_get_aws_observation(
                 stn=self.aws_station_id
             )
-            # 셧다운 이후 도착한 응답은 스냅샷을 갱신하지 않는다
-            # 예약하지 않는다 — 언로드 후 타이머/리스너가 남지 않게 한다.
+            # 셧다운 이후 도착한 응답은 스냅샷을 갱신하지 않는다.
             if self._shutdown:
                 return base
             # 관측시각 없는 잘못된 성공 페이로드는 스냅샷에 넣지 않는다 — 저장 전에
@@ -947,7 +946,7 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             base["last_error"] = message
             base["last_error_time"] = now
             _LOGGER.warning(
-                "AWS 관측 자료 API 미신청(403) — 이전 관측값을 신선한 동안 유지합니다. "
+                "AWS 관측 자료 API 미신청(403) — 이전 관측값을 유지합니다. "
                 "활용신청이 필요합니다: %s",
                 message,
             )
@@ -960,7 +959,7 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             base["last_error"] = message
             base["last_error_time"] = now
             _LOGGER.warning(
-                "AWS 관측 자료 갱신 실패 — 이전 관측값을 신선한 동안 유지합니다: %s",
+                "AWS 관측 자료 갱신 실패 — 이전 관측값을 유지합니다: %s",
                 message,
             )
         # 실제 시도 결과만 허브 집계에 보고한다(스로틀 캐시·셧다운 후
