@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import voluptuous as vol
@@ -50,18 +51,31 @@ def _station_label(station: int, name: str, region: str) -> str:
 
 
 def aws_station_options() -> list[tuple[str, str]]:
-    """SelectSelector 옵션 목록 (value=str(지점번호), label=이름·지역·번호)."""
+    """SelectSelector 옵션 목록. 선택 후에도 이름이 보이도록 value=label=`이름 (지역, 번호)`."""
     return [
-        (str(station), _station_label(station, name, region))
+        (label := _station_label(station, name, region), label)
         for station, (name, region) in sorted(AWS_STATION_CATALOG.items())
     ]
+
+
+_STATION_LABEL_RE = re.compile(r"\(.*,\s*(\d+)\)\s*$")
+
+
+def _station_from_input(value: Any) -> Any:
+    """선택기 값(`이름 (지역, 번호)` 라벨 또는 직접 입력한 번호)에서 번호 부분을 꺼낸다."""
+    if isinstance(value, str):
+        match = _STATION_LABEL_RE.search(value)
+        if match:
+            return match.group(1)
+    return value
 
 
 def _aws_station_selector() -> selector.SelectSelector:
     """`aws_station_id` 선택용 HA 직렬화 가능 SelectSelector.
 
-    번들된 공개 카탈로그(`aws_stations.AWS_STATION_CATALOG`)의 지점번호를 안정
-    값(`value=str(station)`)으로, 이름·지역·번호를 라벨로 노출한다. 검색어
+    번들된 공개 카탈로그(`aws_stations.AWS_STATION_CATALOG`)를 `이름 (지역, 번호)`
+    문자열로 노출한다(값=라벨이라 선택 후에도 이름이 보인다). 제출값에서
+    `_station_from_input`으로 번호를 꺼내 쓴다. 검색어
     입력이 가능한 DROPDOWN 모드는 `custom_value=True`일 때 제공되므로 임의
     텍스트도 스키마를 통과하지만, 서버에서 기존대로 정식 지점번호 정규화
     (parse_aws_station_id)와 카탈로그 포함 여부로 검증해 목록 밖 값은 거부한다.
@@ -290,7 +304,9 @@ class AwsStationSubentryFlowHandler(ConfigSubentryFlow):
 
         if user_input is not None:
             try:
-                station = parse_aws_station_id(user_input.get(CONF_AWS_STATION_ID))
+                station = parse_aws_station_id(
+                    _station_from_input(user_input.get(CONF_AWS_STATION_ID))
+                )
             except ValueError:
                 station = None
                 errors["base"] = "invalid_aws_station"

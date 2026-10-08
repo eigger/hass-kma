@@ -6,6 +6,7 @@ import math
 import re
 from typing import Any
 
+from .aws_stations import AWS_STATION_CATALOG
 from .const import (
     AIR_STAGNATION_GRADE_MAP,
     IMPACT_RISK_GRADE_MAP,
@@ -319,12 +320,14 @@ def aws_station_key(entry_id: str, station: int) -> str:
 
 
 def aws_station_title(station: int) -> str:
-    """AWS 관측소 서브엔트리/디바이스 표시 이름.
+    """AWS 관측소 서브엔트리/디바이스 표시 이름: `서울 (AWS 108)`.
 
-    지점번호를 그대로 노출해 사용자가 어느 관측소인지 바로 알 수 있게 하고,
-    생성되는 엔티티 ID(`sensor.aws_<지점>_<센서>`)도 간결하게 유지한다.
+    카탈로그에 있으면 지점명을 앞에 붙이고, 없으면 `AWS <지점번호>`만 쓴다.
     """
-    return f"AWS {station}"
+    entry = AWS_STATION_CATALOG.get(station)
+    if entry is None:
+        return f"AWS {station}"
+    return f"{entry[0]} (AWS {station})"
 
 
 def parse_aws_station_id(value: Any) -> int | None:

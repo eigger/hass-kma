@@ -333,3 +333,9 @@ def test_setup_passes_config_subentry_id_for_aws_entities() -> None:
 
     assert len(calls) == 1
     assert calls[0][1].get("config_subentry_id") == "sub-1"
+
+
+def test_aws_object_id_names_cover_all_sensors() -> None:
+    from custom_components.kma.sensor import AWS_OBJECT_ID_NAMES, AWS_SENSOR_DESCRIPTIONS
+
+    assert set(AWS_OBJECT_ID_NAMES) == {d.key for d in AWS_SENSOR_DESCRIPTIONS}
