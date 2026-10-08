@@ -351,3 +351,44 @@ def test_attributes_expose_freshness() -> None:
 
     assert fresh["observation_fresh"] is True
     assert stale["observation_fresh"] is False
+
+
+def test_restored_value_is_shown_until_first_observation() -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    desc = _by_key("aws_temperature")
+    sensor = _sensor(desc, _coordinator(None))
+    assert sensor.available is False  # 관측도 복원값도 없음
+
+    sensor._test_last_sensor_data = SimpleNamespace(native_value=19.5)
+    asyncio.run(sensor.async_added_to_hass())
+
+    assert sensor.available is True
+    assert sensor.native_value == 19.5
+
+
+def test_restored_value_is_replaced_by_live_observation() -> None:
+    import asyncio
+    from types import SimpleNamespace
+
+    desc = _by_key("aws_temperature")
+    coordinator = _coordinator(None)
+    sensor = _sensor(desc, coordinator)
+    sensor._test_last_sensor_data = SimpleNamespace(native_value=19.5)
+    asyncio.run(sensor.async_added_to_hass())
+
+    coordinator.aws_observation = _obs()
+
+    assert sensor.native_value == 23.1
+
+
+def test_nothing_restored_stays_unavailable() -> None:
+    import asyncio
+
+    sensor = _sensor(_by_key("aws_temperature"), _coordinator(None))
+    sensor._test_last_sensor_data = None
+    asyncio.run(sensor.async_added_to_hass())
+
+    assert sensor.available is False
+    assert sensor.native_value is None

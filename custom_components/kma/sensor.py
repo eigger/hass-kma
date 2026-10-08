@@ -6,6 +6,7 @@ import logging
 from typing import Any, ClassVar
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -1664,7 +1665,7 @@ class KmaApiErrorCountSensor(
         }
 
 
-class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
+class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], RestoreSensor):
     """AWS(관측소 1분 자료) 센서. `aws_station` 서브엔트리가 소유한다.
 
     예보 센서(KmaSensor)와 코디네이터·디바이스·고유ID가 전부 분리되어 있어
@@ -1691,22 +1692,35 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
         self.entity_id = "sensor." + slugify(
             f"AWS {coordinator.aws_station_id} {AWS_OBJECT_ID_NAMES[description.key]}"
         )
+        # 재시작 직후 첫 관측을 받기 전까지 보여줄 이전 값(RestoreSensor).
+        self._restored_value: Any = None
+
+    async def async_added_to_hass(self) -> None:
+        """재시작 후 첫 조회가 성공하기 전까지 마지막 값을 복원해 보여준다."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_sensor_data()
+        if last is not None:
+            self._restored_value = last.native_value
 
     @property
     def available(self) -> bool:
-        """수용한 관측이 하나라도 있으면 사용 가능. 마지막 값을 유지한다.
+        """수용한 관측이나 복원된 이전 값이 있으면 사용 가능. 마지막 값을 유지한다.
 
         신선도는 가용성이 아니라 `observation_time`(관측 시각 센서/속성)과
-        `observation_fresh` 속성으로 판단한다. 아직 관측이 없으면 unavailable.
+        `observation_fresh` 속성으로 판단한다. 관측도 복원값도 없으면 unavailable.
         """
-        return super().available and self.coordinator.aws_observation is not None
+        return super().available and (
+            self.coordinator.aws_observation is not None
+            or self._restored_value is not None
+        )
 
     @property
     def native_value(self) -> Any:
         """관측값. 관측시각 센서는 KST aware datetime, 나머지는 숫자/None."""
         obs = self.coordinator.aws_observation
         if obs is None:
-            return None
+            # 첫 관측 전에는 복원한 이전 값을 보여준다(없으면 None).
+            return self._restored_value
         return getattr(obs, AWS_VALUE_ATTRS[self.entity_description.key])
 
     @property

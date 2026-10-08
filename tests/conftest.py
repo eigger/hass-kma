@@ -77,6 +77,18 @@ class _MockSensorEntity(_MockBase):
     pass
 
 
+class _MockRestoreSensor(_MockBase):
+    """RestoreSensor — 테스트는 `_test_last_sensor_data`로 복원 데이터를 주입한다."""
+
+    _test_last_sensor_data: Any = None
+
+    async def async_added_to_hass(self) -> None:
+        return None
+
+    async def async_get_last_sensor_data(self) -> Any:
+        return self._test_last_sensor_data
+
+
 class _MockBinarySensorEntity(_MockBase):
     pass
 
@@ -264,6 +276,7 @@ _mock_ha_sensor = _module("homeassistant.components.sensor")
 _mock_ha_sensor.SensorDeviceClass = _StrNameEnum()
 _mock_ha_sensor.SensorStateClass = _StrNameEnum()
 _mock_ha_sensor.SensorEntity = _MockSensorEntity
+_mock_ha_sensor.RestoreSensor = _MockRestoreSensor
 _mock_ha_sensor.SensorEntityDescription = _MockEntityDescription
 
 # --- homeassistant.components.binary_sensor / weather -----------------------
