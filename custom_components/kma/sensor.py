@@ -6,6 +6,7 @@ import logging
 from typing import Any, ClassVar
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -30,7 +31,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util, slugify
 
-from .api import AwsObservation, VillageForecast, bulletin_section, split_bulletin_sections
+from .api import VillageForecast, bulletin_section, split_bulletin_sections
 from .const import (
     API_STATUS_AWS_KEYS,
     API_STATUS_HUB_KEYS,
@@ -1664,7 +1665,7 @@ class KmaApiErrorCountSensor(
         }
 
 
-class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
+class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], RestoreSensor):
     """AWS(관측소 1분 자료) 센서. `aws_station` 서브엔트리가 소유한다.
 
     예보 센서(KmaSensor)와 코디네이터·디바이스·고유ID가 전부 분리되어 있어
@@ -1691,30 +1692,38 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
         self.entity_id = "sensor." + slugify(
             f"AWS {coordinator.aws_station_id} {AWS_OBJECT_ID_NAMES[description.key]}"
         )
+        # 재시작 직후 첫 관측을 받기 전까지 보여줄 이전 값(RestoreSensor).
+        self._restored_value: Any = None
 
-    @property
-    def _observation(self) -> AwsObservation | None:
-        """신선한 관측 스냅샷. 신선하지 않으면(미관측/지나친 지연/미래 시각) None."""
-        coordinator = self.coordinator
-        if not coordinator.aws_observation_fresh:
-            return None
-        return coordinator.aws_observation
+    async def async_added_to_hass(self) -> None:
+        """재시작 후 첫 조회가 성공하기 전까지 마지막 값을 복원해 보여준다."""
+        await super().async_added_to_hass()
+        last = await self.async_get_last_sensor_data()
+        if last is not None:
+            # 단위가 바뀐 릴리스 직후에는 이전 단위의 값을 쓰지 않는다.
+            unit = last.native_unit_of_measurement
+            if unit is None or unit == self.entity_description.native_unit_of_measurement:
+                self._restored_value = last.native_value
 
     @property
     def available(self) -> bool:
-        """신선한 관측만 사용 가능. 신선도는 매 평가 시각으로 다시 계산된다.
+        """수용한 관측이나 복원된 이전 값이 있으면 사용 가능. 마지막 값을 유지한다.
 
-        API가 계속 실패해도 관측 나이가 15분 미만(미래 5분 허용) 범위를 벗어나는
-        순간 엔티티가 자동으로 unavailable가 된다(오래된 스냅샷을 계속 띄우지 않기 위해).
+        신선도는 가용성이 아니라 `observation_time`(관측 시각 센서/속성)과
+        `observation_fresh` 속성으로 판단한다. 관측도 복원값도 없으면 unavailable.
         """
-        return super().available and self.coordinator.aws_observation_fresh
+        return super().available and (
+            self.coordinator.aws_observation is not None
+            or self._restored_value is not None
+        )
 
     @property
     def native_value(self) -> Any:
         """관측값. 관측시각 센서는 KST aware datetime, 나머지는 숫자/None."""
-        obs = self._observation
+        obs = self.coordinator.aws_observation
         if obs is None:
-            return None
+            # 첫 관측 전에는 복원한 이전 값을 보여준다(없으면 None).
+            return self._restored_value
         return getattr(obs, AWS_VALUE_ATTRS[self.entity_description.key])
 
     @property
@@ -1725,6 +1734,7 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
         return {
             "station_id": self.coordinator.aws_station_id,
             "observation_time": obs.observed_at if obs is not None else None,
+            "observation_fresh": self.coordinator.aws_observation_fresh,
             "status": self.coordinator.aws_status,
             "error_count": data.get("error_count", 0),
         }

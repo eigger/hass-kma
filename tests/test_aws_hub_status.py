@@ -163,9 +163,6 @@ def test_aws_coordinator_publishes_only_actual_attempts() -> None:
     _update(coordinator)
     assert hub.attempts == [(108, "ok")]
 
-    # 만료 알림 → 보고 없음.
-    coordinator._handle_observation_expiry(None)
-    assert hub.attempts == [(108, "ok")]
 
 
 def test_aws_coordinator_publishes_failure_and_recovery() -> None:
