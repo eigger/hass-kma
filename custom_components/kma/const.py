@@ -28,9 +28,8 @@ AWS_POLL_INTERVAL_SECONDS = 301
 # 실제 네트워크 시도 간격 하한(성공·실패·수동 갱신 모두 포함, 마지막 시도 기준).
 AWS_ATTEMPT_INTERVAL_MINUTES = 5
 
-# 신선도 판정: 관측 나이 age 가 [-5분, +15분) 범위여야 AWS 센서를 available로 둔다.
-# 상한은 엄격히 미만(<) — 관측시각+15분 정각이 되는 순간 오래된 값으로 간주하므로,
-# 만료콜백도 인위적 여유 없이 정확히 관측시각+15분에 맞춘다.
+# 신선도 판정: 관측 나이 age 가 [-5분, +15분) 범위면 "신선"이다. 센서의 available
+# 에는 쓰지 않고(마지막 값 유지) observation_fresh 속성/진단으로만 노출한다.
 AWS_MAX_OBSERVATION_AGE_MINUTES = 15
 AWS_FUTURE_TOLERANCE_MINUTES = 5
 

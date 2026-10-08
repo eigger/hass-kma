@@ -359,100 +359,35 @@ def test_forecast_update_path_has_no_aws_dependency() -> None:
     assert "aws" not in source.lower()
 
 
-def test_expiry_callback_is_scheduled_at_observation_end() -> None:
-    """관측시각+15분 정각에 정확히 한 번 상태를 다시 쓰도록 예약한다.
 
-    폴링(5분)에만 기대면 만료 이후 최대 5분간 오래된 값이 게시 상태로 남는다.
-    신선도 상한이 엄격히 15분 미만이므로 인위적 여유 없이 정각에 맞춘다.
-    """
+def test_no_timers_are_scheduled_and_last_value_is_kept_when_stale() -> None:
+    """만료 타이머는 없다. 오래된 마지막 관측도 유지되고 신선하지 않다고만 표시된다."""
     coordinator = _coordinator(_Client())
 
     _update(coordinator)
+    coordinator._now = lambda: T0 + datetime.timedelta(hours=3)  # type: ignore[method-assign]
 
-    assert coordinator._expiry_unsub is not None
-    assert coordinator._expiry_at == T0 + datetime.timedelta(
-        minutes=AWS_MAX_OBSERVATION_AGE_MINUTES
-    )
-    record = CALL_LATER_CALLS[-1]
-    # 남은 시간 기준 지연 — 관측 직후면 정확히 15분.
-    assert record["delay"] == pytest.approx(AWS_MAX_OBSERVATION_AGE_MINUTES * 60)
-    assert record["cancelled"] is False
-    assert record["action"].__self__ is coordinator
+    assert CALL_LATER_CALLS == []
+    assert coordinator.aws_observation is not None
+    assert coordinator.aws_observation.temperature == 23.1
+    assert coordinator.aws_observation_fresh is False
 
 
-def test_expiry_callback_reschedules_on_new_observation() -> None:
-    """새 관측을 수용하면 만료 시각이 새 관측시각+15분으로 옮겨진다."""
-    client = _Client()
-    coordinator = _coordinator(client)
-    _update(coordinator)
-    assert coordinator._expiry_at == T0 + datetime.timedelta(
-        minutes=AWS_MAX_OBSERVATION_AGE_MINUTES
-    )
-
-    newer = _obs(observed_at=T0 + datetime.timedelta(minutes=2), tm="202607031433")
-    client.result = newer
-    coordinator._now = lambda: T0 + datetime.timedelta(minutes=6)  # type: ignore[method-assign]
-    _update(coordinator)
-
-    assert coordinator._expiry_at == T0 + datetime.timedelta(
-        minutes=2 + AWS_MAX_OBSERVATION_AGE_MINUTES
-    )
-    # 이전 콜백은 취소되고 하나만 남는다.
-    assert len(CALL_LATER_CALLS) == 2
-    assert CALL_LATER_CALLS[0]["cancelled"] is True
-    assert CALL_LATER_CALLS[1]["cancelled"] is False
-
-
-def test_throttled_refresh_does_not_reschedule_expiry() -> None:
-    """스로틀 갱신은 관측을 바꾸지 않으므로 만료 시각을 늘릴 수 없다."""
-    coordinator = _coordinator(_Client())
-    _update(coordinator)
-    armed_at = coordinator._expiry_at
-    assert armed_at is not None
-
-    # 5분 미만 재갱신 — 네트워크 시도 없이 이전 데이터 반환.
-    coordinator._now = lambda: T0 + datetime.timedelta(minutes=3)  # type: ignore[method-assign]
-    _update(coordinator)
-
-    assert coordinator._expiry_at == armed_at
-    assert len(CALL_LATER_CALLS) == 1  # 추가 예약 없음
-
-
-def test_error_refresh_does_not_reschedule_expiry() -> None:
-    """오류 갱신도 관측을 바꾸지 않으므로 만료 시각이 그대로 유지된다."""
-    coordinator = _coordinator(_Client())
-    _update(coordinator)
-    armed_at = coordinator._expiry_at
-    assert armed_at is not None
-
-    client = coordinator.client
-    client.error = KmaApiError("boom")
-    coordinator._now = lambda: T0 + datetime.timedelta(minutes=6)  # type: ignore[method-assign]
-    _update(coordinator)
-
-    assert coordinator._expiry_at == armed_at
-    assert len(CALL_LATER_CALLS) == 1  # 추가 예약 없음
-
-
-def test_expiry_callback_is_cancelled_on_shutdown() -> None:
-    """언로드/비활성화 시 만료콜백과 폴링이 함께 정리된다."""
+def test_shutdown_marks_coordinator_and_stops_polling() -> None:
     coordinator = _coordinator(_Client())
     _update(coordinator)
 
     asyncio.run(coordinator.async_shutdown())
 
-    assert coordinator._expiry_unsub is None
-    assert coordinator._expiry_at is None
-    assert CALL_LATER_CALLS[-1]["cancelled"] is True
+    assert coordinator._shutdown is True
     assert coordinator._shutdown_requested is True
 
 
-def test_shutdown_during_inflight_request_does_not_rearm_expiry() -> None:
-    """요청이 진행 중일 때 셧다운되면 늦게 도착한 응답이 만료콜백을 되살리지 않는다.
+def test_shutdown_during_inflight_request_does_not_store_snapshot() -> None:
+    """요청이 진행 중일 때 셧다운되면 늦게 도착한 응답이 스냅샷을 저장하지 않는다.
 
     비동기 경합: HTTP 요청 보류 → async_shutdown → 요청 완료. 완료된 응답이
-    스냅샷을 저장하거나 async_call_later 로 타이머를 다시 걸면 언로드 후에도
-    타이머/리스너가 남는다.
+    스냅샷을 저장하면 언로드 후에도 상태가 되살아난다.
     """
 
     class _BlockingClient(_Client):
@@ -485,28 +420,11 @@ def test_shutdown_during_inflight_request_does_not_rearm_expiry() -> None:
     coordinator = holder["coordinator"]
     assert holder["data"]["observation"] is None
     assert coordinator._shutdown is True
-    assert coordinator._expiry_unsub is None
-    assert coordinator._expiry_at is None
-    # 늦게 완료된 응답이 만료 타이머를 다시 걸지 않는다.
     assert CALL_LATER_CALLS == []
 
 
-def test_no_expiry_callback_without_observation() -> None:
-    """관측이 없으면(미신청/오류) 만료콜백을 예약하지 않는다."""
-    client = _Client()
-    client.error = KmaApiError("boom")
-    coordinator = _coordinator(client)
-
-    _update(coordinator)
-
-    assert coordinator.aws_observation is None
-    assert coordinator._expiry_unsub is None
-    assert coordinator._expiry_at is None
-    assert CALL_LATER_CALLS == []
-
-
-def test_malformed_observation_is_never_stored_or_scheduled() -> None:
-    """관측시각 없는 성공 페이로드는 스냅샷에 넣지도, 만료콜백도 만들지 않는다."""
+def test_malformed_observation_is_never_stored() -> None:
+    """관측시각 없는 성공 페이로드는 스냅샷에 넣지 않는다."""
     client = _Client()
     client.result = object()  # observed_at 이 없는 값 (첫 응답)
     coordinator = _coordinator(client)
@@ -515,46 +433,4 @@ def test_malformed_observation_is_never_stored_or_scheduled() -> None:
 
     assert data["status"].startswith("error: ")
     assert data["observation"] is None
-    assert coordinator._expiry_unsub is None
     assert CALL_LATER_CALLS == []
-
-
-def test_expiry_callback_publishes_stale_state_through_listeners() -> None:
-    """만료콜백이 리스너를 통해 게시 상태를 갱신한다(=만료 후 unavailable).
-
-    타이머가 등록한 실제 콜백(CALL_LATER_CALLS[-1]["action"])을 만료 시각에
-    실행하고, 엔티티 역할을 하는 리스너가 게시한 available/값이 stale로 바뀌는지
-    확인한다.
-    """
-    coordinator = _coordinator(_Client())
-    _update(coordinator)
-
-    published: list[dict] = []
-
-    def _record_state() -> None:
-        obs = coordinator.aws_observation
-        published.append(
-            {
-                "available": coordinator.last_update_success
-                and coordinator.aws_observation_fresh,
-                "temperature": obs.temperature if obs is not None else None,
-            }
-        )
-
-    coordinator._listeners["sensor.aws_x"] = (None, _record_state)
-
-    # 만료 직전(+14분): 게시 상태는 fresh + 실측값.
-    coordinator._now = lambda: T0 + datetime.timedelta(minutes=14)  # type: ignore[method-assign]
-    assert coordinator.aws_observation_fresh is True
-
-    # 만료 시각에 타이머가 호출하는 실제 콜백을 실행한다.
-    action = CALL_LATER_CALLS[-1]["action"]
-    coordinator._now = lambda: T0 + datetime.timedelta(minutes=16)  # type: ignore[method-assign]
-    action(datetime.datetime.now(datetime.timezone.utc))
-
-    # 콜백이 리스너를 불러 게시했고, 상태는 stale(unavailable)이 되었다.
-    # 스냅샷 값(온도)은 유지된다 — 게시만 중단되고 진단/이력은 남는다.
-    assert len(published) == 1
-    assert published[0] == {"available": False, "temperature": 23.1}
-    # 콜백이 발화 후 스스로 예약 해제했다.
-    assert coordinator._expiry_unsub is None

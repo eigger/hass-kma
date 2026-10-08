@@ -30,7 +30,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util, slugify
 
-from .api import AwsObservation, VillageForecast, bulletin_section, split_bulletin_sections
+from .api import VillageForecast, bulletin_section, split_bulletin_sections
 from .const import (
     API_STATUS_AWS_KEYS,
     API_STATUS_HUB_KEYS,
@@ -1693,26 +1693,18 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
         )
 
     @property
-    def _observation(self) -> AwsObservation | None:
-        """신선한 관측 스냅샷. 신선하지 않으면(미관측/지나친 지연/미래 시각) None."""
-        coordinator = self.coordinator
-        if not coordinator.aws_observation_fresh:
-            return None
-        return coordinator.aws_observation
-
-    @property
     def available(self) -> bool:
-        """신선한 관측만 사용 가능. 신선도는 매 평가 시각으로 다시 계산된다.
+        """수용한 관측이 하나라도 있으면 사용 가능. 마지막 값을 유지한다.
 
-        API가 계속 실패해도 관측 나이가 15분 미만(미래 5분 허용) 범위를 벗어나는
-        순간 엔티티가 자동으로 unavailable가 된다(오래된 스냅샷을 계속 띄우지 않기 위해).
+        신선도는 가용성이 아니라 `observation_time`(관측 시각 센서/속성)과
+        `observation_fresh` 속성으로 판단한다. 아직 관측이 없으면 unavailable.
         """
-        return super().available and self.coordinator.aws_observation_fresh
+        return super().available and self.coordinator.aws_observation is not None
 
     @property
     def native_value(self) -> Any:
         """관측값. 관측시각 센서는 KST aware datetime, 나머지는 숫자/None."""
-        obs = self._observation
+        obs = self.coordinator.aws_observation
         if obs is None:
             return None
         return getattr(obs, AWS_VALUE_ATTRS[self.entity_description.key])
@@ -1725,6 +1717,7 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], SensorEntity):
         return {
             "station_id": self.coordinator.aws_station_id,
             "observation_time": obs.observed_at if obs is not None else None,
+            "observation_fresh": self.coordinator.aws_observation_fresh,
             "status": self.coordinator.aws_status,
             "error_count": data.get("error_count", 0),
         }

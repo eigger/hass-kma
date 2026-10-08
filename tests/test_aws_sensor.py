@@ -230,11 +230,12 @@ def test_observation_time_returns_aware_datetime() -> None:
     assert value.tzinfo is not None
 
 
-def test_native_value_is_none_without_fresh_observation() -> None:
+def test_native_value_is_none_without_observation_but_kept_when_stale() -> None:
     desc = _by_key("aws_temperature")
 
     assert _sensor(desc, _coordinator(None)).native_value is None
-    assert _sensor(desc, _coordinator(_obs(), fresh=False)).native_value is None
+    # 신선하지 않아도 마지막 관측값을 유지한다.
+    assert _sensor(desc, _coordinator(_obs(), fresh=False)).native_value == 23.1
 
 
 def test_missing_field_yields_none() -> None:
@@ -242,11 +243,12 @@ def test_missing_field_yields_none() -> None:
     assert sensor.native_value is None
 
 
-def test_availability_follows_freshness() -> None:
+def test_availability_keeps_last_value_regardless_of_freshness() -> None:
     desc = _by_key("aws_temperature")
 
     assert _sensor(desc, _coordinator(_obs(), fresh=True)).available is True
-    assert _sensor(desc, _coordinator(_obs(), fresh=False)).available is False
+    # 오래된 관측도 마지막 값을 유지하므로 사용 가능(신선도는 속성으로만 노출).
+    assert _sensor(desc, _coordinator(_obs(), fresh=False)).available is True
     assert _sensor(desc, _coordinator(None, fresh=False)).available is False
 
 
@@ -339,3 +341,13 @@ def test_aws_object_id_names_cover_all_sensors() -> None:
     from custom_components.kma.sensor import AWS_OBJECT_ID_NAMES, AWS_SENSOR_DESCRIPTIONS
 
     assert set(AWS_OBJECT_ID_NAMES) == {d.key for d in AWS_SENSOR_DESCRIPTIONS}
+
+
+def test_attributes_expose_freshness() -> None:
+    desc = _by_key("aws_temperature")
+
+    fresh = _sensor(desc, _coordinator(_obs(), fresh=True)).extra_state_attributes
+    stale = _sensor(desc, _coordinator(_obs(), fresh=False)).extra_state_attributes
+
+    assert fresh["observation_fresh"] is True
+    assert stale["observation_fresh"] is False
