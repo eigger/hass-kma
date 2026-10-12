@@ -325,6 +325,20 @@ def build_written_source(
     return _DATE_RE.sub(lambda m: m.group(1) + date_str, updated, count=1)
 
 
+def detect_newline(raw: bytes) -> str:
+    """Return the file's line ending (``\\n`` or ``\\r\\n``).
+
+    ``read_text`` normalises every line ending to ``\\n``, so a file mixing LF and
+    CRLF cannot be written back faithfully. Such a file is refused with
+    ``CatalogError`` before anything is written.
+    """
+    crlf = raw.count(b"\r\n")
+    lf = raw.count(b"\n") - crlf
+    if crlf and lf:
+        raise CatalogError("catalog mixes LF and CRLF line endings; normalise them first")
+    return "\r\n" if crlf else "\n"
+
+
 def atomic_write_catalog(
     path: Path, new_source: str, expected: dict[int, tuple[str, str]]
 ) -> None:
@@ -350,9 +364,11 @@ def atomic_write_catalog(
         raise CatalogError("generated catalog does not round-trip; refusing to write")
 
     mode = path.stat().st_mode
+    # 원본 줄바꿈(LF/CRLF)을 유지한다. 텍스트 모드 기본값은 Windows에서 LF를 CRLF로 바꾼다.
+    newline = detect_newline(path.read_bytes())
     fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        with os.fdopen(fd, "w", encoding="utf-8", newline=newline) as handle:
             handle.write(new_source)
             handle.flush()
             os.fsync(handle.fileno())

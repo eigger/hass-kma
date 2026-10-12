@@ -46,11 +46,12 @@ def _write_catalog(tmp_path, catalog, *, date="2026-10-08", name="aws_stations.p
     rows = ["    " + ",    ".join(items[i : i + 4]) + "," for i in range(0, len(items), 4)]
     body = "{\n" + "\n".join(rows) + "\n}"
     path = tmp_path / name
-    path.write_text(
-        f'"""테스트 카탈로그.\n\n추출일: {date}. 유형 ASOS/AWS/SG.\n"""\n'
-        "from __future__ import annotations\n\n"
-        f"AWS_STATION_CATALOG: dict[int, tuple[str, str]] = {body}\n",
-        encoding="utf-8",
+    path.write_bytes(
+        (
+            f'"""테스트 카탈로그.\n\n추출일: {date}. 유형 ASOS/AWS/SG.\n"""\n'
+            "from __future__ import annotations\n\n"
+            f"AWS_STATION_CATALOG: dict[int, tuple[str, str]] = {body}\n"
+        ).encode("utf-8")
     )
     return path
 
@@ -276,6 +277,7 @@ def test_write_requires_extraction_date_field(tmp_path):
     assert path.read_bytes() == before
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX 권한 비트는 Windows에서 유지되지 않음")
 def test_write_preserves_mode_and_leaves_no_temp(tmp_path):
     import stat
 
@@ -289,6 +291,40 @@ def test_write_preserves_mode_and_leaves_no_temp(tmp_path):
         _args("--write", "--date", "2026-11-30", "--html", str(html_path)), catalog_path=cat_path
     ) == 0
     assert stat.S_IMODE(cat_path.stat().st_mode) == 0o640
+    assert not list(tmp_path.glob("*.tmp"))
+
+
+@pytest.mark.parametrize("eol", [b"\n", b"\r\n"])
+def test_write_preserves_line_endings(tmp_path, eol):
+    cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
+    cat_path.write_bytes(cat_path.read_bytes().replace(b"\n", eol))
+    html_path = _write_html(
+        tmp_path,
+        {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]},
+    )
+    assert tool.run(
+        _args("--write", "--date", "2026-11-30", "--html", str(html_path)), catalog_path=cat_path
+    ) == 0
+    out = cat_path.read_bytes()
+    assert b"2026-11-30" in out
+    if eol == b"\n":
+        assert b"\r" not in out
+    else:
+        assert out.count(b"\r\n") == out.count(b"\n")
+
+
+def test_write_refuses_mixed_line_endings(tmp_path):
+    cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
+    raw = cat_path.read_bytes().replace(b"\n", b"\r\n", 1)
+    cat_path.write_bytes(raw)
+    html_path = _write_html(
+        tmp_path,
+        {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]},
+    )
+    assert tool.run(
+        _args("--write", "--date", "2026-11-30", "--html", str(html_path)), catalog_path=cat_path
+    ) == 2
+    assert cat_path.read_bytes() == raw
     assert not list(tmp_path.glob("*.tmp"))
 
 
@@ -336,7 +372,8 @@ def test_cli_subprocess_check_reports_drift(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(_SCRIPT), "--check", "--html", str(html_path)],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         timeout=60,
     )
     assert proc.returncode == 1, proc.stderr
