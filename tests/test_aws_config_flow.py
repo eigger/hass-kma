@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import subprocess
 import sys
 import textwrap
@@ -30,6 +31,14 @@ from custom_components.kma.const import (
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+# 공식 출처(https://www.weather.go.kr/w/weather/land/aws-obs.do) 스냅샷의
+# 축약 픽스처: SG 지점 82개(이름·지역)와 범위 밖(AM/SW/OA) 지점번호.
+# HTML/관측값/좌표/주소는 담지 않는다.
+_OFFICIAL_SOURCE = json.loads(
+    (_REPO_ROOT / "tests" / "fixtures" / "official_sg_stations.json").read_text(
+        encoding="utf-8"
+    )
+)
 # 실제 Home Assistant가 설치된 환경에서만 직렬화 회귀 테스트를 돌린다(CI는 미설치).
 _REAL_HA_AVAILABLE = (
     subprocess.run(
@@ -336,11 +345,45 @@ def test_aws_station_flow_has_no_reconfigure_step() -> None:
 
 
 def test_aws_station_catalog_is_public_and_complete() -> None:
-    assert len(AWS_STATION_CATALOG) == 638
+    # 2026-10-08 공식 목록: ASOS 98 + AWS 540 + SG 82 = 720 (AM/SW/OA 제외).
+    assert len(AWS_STATION_CATALOG) == 720
     assert AWS_STATION_CATALOG[108] == ("서울", "서울특별시")
     assert AWS_STATION_CATALOG[400] == ("강남", "서울특별시")
+    # 경기도청 관측소(SG)도 같은 카탈로그에 포함된다.
+    assert AWS_STATION_CATALOG[351] == ("남면", "경기도")
     assert all(isinstance(stn, int) and stn > 0 for stn in AWS_STATION_CATALOG)
     assert all(name and region for name, region in AWS_STATION_CATALOG.values())
+
+
+def test_catalog_includes_every_official_sg_station() -> None:
+    """공식 출처의 SG 82지점이 이름·지역까지 그대로 포함돼야 한다(개수만이 아님).
+
+    하드코딩한 총 개수가 아니라 축약 픽스처(공식 스냅샷)와 대조해 완전성을
+    확인한다 — 지점이 누락되거나 이름/지역이 틀리면 실패한다.
+    """
+    sg = _OFFICIAL_SOURCE["sg"]
+    assert len(sg) == 82
+    mismatched = {
+        int(stn): {"fixture": (name, region), "catalog": AWS_STATION_CATALOG.get(int(stn))}
+        for stn, (name, region) in sg.items()
+        if AWS_STATION_CATALOG.get(int(stn)) != (name, region)
+    }
+    assert not mismatched, mismatched
+
+
+def test_catalog_excludes_out_of_scope_station_categories() -> None:
+    """AM/SW/OA 지점은 이번 변경 범위가 아니므로 카탈로그에 없어야 한다."""
+    leaked = [stn for stn in _OFFICIAL_SOURCE["excluded_ids"] if stn in AWS_STATION_CATALOG]
+    assert not leaked, leaked
+
+
+def test_existing_asos_aws_identities_are_unchanged() -> None:
+    """기존 ASOS/AWS 지점의 번호→(이름, 지역) 매핑은 그대로 유지된다."""
+    assert AWS_STATION_CATALOG[90] == ("속초", "강원특별자치도")
+    assert AWS_STATION_CATALOG[108] == ("서울", "서울특별시")
+    assert AWS_STATION_CATALOG[119] == ("수원", "경기도")
+    assert AWS_STATION_CATALOG[400] == ("강남", "서울특별시")
+    assert AWS_STATION_CATALOG[996] == ("화동", "경상북도")
 
 
 def test_aws_station_options_have_stable_values_and_named_labels() -> None:
@@ -348,12 +391,64 @@ def test_aws_station_options_have_stable_values_and_named_labels() -> None:
     values = [value for value, _ in options]
     labels = [label for _, label in options]
 
-    assert len(options) == 638
+    assert len(options) == 720
     assert values == labels  # 선택 후에도 이름이 보이도록 값=라벨
     assert len(set(values)) == len(values)  # 값은 고유
     assert len(set(labels)) == len(labels)  # 라벨도 고유(번호 포함)
     assert ("서울 (서울특별시, 108)", "서울 (서울특별시, 108)") in options
     assert ("강남 (서울특별시, 400)", "강남 (서울특별시, 400)") in options
+
+
+def test_sg_stations_are_selectable_in_the_selector_options() -> None:
+    """SG 지점이 선택기 옵션에 `이름 (지역, 번호)` 라벨로 노출된다(둘 이상)."""
+    options = dict(aws_station_options())
+    assert options.get("남면 (경기도, 351)") == "남면 (경기도, 351)"
+    assert options.get("경기 * (경기도, 430)") == "경기 * (경기도, 430)"
+    assert options.get("학온동 * (경기도, 492)") == "학온동 * (경기도, 492)"
+
+
+@pytest.mark.parametrize(
+    "value,expected_station,expected_title",
+    [
+        ("351", 351, "남면 (AWS 351)"),
+        ("남면 (경기도, 351)", 351, "남면 (AWS 351)"),
+        (351, 351, "남면 (AWS 351)"),
+        ("430", 430, "경기 * (AWS 430)"),
+        ("492", 492, "학온동 * (AWS 492)"),
+    ],
+)
+def test_sg_station_selectable_in_initial_aws_flow(
+    value, expected_station, expected_title
+) -> None:
+    """SG 지점을 초기 AWS 관측소 서브엔트리 흐름에서 선택/생성할 수 있다."""
+    calls = _aws_create(value)
+
+    assert "create" in calls
+    assert calls["create"]["data"] == {CONF_AWS_STATION_ID: expected_station}
+    assert calls["create"]["unique_id"] == str(expected_station)
+    assert calls["create"]["title"] == expected_title
+
+
+@pytest.mark.parametrize(
+    "value,expected_station",
+    [
+        ("108", 108),
+        ("0108", 108),
+        (108, 108),
+        ("  351  ", 351),
+        ("0351", 351),
+        (351, 351),
+    ],
+)
+def test_numeric_station_ids_round_trip(value, expected_station) -> None:
+    """숫자(레거시 포함) 지점번호는 정규화돼 같은 정수로 왕복한다."""
+    calls = _aws_create(value)
+
+    assert "create" in calls
+    station = calls["create"]["data"][CONF_AWS_STATION_ID]
+    assert station == expected_station
+    assert isinstance(station, int)
+    assert station in AWS_STATION_CATALOG
 
 
 def test_station_label_distinguishes_duplicate_names() -> None:
@@ -413,7 +508,9 @@ def test_form_schema_serializes_with_real_ha() -> None:
         assert sel["mode"] == "dropdown", aws
         assert sel["custom_value"] is True, aws
         values = [o["value"] for o in sel["options"]]
-        assert "108" in values and "400" in values, aws
+        # 값=라벨(`이름 (지역, 번호)`) — SG 지점도 직렬화 목록에 포함된다.
+        assert "서울 (서울특별시, 108)" in values, aws
+        assert "남면 (경기도, 351)" in values, aws
         print("SERIALIZED_OK")
         """
     )
