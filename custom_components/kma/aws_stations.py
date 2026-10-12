@@ -1,15 +1,19 @@
 """KMA AWS/ASOS 관측소 카탈로그 (공개 메타데이터).
 
 출처: https://www.weather.go.kr/w/weather/land/aws-obs.do
-추출일: 2026-10-08. 유형 ASOS/AWS 지점만 포함(AM/SG/SW/OA 제외).
-형식: 지점번호 -> (지점명, 지역). 지점번호는 영구 식별자, 이름/지역은 표시용.
-카탈로그에 없는 지점번호로 이미 저장된 서브엔트리도 그대로 로드된다.
+추출일: 2026-10-08. 기상청 공개 관측소 목록의 스냅샷이다. 갱신 도구는 유형 코드
+SA/SS/SG를 모두 파싱해 갱신 대상으로 삼는다. 형식: 지점번호 -> (지점명, 지역).
+지점번호는 영구 식별자, 이름/지역은 표시용. 카탈로그에 없는 지점번호로 이미 저장된
+서브엔트리도 그대로 로드된다.
 
-갱신 절차: 공개 출처에서 ASOS/AWS 지점 목록을 다시 추출해 이 파일의 스냅샷과
-추출일을 교체한다. 자동 다운로드/스크래핑 기능은 두지 않는다. 교체 시 함께
-손봐야 할 곳: README의 지점 수/추출일, tests의 638개 지점 수를 확인하는 테스트
-(`test_aws_station_options_have_stable_values_and_named_labels`). 지점번호는
-영구 식별자이므로 기존 고유ID/엔티티ID에는 영향이 없다.
+갱신 절차: `python scripts/update_aws_stations.py --check`로 공식 목록과 이 파일의
+스냅샷 차이를 확인하고, 반영하려면 `--write`를 실행한다(`--html <저장한 페이지>`로
+오프라인 파싱, `--date YYYY-MM-DD`로 추출일 지정, `--allow-removals`로 지점 삭제
+허용). 기록은 지점별로 최소 변경으로 반영되므로 관련 없는 줄은 재배치되지 않는다.
+이 파일은 정적 스냅샷이므로 런타임에 공식 페이지를 가져오지 않는다. 손봐야 할 곳:
+README의 지점 수/추출일, tests의 스냅샷을 고정하는 테스트
+(`test_aws_station_catalog_snapshot_basics`). 지점번호는 영구 식별자이므로 기존
+고유ID/엔티티ID에는 영향이 없다.
 """
 from __future__ import annotations
 

@@ -335,7 +335,7 @@ def test_aws_station_flow_has_no_reconfigure_step() -> None:
     assert not hasattr(AwsStationSubentryFlowHandler, "async_step_user_reconfigure")
 
 
-def test_aws_station_catalog_is_public_and_complete() -> None:
+def test_aws_station_catalog_snapshot_basics() -> None:
     assert len(AWS_STATION_CATALOG) == 638
     assert AWS_STATION_CATALOG[108] == ("서울", "서울특별시")
     assert AWS_STATION_CATALOG[400] == ("강남", "서울특별시")
@@ -348,7 +348,7 @@ def test_aws_station_options_have_stable_values_and_named_labels() -> None:
     values = [value for value, _ in options]
     labels = [label for _, label in options]
 
-    assert len(options) == 638
+    assert len(options) == len(AWS_STATION_CATALOG)
     assert values == labels  # 선택 후에도 이름이 보이도록 값=라벨
     assert len(set(values)) == len(values)  # 값은 고유
     assert len(set(labels)) == len(labels)  # 라벨도 고유(번호 포함)
@@ -413,7 +413,8 @@ def test_form_schema_serializes_with_real_ha() -> None:
         assert sel["mode"] == "dropdown", aws
         assert sel["custom_value"] is True, aws
         values = [o["value"] for o in sel["options"]]
-        assert "108" in values and "400" in values, aws
+        assert "서울 (서울특별시, 108)" in values, aws
+        assert "강남 (서울특별시, 400)" in values, aws
         print("SERIALIZED_OK")
         """
     )
