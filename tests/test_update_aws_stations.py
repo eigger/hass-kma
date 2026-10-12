@@ -313,6 +313,21 @@ def test_write_preserves_line_endings(tmp_path, eol):
         assert out.count(b"\r\n") == out.count(b"\n")
 
 
+def test_write_refuses_mixed_line_endings(tmp_path):
+    cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
+    raw = cat_path.read_bytes().replace(b"\n", b"\r\n", 1)
+    cat_path.write_bytes(raw)
+    html_path = _write_html(
+        tmp_path,
+        {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]},
+    )
+    assert tool.run(
+        _args("--write", "--date", "2026-11-30", "--html", str(html_path)), catalog_path=cat_path
+    ) == 2
+    assert cat_path.read_bytes() == raw
+    assert not list(tmp_path.glob("*.tmp"))
+
+
 def test_write_validates_generated_source_before_replace(tmp_path, monkeypatch):
     cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
     html_path = _write_html(
@@ -357,7 +372,8 @@ def test_cli_subprocess_check_reports_drift(tmp_path):
     proc = subprocess.run(
         [sys.executable, str(_SCRIPT), "--check", "--html", str(html_path)],
         capture_output=True,
-        text=True,
+        encoding="utf-8",
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         timeout=60,
     )
     assert proc.returncode == 1, proc.stderr
