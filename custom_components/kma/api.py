@@ -59,7 +59,12 @@ import aiohttp
 _LOGGER = logging.getLogger(__name__)
 
 APIHUB_HOST = "apihub.kma.go.kr"
-ALLOWED_PUBLIC_HOST_SUFFIXES: tuple[str, ...] = ("kma.go.kr", "data.go.kr")
+ALLOWED_PUBLIC_HOST_SUFFIXES: tuple[str, ...] = (
+    "kma.go.kr",
+    "weather.go.kr",
+    "data.go.kr",
+)
+MAX_PUBLIC_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MiB
 
 BASE_URL = "https://apihub.kma.go.kr/api/typ01/url"
 # AWS(관측소 1분 자료)는 typ01/url이 아니라 cgi-bin/nph 경로라 BASE_URL을 쓰지 않고
@@ -1032,7 +1037,9 @@ def _is_allowed_public_url(url: str) -> bool:
         parsed = urlsplit(url)
     except Exception:
         return False
-    if parsed.scheme != "https":
+    if (parsed.scheme or "").lower() != "https":
+        return False
+    if parsed.username or parsed.password:
         return False
     host = (parsed.hostname or "").lower()
     return any(
@@ -1044,16 +1051,29 @@ def _is_allowed_public_url(url: str) -> bool:
 def _normalize_public_url(url: str) -> str | None:
     """공개 이미지 URL 정규화 및 허용 여부 확인.
 
-    HTTP 스킴은 HTTPS로 업그레이드하고, 허용된 도메인인지 검증한다.
+    HTTP 스킴(대소문자 무관)은 HTTPS로 업그레이드하고, 허용된 도메인인지 검증한다.
     """
     if not url:
         return None
     url = url.strip()
-    if url.startswith("http://"):
-        url = f"https://{url[len('http://') :]}"
-    if not _is_allowed_public_url(url):
+    try:
+        parsed = urlsplit(url)
+    except Exception:
         return None
-    return url
+
+    if parsed.username or parsed.password:
+        return None
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "http":
+        parsed = parsed._replace(scheme="https")
+    elif scheme != "https":
+        return None
+
+    normalized = parsed.geturl()
+    if not _is_allowed_public_url(normalized):
+        return None
+    return normalized
 
 
 # ---------------------------------------------------------------------------
@@ -1088,7 +1108,8 @@ class KmaApiClient:
         디코딩/오류 변환은 호출자(_request/_request_binary)의 몫이다.
         authKey가 포함되므로 안전한 https://apihub.kma.go.kr 엔드포인트만 허용한다.
         """
-        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+        lowered = endpoint.lower()
+        if lowered.startswith("http://") or lowered.startswith("https://"):
             url = endpoint
         elif "typ02" in endpoint or "openApi" in endpoint:
             url = f"https://apihub.kma.go.kr/{endpoint.lstrip('/')}"
@@ -1096,7 +1117,12 @@ class KmaApiClient:
             url = f"{self._base_url}/{endpoint}"
 
         parsed = urlsplit(url)
-        if parsed.scheme != "https" or (parsed.hostname or "").lower() != APIHUB_HOST:
+        if (
+            (parsed.scheme or "").lower() != "https"
+            or (parsed.hostname or "").lower() != APIHUB_HOST
+            or parsed.username
+            or parsed.password
+        ):
             raise KmaApiError(
                 f"인증키가 필요한 API 요청은 https://{APIHUB_HOST} 도메인으로만 전송할 수 있습니다: {url}"
             )
@@ -1119,19 +1145,40 @@ class KmaApiClient:
     async def _request_public_binary(self, url: str) -> tuple[bytes, str] | None:
         """인증키(authKey) 없이 공개 바이너리/이미지 자원을 안전하게 GET 요청.
 
-        HTTPS 스킴 및 신뢰할 수 있는 도메인(*.kma.go.kr, *.data.go.kr)만 허용한다.
+        HTTPS 스킴 및 신뢰할 수 있는 도메인(*.kma.go.kr, *.weather.go.kr, *.data.go.kr)만 허용한다.
+        네트워크 전송 오류(ClientError, TimeoutError)는 KmaTransientError로 전파하며,
+        아직 게시되지 않아 404/non-200이거나 크기 초과인 경우 등은 None을 반환한다.
         """
         normalized_url = _normalize_public_url(url)
         if normalized_url is None:
-            _LOGGER.warning("허용되지 않은 공개 이미지 URL 건너뜀: %s", url)
+            _LOGGER.debug("허용되지 않은 공개 이미지 URL 건너뜀: %s", url)
             return None
 
         _LOGGER.debug("KMA GET (public) %s", normalized_url)
         try:
             async with self._concurrency:
                 async with self._session.get(
-                    normalized_url, timeout=self._timeout
+                    normalized_url,
+                    timeout=self._timeout,
+                    allow_redirects=True,
+                    max_redirects=3,
                 ) as resp:
+                    for hist in resp.history:
+                        if not _is_allowed_public_url(str(hist.url)):
+                            _LOGGER.debug(
+                                "공개 이미지 리다이렉트 도메인 거부 (%s -> %s)",
+                                normalized_url,
+                                hist.url,
+                            )
+                            return None
+                    if not _is_allowed_public_url(str(resp.url)):
+                        _LOGGER.debug(
+                            "공개 이미지 최종 리다이렉트 도메인 거부 (%s -> %s)",
+                            normalized_url,
+                            resp.url,
+                        )
+                        return None
+
                     if resp.status != 200:
                         _LOGGER.debug(
                             "공개 이미지 HTTP 상태 코드 오류 (%s): %s",
@@ -1139,11 +1186,32 @@ class KmaApiClient:
                             resp.status,
                         )
                         return None
-                    raw = await resp.read()
+
+                    if (
+                        resp.content_length
+                        and resp.content_length > MAX_PUBLIC_IMAGE_SIZE
+                    ):
+                        _LOGGER.debug(
+                            "공개 이미지 크기 초과 (%s): %s bytes",
+                            normalized_url,
+                            resp.content_length,
+                        )
+                        return None
+
+                    if hasattr(resp, "content") and hasattr(resp.content, "read"):
+                        raw = await resp.content.read(MAX_PUBLIC_IMAGE_SIZE + 1)
+                    else:
+                        raw = await resp.read()
+
+                    if len(raw) > MAX_PUBLIC_IMAGE_SIZE:
+                        _LOGGER.debug("공개 이미지 크기 초과 (%s)", normalized_url)
+                        return None
+
                     return raw, (resp.content_type or "")
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-            _LOGGER.debug("공개 이미지 연결 오류 (%s): %s", normalized_url, err)
-            return None
+            raise KmaTransientError(
+                f"{normalized_url}: 공개 이미지 연결 오류: {err}"
+            ) from err
 
     async def _request_binary(
         self, endpoint: str, params: dict[str, Any]
