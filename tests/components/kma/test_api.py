@@ -664,7 +664,9 @@ class TestRequestPublicBinary:
             lambda url, **kw: _MockResponse(b"404 Not Found", 404, "text/html")
         )
         client = KmaApiClient(session, "secret-key")
-        result = await client._request_public_binary("https://nmsc.kma.go.kr/missing.png")
+        result = await client._request_public_binary(
+            "https://nmsc.kma.go.kr/missing.png"
+        )
         assert result is None
 
 
@@ -752,9 +754,10 @@ class TestAsyncGetDustSatelliteImage:
             }
         )
         session = _MockSession(
-            lambda url, **kw: _MockResponse(json_resp.encode("utf-8"), 200, "application/json")
+            lambda url, **kw: _MockResponse(
+                json_resp.encode("utf-8"), 200, "application/json"
+            )
         )
         client = KmaApiClient(session, "secret-key")
         img = await client.async_get_dust_satellite_image()
         assert img is None
-

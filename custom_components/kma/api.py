@@ -1050,7 +1050,7 @@ def _normalize_public_url(url: str) -> str | None:
         return None
     url = url.strip()
     if url.startswith("http://"):
-        url = f"https://{url[len('http://'):]}"
+        url = f"https://{url[len('http://') :]}"
     if not _is_allowed_public_url(url):
         return None
     return url
