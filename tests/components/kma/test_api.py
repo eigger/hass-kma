@@ -1,3 +1,5 @@
+"""api.py 순수 함수 및 클라이언트 단위 테스트 — 네트워크 호출 없음."""
+
 import asyncio
 import json
 
@@ -587,16 +589,22 @@ class TestPublicUrlValidation:
 # API 요청 보안 단위 테스트 (_do_request, _request_public_binary, async_get_dust_satellite_image)
 # ---------------------------------------------------------------------------
 class _MockStreamReader:
-    def __init__(self, data: bytes):
+    def __init__(self, data: bytes, chunk_size: int = 1024):
         self._data = data
+        self._chunk_size = chunk_size
+
+    async def iter_chunked(self, n: int):
+        for i in range(0, len(self._data), n):
+            yield self._data[i : i + n]
 
     async def read(self, n: int = -1) -> bytes:
         if n == -1 or n >= len(self._data):
             res = self._data
             self._data = b""
             return res
-        res = self._data[:n]
-        self._data = self._data[n:]
+        chunk_len = min(n, self._chunk_size, len(self._data))
+        res = self._data[:chunk_len]
+        self._data = self._data[chunk_len:]
         return res
 
 
@@ -609,6 +617,8 @@ class _MockResponse:
         url: str = "https://nmsc.kma.go.kr/img.png",
         history: list | None = None,
         content_length: int | None = None,
+        headers: dict[str, str] | None = None,
+        stream_chunk_size: int = 1024,
     ):
         self._raw = raw
         self.status = status
@@ -616,7 +626,8 @@ class _MockResponse:
         self.url = url
         self.history = history or []
         self.content_length = content_length if content_length is not None else len(raw)
-        self.content = _MockStreamReader(raw)
+        self.headers = headers or {}
+        self.content = _MockStreamReader(raw, chunk_size=stream_chunk_size)
 
     async def read(self) -> bytes:
         return self._raw
@@ -736,54 +747,85 @@ class TestRequestPublicBinary:
         )
         assert result is None
 
+    async def test_reads_large_multi_chunk_image_completely(self):
+        # 128 KiB 크기 데이터가 1024바이트 청크로 쪼개져 전달되더라도
+        # iter_chunked를 통해 잘리지 않고 끝까지 온전히 읽힘을 검증
+        large_png = b"\x89PNG\r\n\x1a\n" + b"X" * (128 * 1024)
+        resp = _MockResponse(large_png, 200, "image/png", stream_chunk_size=1024)
+        session = _MockSession(lambda url, **kw: resp)
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
+        assert result is not None
+        assert result[0] == large_png
+
     async def test_rejects_redirect_to_untrusted_host(self):
-        hist_resp = _MockResponse(
-            b"", 302, "text/html", url="https://nmsc.kma.go.kr/img.png"
+        # 비인가 호스트로 리다이렉트 시 2번째 요청을 보내기 전에 사전 차단됨 검증
+        resp = _MockResponse(
+            b"",
+            302,
+            "text/html",
+            headers={"Location": "https://attacker.com/evil.png"},
         )
-        final_resp = _MockResponse(
-            b"fake",
-            200,
-            "image/png",
-            url="https://attacker.com/evil.png",
-            history=[hist_resp],
-        )
-        session = _MockSession(lambda url, **kw: final_resp)
+        session = _MockSession(lambda url, **kw: resp)
         client = KmaApiClient(session, "secret-key")
         result = await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
         assert result is None
+        assert len(session.calls) == 1
 
     async def test_rejects_redirect_to_plain_http(self):
-        hist_resp = _MockResponse(
-            b"", 302, "text/html", url="https://nmsc.kma.go.kr/img.png"
+        # 비보안 HTTP로 리다이렉트 시 2번째 요청을 보내기 전에 사전 차단됨 검증
+        resp = _MockResponse(
+            b"",
+            302,
+            "text/html",
+            headers={"Location": "http://nmsc.kma.go.kr/insecure.png"},
         )
-        final_resp = _MockResponse(
-            b"fake",
-            200,
-            "image/png",
-            url="http://nmsc.kma.go.kr/insecure.png",
-            history=[hist_resp],
-        )
-        session = _MockSession(lambda url, **kw: final_resp)
+        session = _MockSession(lambda url, **kw: resp)
         client = KmaApiClient(session, "secret-key")
         result = await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
         assert result is None
+        assert len(session.calls) == 1
 
     async def test_allows_redirect_within_trusted_hosts(self):
-        hist_resp = _MockResponse(
-            b"", 302, "text/html", url="https://weather.go.kr/img.png"
-        )
-        final_resp = _MockResponse(
-            b"\x89PNG\r\n\x1a\nvalid",
-            200,
-            "image/png",
-            url="https://nmsc.kma.go.kr/img.png",
-            history=[hist_resp],
-        )
-        session = _MockSession(lambda url, **kw: final_resp)
+        def handler(url: str, **kwargs):
+            if "weather.go.kr" in url:
+                return _MockResponse(
+                    b"",
+                    302,
+                    "text/html",
+                    headers={"Location": "https://nmsc.kma.go.kr/img.png"},
+                    url=url,
+                )
+            return _MockResponse(
+                b"\x89PNG\r\n\x1a\nvalid",
+                200,
+                "image/png",
+                url=url,
+            )
+
+        session = _MockSession(handler)
         client = KmaApiClient(session, "secret-key")
         result = await client._request_public_binary("https://weather.go.kr/img.png")
         assert result is not None
         assert result[0] == b"\x89PNG\r\n\x1a\nvalid"
+        assert len(session.calls) == 2
+        assert session.calls[0][1]["allow_redirects"] is False
+        assert session.calls[1][1]["allow_redirects"] is False
+
+    async def test_rejects_redirect_exceeding_max_hops(self):
+        loop_resp = _MockResponse(
+            b"",
+            302,
+            "text/html",
+            headers={"Location": "https://nmsc.kma.go.kr/loop.png"},
+        )
+        session = _MockSession(lambda url, **kw: loop_resp)
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary(
+            "https://nmsc.kma.go.kr/start.png", max_redirects=3
+        )
+        assert result is None
+        assert len(session.calls) == 4
 
     async def test_rejects_oversized_content_length(self):
         resp = _MockResponse(b"huge", 200, "image/png", content_length=15 * 1024 * 1024)
@@ -962,3 +1004,29 @@ class TestAsyncGetDustSatelliteImage:
         client = KmaApiClient(session, "secret-key")
         img = await client.async_get_dust_satellite_image()
         assert img is None
+
+    async def test_raises_kma_api_error_when_all_candidates_rejected_by_policy(self):
+        json_resp = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+                    "body": {
+                        "items": {
+                            "item": [
+                                {
+                                    "satImgC-file-Sate": "[https://attacker.com/1.png, https://evil.com/2.png]"
+                                }
+                            ]
+                        }
+                    },
+                }
+            }
+        )
+        session = _MockSession(
+            lambda url, **kw: _MockResponse(
+                json_resp.encode("utf-8"), 200, "application/json", url=url
+            )
+        )
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(KmaApiError, match="보안 정책에 의해 거부되었습니다"):
+            await client.async_get_dust_satellite_image()

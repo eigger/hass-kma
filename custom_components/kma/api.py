@@ -52,7 +52,7 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import aiohttp
 
@@ -1142,75 +1142,83 @@ class KmaApiClient:
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise KmaTransientError(f"{endpoint}: 연결 오류: {err}") from err
 
-    async def _request_public_binary(self, url: str) -> tuple[bytes, str] | None:
+    async def _request_public_binary(
+        self, url: str, max_redirects: int = 3
+    ) -> tuple[bytes, str] | None:
         """인증키(authKey) 없이 공개 바이너리/이미지 자원을 안전하게 GET 요청.
 
         HTTPS 스킴 및 신뢰할 수 있는 도메인(*.kma.go.kr, *.weather.go.kr, *.data.go.kr)만 허용한다.
+        리다이렉트는 네트워크 요청 전에 사전 검증하며 최대 max_redirects회 수동 추적한다.
         네트워크 전송 오류(ClientError, TimeoutError)는 KmaTransientError로 전파하며,
         아직 게시되지 않아 404/non-200이거나 크기 초과인 경우 등은 None을 반환한다.
         """
-        normalized_url = _normalize_public_url(url)
-        if normalized_url is None:
+        current_url = _normalize_public_url(url)
+        if current_url is None:
             _LOGGER.debug("허용되지 않은 공개 이미지 URL 건너뜀: %s", url)
             return None
 
-        _LOGGER.debug("KMA GET (public) %s", normalized_url)
         try:
             async with self._concurrency:
-                async with self._session.get(
-                    normalized_url,
-                    timeout=self._timeout,
-                    allow_redirects=True,
-                    max_redirects=3,
-                ) as resp:
-                    for hist in resp.history:
-                        if not _is_allowed_public_url(str(hist.url)):
+                for _ in range(max_redirects + 1):
+                    _LOGGER.debug("KMA GET (public) %s", current_url)
+                    async with self._session.get(
+                        current_url,
+                        timeout=self._timeout,
+                        allow_redirects=False,
+                    ) as resp:
+                        if resp.status in (301, 302, 303, 307, 308):
+                            location = resp.headers.get("Location")
+                            if not location:
+                                _LOGGER.debug(
+                                    "공개 이미지 리다이렉트 Location 헤더 없음 (%s, %s)",
+                                    current_url,
+                                    resp.status,
+                                )
+                                return None
+                            next_url = urljoin(current_url, location)
+                            if not _is_allowed_public_url(next_url):
+                                _LOGGER.debug(
+                                    "공개 이미지 리다이렉트 대상 미허용 거부 (%s -> %s)",
+                                    current_url,
+                                    next_url,
+                                )
+                                return None
+                            current_url = next_url
+                            continue
+
+                        if resp.status != 200:
                             _LOGGER.debug(
-                                "공개 이미지 리다이렉트 도메인 거부 (%s -> %s)",
-                                normalized_url,
-                                hist.url,
+                                "공개 이미지 HTTP 상태 코드 오류 (%s): %s",
+                                current_url,
+                                resp.status,
                             )
                             return None
-                    if not _is_allowed_public_url(str(resp.url)):
-                        _LOGGER.debug(
-                            "공개 이미지 최종 리다이렉트 도메인 거부 (%s -> %s)",
-                            normalized_url,
-                            resp.url,
-                        )
-                        return None
 
-                    if resp.status != 200:
-                        _LOGGER.debug(
-                            "공개 이미지 HTTP 상태 코드 오류 (%s): %s",
-                            normalized_url,
-                            resp.status,
-                        )
-                        return None
+                        if (
+                            resp.content_length
+                            and resp.content_length > MAX_PUBLIC_IMAGE_SIZE
+                        ):
+                            _LOGGER.debug(
+                                "공개 이미지 크기 초과 (%s): %s bytes",
+                                current_url,
+                                resp.content_length,
+                            )
+                            return None
 
-                    if (
-                        resp.content_length
-                        and resp.content_length > MAX_PUBLIC_IMAGE_SIZE
-                    ):
-                        _LOGGER.debug(
-                            "공개 이미지 크기 초과 (%s): %s bytes",
-                            normalized_url,
-                            resp.content_length,
-                        )
-                        return None
+                        chunks = bytearray()
+                        async for chunk in resp.content.iter_chunked(64 * 1024):
+                            chunks.extend(chunk)
+                            if len(chunks) > MAX_PUBLIC_IMAGE_SIZE:
+                                _LOGGER.debug("공개 이미지 크기 초과 (%s)", current_url)
+                                return None
 
-                    if hasattr(resp, "content") and hasattr(resp.content, "read"):
-                        raw = await resp.content.read(MAX_PUBLIC_IMAGE_SIZE + 1)
-                    else:
-                        raw = await resp.read()
+                        return bytes(chunks), (resp.content_type or "")
 
-                    if len(raw) > MAX_PUBLIC_IMAGE_SIZE:
-                        _LOGGER.debug("공개 이미지 크기 초과 (%s)", normalized_url)
-                        return None
-
-                    return raw, (resp.content_type or "")
+                _LOGGER.debug("공개 이미지 최대 리다이렉트 횟수 초과 (%s)", url)
+                return None
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise KmaTransientError(
-                f"{normalized_url}: 공개 이미지 연결 오류: {err}"
+                f"{current_url}: 공개 이미지 연결 오류: {err}"
             ) from err
 
     async def _request_binary(
@@ -2256,7 +2264,15 @@ class KmaApiClient:
             return None
         raw_urls = items[0].get("satImgC-file-Sate", "")
         urls = [u.strip() for u in raw_urls.strip("[]").split(",") if u.strip()]
-        for url in reversed(urls[-12:]):
+        candidates = urls[-12:]
+        if not candidates:
+            return None
+
+        policy_rejected_count = 0
+        for url in reversed(candidates):
+            if _normalize_public_url(url) is None:
+                policy_rejected_count += 1
+                continue
             res = await self._request_public_binary(url)
             if res is None:
                 continue
@@ -2265,6 +2281,16 @@ class KmaApiClient:
                 return ImageBinary(
                     data=raw, content_type="image/png", filename=url.rsplit("/", 1)[-1]
                 )
+
+        if policy_rejected_count == len(candidates):
+            _LOGGER.warning(
+                "황사위성영상 URL 후보 전체가 보안 정책(허용 도메인/HTTPS)에 의해 거부되었습니다: %s",
+                candidates,
+            )
+            raise KmaApiError(
+                f"황사위성영상 URL 후보 전체가 보안 정책에 의해 거부되었습니다: {candidates[0]}"
+            )
+
         return None
 
     # -- 미세먼지 시간통계 ------------------------------------------------------
