@@ -8,7 +8,7 @@
 |---|---|
 | 리포 / 기본 브랜치 | eigger/hass-kma / main |
 | domain / 구현 경로 | kma / custom_components/kma |
-| 채택 브랜치 / 커밋 | `adopt-shared-standards` |
+| 채택 브랜치 / 커밋 | [PR #36](https://github.com/eigger/hass-kma/pull/36) (`adopt-shared-standards`) |
 | 검토한 표준 SHA / 검토일 | `ec6a6c7b39678c187be069b2d398939c81140ae4` (공통 workflow 호출 SHA와 동일) / 2026-10-18 |
 | 조율 / 구현 / 독립 리뷰·검증 | 조율 `root` / 구현 `kma_implementation` / 독립 리뷰·검증 `kma_review` |
 | 중앙 현황표 | 등록 대기 / 갱신 대상 (`docs/adoption-status.md` `hass-kma` 행) |
