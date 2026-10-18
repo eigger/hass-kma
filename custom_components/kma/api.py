@@ -59,6 +59,8 @@ import aiohttp
 _LOGGER = logging.getLogger(__name__)
 
 APIHUB_HOST = "apihub.kma.go.kr"
+# 황사위성영상(satImgC-file-Sate) 등 공개 자원을 제공하는 공식 기상청/공공 도메인.
+# [실측 검증 2026-10-19]: nmsc.kma.go.kr(국가기상위성센터 200 OK), weather.go.kr(302/200 OK) 모두 HTTPS 및 TLS 정상 지원.
 ALLOWED_PUBLIC_HOST_SUFFIXES: tuple[str, ...] = (
     "kma.go.kr",
     "weather.go.kr",
@@ -106,6 +108,10 @@ class KmaActivationRequiredError(KmaApiError):
     def __init__(self, endpoint: str, message: str) -> None:
         self.endpoint = endpoint
         super().__init__(f"활용신청 필요: {endpoint} ({message})")
+
+
+class KmaSecurityPolicyError(KmaApiError):
+    """보안 정책(허용되지 않은 도메인, 비보안 HTTP, userinfo 등) 위반 시 발생."""
 
 
 # ---------------------------------------------------------------------------
@@ -1148,74 +1154,70 @@ class KmaApiClient:
         """인증키(authKey) 없이 공개 바이너리/이미지 자원을 안전하게 GET 요청.
 
         HTTPS 스킴 및 신뢰할 수 있는 도메인(*.kma.go.kr, *.weather.go.kr, *.data.go.kr)만 허용한다.
+        보안 정책(도메인, 스킴, userinfo) 위반 시 KmaSecurityPolicyError를 발생시킨다.
         리다이렉트는 네트워크 요청 전에 사전 검증하며 최대 max_redirects회 수동 추적한다.
         네트워크 전송 오류(ClientError, TimeoutError)는 KmaTransientError로 전파하며,
         아직 게시되지 않아 404/non-200이거나 크기 초과인 경우 등은 None을 반환한다.
         """
         current_url = _normalize_public_url(url)
         if current_url is None:
-            _LOGGER.debug("허용되지 않은 공개 이미지 URL 건너뜀: %s", url)
-            return None
+            raise KmaSecurityPolicyError(f"허용되지 않은 공개 이미지 URL: {url}")
 
         try:
-            async with self._concurrency:
-                for _ in range(max_redirects + 1):
-                    _LOGGER.debug("KMA GET (public) %s", current_url)
-                    async with self._session.get(
-                        current_url,
-                        timeout=self._timeout,
-                        allow_redirects=False,
-                    ) as resp:
-                        if resp.status in (301, 302, 303, 307, 308):
-                            location = resp.headers.get("Location")
-                            if not location:
-                                _LOGGER.debug(
-                                    "공개 이미지 리다이렉트 Location 헤더 없음 (%s, %s)",
-                                    current_url,
-                                    resp.status,
-                                )
-                                return None
-                            next_url = urljoin(current_url, location)
-                            if not _is_allowed_public_url(next_url):
-                                _LOGGER.debug(
-                                    "공개 이미지 리다이렉트 대상 미허용 거부 (%s -> %s)",
-                                    current_url,
-                                    next_url,
-                                )
-                                return None
-                            current_url = next_url
-                            continue
-
-                        if resp.status != 200:
+            for _ in range(max_redirects + 1):
+                _LOGGER.debug("KMA GET (public) %s", current_url)
+                async with self._session.get(
+                    current_url,
+                    timeout=self._timeout,
+                    allow_redirects=False,
+                ) as resp:
+                    if resp.status in (301, 302, 303, 307, 308):
+                        location = resp.headers.get("Location")
+                        if not location:
                             _LOGGER.debug(
-                                "공개 이미지 HTTP 상태 코드 오류 (%s): %s",
+                                "공개 이미지 리다이렉트 Location 헤더 없음 (%s, %s)",
                                 current_url,
                                 resp.status,
                             )
                             return None
-
-                        if (
-                            resp.content_length
-                            and resp.content_length > MAX_PUBLIC_IMAGE_SIZE
-                        ):
-                            _LOGGER.debug(
-                                "공개 이미지 크기 초과 (%s): %s bytes",
-                                current_url,
-                                resp.content_length,
+                        next_url = urljoin(current_url, location)
+                        if not _is_allowed_public_url(next_url):
+                            raise KmaSecurityPolicyError(
+                                f"허용되지 않은 공개 이미지 리다이렉트 대상 ({current_url} -> {next_url})"
                             )
+                        current_url = next_url
+                        continue
+
+                    if resp.status != 200:
+                        _LOGGER.debug(
+                            "공개 이미지 HTTP 상태 코드 오류 (%s): %s",
+                            current_url,
+                            resp.status,
+                        )
+                        return None
+
+                    if (
+                        resp.content_length
+                        and resp.content_length > MAX_PUBLIC_IMAGE_SIZE
+                    ):
+                        _LOGGER.debug(
+                            "공개 이미지 크기 초과 (%s): %s bytes",
+                            current_url,
+                            resp.content_length,
+                        )
+                        return None
+
+                    chunks = bytearray()
+                    async for chunk in resp.content.iter_chunked(64 * 1024):
+                        chunks.extend(chunk)
+                        if len(chunks) > MAX_PUBLIC_IMAGE_SIZE:
+                            _LOGGER.debug("공개 이미지 크기 초과 (%s)", current_url)
                             return None
 
-                        chunks = bytearray()
-                        async for chunk in resp.content.iter_chunked(64 * 1024):
-                            chunks.extend(chunk)
-                            if len(chunks) > MAX_PUBLIC_IMAGE_SIZE:
-                                _LOGGER.debug("공개 이미지 크기 초과 (%s)", current_url)
-                                return None
+                    return bytes(chunks), (resp.content_type or "")
 
-                        return bytes(chunks), (resp.content_type or "")
-
-                _LOGGER.debug("공개 이미지 최대 리다이렉트 횟수 초과 (%s)", url)
-                return None
+            _LOGGER.debug("공개 이미지 최대 리다이렉트 횟수 초과 (%s)", url)
+            return None
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise KmaTransientError(
                 f"{current_url}: 공개 이미지 연결 오류: {err}"
@@ -2268,12 +2270,24 @@ class KmaApiClient:
         if not candidates:
             return None
 
-        policy_rejected_count = 0
+        last_transient_error: KmaTransientError | None = None
+        consecutive_transient_errors = 0
+        policy_errors: list[KmaSecurityPolicyError] = []
+
         for url in reversed(candidates):
-            if _normalize_public_url(url) is None:
-                policy_rejected_count += 1
+            try:
+                res = await self._request_public_binary(url)
+            except KmaSecurityPolicyError as err:
+                policy_errors.append(err)
                 continue
-            res = await self._request_public_binary(url)
+            except KmaTransientError as err:
+                last_transient_error = err
+                consecutive_transient_errors += 1
+                if consecutive_transient_errors >= 2:
+                    raise err
+                continue
+
+            consecutive_transient_errors = 0
             if res is None:
                 continue
             raw, _content_type = res
@@ -2282,14 +2296,14 @@ class KmaApiClient:
                     data=raw, content_type="image/png", filename=url.rsplit("/", 1)[-1]
                 )
 
-        if policy_rejected_count == len(candidates):
-            _LOGGER.warning(
-                "황사위성영상 URL 후보 전체가 보안 정책(허용 도메인/HTTPS)에 의해 거부되었습니다: %s",
-                candidates,
+        if policy_errors:
+            _LOGGER.debug(
+                "황사위성영상 후보 중 보안 정책 거부 발생: %s", policy_errors[0]
             )
-            raise KmaApiError(
-                f"황사위성영상 URL 후보 전체가 보안 정책에 의해 거부되었습니다: {candidates[0]}"
-            )
+            raise policy_errors[0]
+
+        if last_transient_error is not None:
+            raise last_transient_error
 
         return None
 
