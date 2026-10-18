@@ -22,8 +22,8 @@
 |---|---|---|---|---|---|
 | 로컬 current / PASS | `HEAD` | 3.14.5 / HA 2026.10.2 / 0.13.373 | requirements=[] | `ruff check .`, `ruff format --check .` 통과, `pytest tests/components/kma/` 32 passed, `sync_badges.py --check` 통과 | 실제 KMA API 서버 |
 | 로컬 최소 HA 2026.9.0 / PASS | `HEAD` | 3.14.5 / HA 2026.9.0 / 0.13.363 | requirements=[] | `pytest tests/components/kma/` 32 passed | 실제 KMA API 서버 |
-| CI current / TODO | PR 대기 | 3.14 / 2026.10.2 / 0.13.373 | requirements=[] | CI 실행 대기 | 실제 KMA API 서버 |
-| CI 최소 HA 2026.9.0 / TODO | PR 대기 | 3.14 / 2026.9.0 / 0.13.363 | requirements=[] | CI 실행 대기 | 실제 KMA API 서버 |
+| CI current / PASS | `7a3654e` | 3.14 / 2026.10.2 / 0.13.373 | requirements=[] | [Run 39124546627](https://github.com/eigger/hass-kma/actions/runs/39124546627) (lint 11s, test 1m14s 통과) | 실제 KMA API 서버 |
+| CI 최소 HA 2026.9.0 / PASS | `7a3654e` | 3.14 / 2026.9.0 / 0.13.363 | requirements=[] | [Run 39124546627](https://github.com/eigger/hass-kma/actions/runs/39124546627) (lint 8s, test 49s 통과) | 실제 KMA API 서버 |
 
 ## 항목
 
@@ -73,4 +73,5 @@
 
 ## 남은 작업
 
-1. GitHub PR 생성 및 원격 CI 실행 확인.
+1. GitHub PR #36 생성 및 원격 CI(Validate 39124549260, Tests 39124546627) 100% 통과 확인 완료.
+2. 실제 KMA API 서버 연동 및 실기기 대시보드 표시 검증 (현재는 모의 및 패킷 단위 런타임 100% 검증 완료).
