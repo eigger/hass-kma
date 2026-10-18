@@ -504,7 +504,7 @@ def _to_int(value: str) -> int | None:
     """정수 변환. 결측값(-99)이나 비정상은 None."""
     try:
         num = int(value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
     return None if num == -99 else num
 
@@ -513,7 +513,7 @@ def _to_float(value: str) -> float | None:
     """실수 변환. 결측값(-99, -99.0)이나 비정상은 None."""
     try:
         num = float(value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
     return None if num in (-99.0, -99) else num
 
@@ -602,7 +602,7 @@ def _to_aws_float(value: str) -> float | None:
     """AWS 실수 컬럼 변환. 비유한 수치·결측 센티널(-99.9/-99.0/-99)은 None."""
     try:
         num = float(value)
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         return None
     if not math.isfinite(num):
         return None

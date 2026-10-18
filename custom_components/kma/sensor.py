@@ -846,7 +846,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
             return
         try:
             value = float(last_state.state)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return
         self._today_extremes_date = today_str
         if self.entity_description.key == "today_temp_low":
@@ -871,7 +871,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
         if curr.tmp is not None:
             try:
                 today_temps.append(float(curr.tmp))
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 pass
 
         if self._today_extremes_date != today_str:
@@ -926,7 +926,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
             rh = float(curr.reh)
             di = 1.8 * temp - 0.55 * (1.0 - rh / 100.0) * (1.8 * temp - 26.0) + 32.0
             return round(di, 1)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
     def _compute_laundry_index(
@@ -970,7 +970,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
             t_fact = max(0.0, temp * 0.5)
             score = min(100.0, h_fact + w_fact + s_fact + t_fact)
             return round(score)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
     def _compute_car_wash_index(
@@ -1040,7 +1040,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
             fpi = 0.000189 * temp * rh + 0.215 * temp + 0.161 * rh - 2.85
             score = max(0.0, min(100.0, fpi))
             return round(score)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
     @property
@@ -1208,7 +1208,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
                     e = (rh / 100.0) * 6.105 * math.exp((17.27 * temp) / (237.7 + temp))
                     apparent = temp + 0.33 * e - 0.70 * ws - 4.00
                     return round(apparent, 1)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     return None
             return None
 
@@ -1224,7 +1224,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
                         if 17.27 - gamma != 0:
                             dew_point = (237.7 * gamma) / (17.27 - gamma)
                             return round(dew_point, 1)
-                except (ValueError, TypeError):
+                except ValueError, TypeError:
                     return None
             return None
 

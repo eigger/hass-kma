@@ -222,3 +222,36 @@ async def test_options_flow(
     )
     assert result2["type"] is FlowResultType.CREATE_ENTRY
     assert result2["data"] == {"scan_interval": 20}
+
+
+def test_aws_station_catalog_is_public_and_complete() -> None:
+    from custom_components.kma.aws_stations import AWS_STATION_CATALOG
+
+    assert len(AWS_STATION_CATALOG) == 638
+    assert AWS_STATION_CATALOG[108] == ("서울", "서울특별시")
+    assert AWS_STATION_CATALOG[400] == ("강남", "서울특별시")
+    assert all(isinstance(stn, int) and stn > 0 for stn in AWS_STATION_CATALOG)
+    assert all(name and region for name, region in AWS_STATION_CATALOG.values())
+
+
+def test_aws_station_options_have_stable_values_and_named_labels() -> None:
+    from custom_components.kma.config_flow import aws_station_options
+
+    options = aws_station_options()
+    values = [value for value, _ in options]
+    labels = [label for _, label in options]
+
+    assert len(options) == 638
+    assert values == labels  # 선택 후에도 이름이 보이도록 값=라벨
+    assert len(set(values)) == len(values)  # 값은 고유
+    assert len(set(labels)) == len(labels)  # 라벨도 고유(번호 포함)
+    assert ("서울 (서울특별시, 108)", "서울 (서울특별시, 108)") in options
+    assert ("강남 (서울특별시, 400)", "강남 (서울특별시, 400)") in options
+
+
+def test_station_label_distinguishes_duplicate_names() -> None:
+    from custom_components.kma.config_flow import _station_label
+
+    assert _station_label(108, "동명", "지역") != _station_label(400, "동명", "지역")
+    assert "108" in _station_label(108, "동명", "지역")
+    assert "400" in _station_label(400, "동명", "지역")

@@ -82,7 +82,7 @@ def get_pm10_station_name(stn: str | int | None) -> str | None:
         return None
     try:
         return PM10_STN_NAMES.get(int(stn))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -95,7 +95,7 @@ def get_office_name(stn: str | int | None) -> str | None:
         return None
     try:
         return OFFICE_STN_NAMES.get(int(stn))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

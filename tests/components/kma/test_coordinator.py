@@ -64,10 +64,15 @@ async def test_aws_coordinator_freshness(
     assert coord.aws_status == "ok"
 
     # With observation observed_at = now, freshness should be True
+    now = datetime.datetime.now(_KST)
+    coord.data["observation"] = make_aws_observation(
+        observed_at=now,
+        tm=now.strftime("%Y%m%d%H%M"),
+    )
     assert coord.aws_observation_fresh is True
 
     # When observation is older than 15 minutes, freshness becomes False
-    old_time = datetime.datetime.now(_KST) - datetime.timedelta(minutes=20)
+    old_time = now - datetime.timedelta(minutes=20)
     coord.data["observation"] = make_aws_observation(
         observed_at=old_time,
         tm=old_time.strftime("%Y%m%d%H%M"),

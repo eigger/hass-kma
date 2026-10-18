@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -31,14 +32,15 @@ from custom_components.kma.const import (
 
 _KST = datetime.timezone(datetime.timedelta(hours=9))
 
+CALL_LATER_CALLS: list[dict[str, Any]] = []
+
 
 def make_aws_observation(**overrides) -> AwsObservation:
     """Generate a valid AwsObservation instance."""
-    now = datetime.datetime.now(_KST)
     values = dict(
         stn="108",
-        tm=now.strftime("%Y%m%d%H%M"),
-        observed_at=now,
+        tm="202607031431",
+        observed_at=datetime.datetime(2026, 7, 3, 14, 31, tzinfo=_KST),
         wind_dir_1m=225.0,
         wind_speed_1m=1.8,
         gust_dir=180.0,

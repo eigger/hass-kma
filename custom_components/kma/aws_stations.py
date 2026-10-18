@@ -7,9 +7,9 @@
 
 갱신 절차: 공개 출처에서 ASOS/AWS 지점 목록을 다시 추출해 이 파일의 스냅샷과
 추출일을 교체한다. 자동 다운로드/스크래핑 기능은 두지 않는다. 교체 시 함께
-손봐야 할 곳: README의 지점 수/추출일, tests의 638개 지점 수를 확인하는 테스트
-(`test_aws_station_options_have_stable_values_and_named_labels`). 지점번호는
-영구 식별자이므로 기존 고유ID/엔티티ID에는 영향이 없다.
+손봐야 할 곳: README의 지점 수/추출일, `tests/components/kma/test_config_flow.py`의
+638개 지점 수를 확인하는 테스트(`test_aws_station_options_have_stable_values_and_named_labels`).
+지점번호는 영구 식별자이므로 기존 고유ID/엔티티ID에는 영향이 없다.
 """
 
 from __future__ import annotations

@@ -172,7 +172,7 @@ def aggregate_daily_forecasts(
     for lf in land_forecasts:
         try:
             date_str = lf.tm_ef[:8]
-        except (TypeError, AttributeError):
+        except TypeError, AttributeError:
             _LOGGER.debug("육상예보 tm_ef 파싱 스킵: %r", lf)
             continue
         if date_str in existing_dates:

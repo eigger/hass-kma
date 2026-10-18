@@ -26,10 +26,10 @@ Home Assistant custom component for integrating Korea Meteorological Administrat
 
 Add your API Key from [KMA APIhub](https://apihub.kma.go.kr/) and select your Home Assistant zone:
 
-1. Obtain an API key from the KMA APIhub portal.
+1. Obtain an API key (authKey) from [KMA APIhub](https://apihub.kma.go.kr/) and apply for necessary APIs (~20 APIs; see [User Guide](docs/user-guide.md#kma-apihub-application-guide)).
 2. In Home Assistant, go to **Settings → Devices & Services → Add Integration**.
 3. Search for **KMA Weather (기상청 APIhub)**.
-4. Enter your API key and configure your location zones.
+4. Enter your API key and configure your location zones and optional AWS stations.
 
 ## Installation
 

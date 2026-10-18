@@ -30,11 +30,10 @@ async def test_weather_entity_state(
     """Test weather entity is added and has correct state and attributes."""
     state = hass.states.get("weather.home")
     assert state is not None
-    # With sky=1 and pty=0, default non-night is sunny
-    assert state.state in {ATTR_CONDITION_SUNNY, ATTR_CONDITION_CLEAR_NIGHT}
+    assert state.state in (ATTR_CONDITION_SUNNY, ATTR_CONDITION_CLEAR_NIGHT)
     assert state.attributes["temperature"] == 22.5  # From ultra ncst
     assert state.attributes["humidity"] == 60.0
-    assert state.attributes["wind_speed"] in {2.5, 9.0}
+    assert state.attributes["wind_speed"] == 9.0  # 2.5 m/s in km/h
     assert state.attributes["wind_bearing"] == 180.0
 
 
@@ -68,7 +67,17 @@ async def test_weather_forecast_methods(
     daily = await entity.async_forecast_daily()
     assert isinstance(daily, list)
     assert len(daily) > 0
+    assert "datetime" in daily[0]
+    assert "native_temperature" in daily[0]
+    assert "condition" in daily[0]
+    assert daily[0]["native_temperature"] == 22.0
+    assert daily[0]["condition"] == ATTR_CONDITION_SUNNY
 
     hourly = await entity.async_forecast_hourly()
     assert isinstance(hourly, list)
     assert len(hourly) > 0
+    assert "datetime" in hourly[0]
+    assert "native_temperature" in hourly[0]
+    assert "condition" in hourly[0]
+    assert hourly[0]["native_temperature"] == 22.0
+    assert hourly[0]["condition"] in (ATTR_CONDITION_SUNNY, ATTR_CONDITION_CLEAR_NIGHT)
