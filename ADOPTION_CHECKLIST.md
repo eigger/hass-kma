@@ -29,8 +29,8 @@
 
 | 규칙 ID | 상태 | 근거 / 남은 작업 |
 |---|---|---|
-| GOV-01 | PASS | `STANDARDS.md`에 전체 표준 SHA(`ec6a6c7b39678c187be069b2d398939c81140ae4`), profile(`integration / ha`), 기본 브랜치(`main`), 지원 최소 HA(`2026.9.0`) 기록 |
-| GOV-02 | PASS | 공통 workflow 호출을 `ec6a6c7b39678c187be069b2d398939c81140ae4` 전체 SHA로 고정 (`.github/workflows/tests.yml`, `validate.yml`) |
+| GOV-01 | PASS | `STANDARDS.md`에 전체 표준 SHA(`1524e4d71b0976812bb854f9e390b94408a96b52`), profile(`integration / ha`), 기본 브랜치(`main`), 지원 최소 HA(`2026.9.0`) 기록 |
+| GOV-02 | PASS | 공통 workflow 호출을 `1524e4d71b0976812bb854f9e390b94408a96b52` 전체 SHA로 고정 (`.github/workflows/tests.yml`, `validate.yml`) |
 | GOV-03 | PASS | 채택 브랜치 `adopt-shared-standards`에서 PR 및 main 반영 준비 |
 | GOV-04 | PASS | 중앙 `hass-repo-standards/docs/adoption-status.md` 갱신 대상 정보 기록 완료 |
 | GOV-05 | PASS | 조율(`root`), 구현(`kma_implementation`), 독립 리뷰·검증(`kma_review`) 분리 및 검증 수행 |
