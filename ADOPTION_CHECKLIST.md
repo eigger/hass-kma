@@ -20,8 +20,8 @@
 
 | 축 / 상태 | 통합 커밋 | Python / HA / 플러그인 | 대상 패키지 | 명령·결과 | 미검증 범위 |
 |---|---|---|---|---|---|
-| 로컬 current / PASS | `HEAD` | 3.14.5 / HA 2026.10.2 / 0.13.373 | requirements=[] | `ruff check .`, `ruff format --check .` 통과, `pytest tests/components/kma/` 385 passed, `sync_badges.py --check` 통과 | 실제 KMA API 서버 |
-| 로컬 최소 HA 2026.9.0 / PASS | `HEAD` | 3.14.5 / HA 2026.9.0 / 0.13.363 | requirements=[] | `pytest tests/components/kma/` 385 passed | 실제 KMA API 서버 |
+| 로컬 current / PASS | `HEAD` | 3.14.5 / HA 2026.10.2 / 0.13.373 | requirements=[] | `ruff check .`, `ruff format --check .` 통과, `pytest tests/components/kma/` 436 passed, `sync_badges.py --check` 통과 | 실제 KMA API 서버 |
+| 로컬 최소 HA 2026.9.0 / PASS | `HEAD` | 3.14.5 / HA 2026.9.0 / 0.13.363 | requirements=[] | `pytest tests/components/kma/` 436 passed | 실제 KMA API 서버 |
 | CI current / PASS | `7a3654e` | 3.14 / 2026.10.2 / 0.13.373 | requirements=[] | [Run 39124546627](https://github.com/eigger/hass-kma/actions/runs/39124546627) (lint 11s, test 1m14s 통과) | 실제 KMA API 서버 |
 | CI 최소 HA 2026.9.0 / PASS | `7a3654e` | 3.14 / 2026.9.0 / 0.13.363 | requirements=[] | [Run 39124546627](https://github.com/eigger/hass-kma/actions/runs/39124546627) (lint 8s, test 49s 통과) | 실제 KMA API 서버 |
 
@@ -46,18 +46,18 @@
 | HA-10 | PASS | HA Core 표준 라이브러리 및 공개 API 준수 |
 | HA-11 | PASS | `strings.json` 및 `translations/en.json`, `ko.json` 일치 (`test_translations.py`) |
 | HA-12 | PASS | 테스트 fixture에 민감한 실제 API 키 없음 (`test_auth_key` 모의 키 사용) |
-| TEST-08 | PASS | Core 대응 구조(`tests/__init__.py`, `tests/conftest.py`, `tests/components/__init__.py`, `tests/components/kma/__init__.py`, `tests/components/kma/conftest.py` 및 테스트 16개 모듈) 배치 |
-| TEST-02, TEST-03, TEST-09 | PASS | 실제 HA 통합(`hass` fixture, `MockConfigEntry`) 및 런타임/단위 테스트 385건 구축 |
-| TEST-01, TEST-06, TEST-07 | PASS | 385개 테스트가 config flow, entry setup/unload/reload, weather/sensor/binary_sensor/button/image, 코디네이터 스로틀/오류/허브 집계, API 파싱, authKey 마스킹 등을 검증 |
-| TEST-04, HACS-01(최소 검증) | PASS | 최소 HA 2026.9.0 (Python 3.14, HA 2026.9.0, pytest-homeassistant-custom-component 0.13.363) 환경에서 전체 385개 테스트 통과 |
-| TEST-05, DEP-02, DEP-05 | PASS | current 환경 (Python 3.14, HA 2026.10.2, pytest-homeassistant-custom-component 0.13.373) 환경에서 전체 385개 테스트 통과 |
+| TEST-08 | PASS | Core 대응 구조(`tests/__init__.py`, `tests/conftest.py`, `tests/components/__init__.py`, `tests/components/kma/__init__.py`, `tests/components/kma/conftest.py` 및 테스트 17개 모듈) 배치 |
+| TEST-02, TEST-03, TEST-09 | PASS | 실제 HA 통합(`hass` fixture, `MockConfigEntry`) 및 런타임/단위 테스트 436건 구축 |
+| TEST-01, TEST-06, TEST-07 | PASS | 436개 테스트가 config flow, entry setup/unload/reload, weather/sensor/binary_sensor/button/image, 코디네이터 스로틀/오류/허브 집계, API 파싱, authKey 마스킹 등을 검증 |
+| TEST-04, HACS-01(최소 검증) | PASS | 최소 HA 2026.9.0 (Python 3.14, HA 2026.9.0, pytest-homeassistant-custom-component 0.13.363) 환경에서 전체 436개 테스트 통과 |
+| TEST-05, DEP-02, DEP-05 | PASS | current 환경 (Python 3.14, HA 2026.10.2, pytest-homeassistant-custom-component 0.13.373) 환경에서 전체 436개 테스트 통과 |
 | DEP-01, DEP-06 | PASS | 의존성은 `requirements_test.txt`, `requirements_test_min.txt`, `requirements_lint.txt`로 명확히 분리, manifest `requirements: []` |
 | DEP-07, CI-06 | PASS | `ruff==0.17.1` 고정 및 린트/포맷 클린 상태 검증 |
 | DEP-03, DEP-04, CI-09, CI-10 | N/A | 외부 자체 upstream 패키지가 없어 자동 dependency-update workflow 해당 없음 |
 | DEP-08 | N/A | 런타임 의존성 추가 없음 |
 | HACS-01(구조), HACS-02 | PASS | 루트 `README.md`, `LICENSE`, `hacs.json` 및 `custom_components/kma` 구조 확인 |
 | HACS-03, HACS-05 | PASS | HACS Custom 배지 사용, `custom_components/kma/brand/icon.png`(256×256) 및 `icon@2x.png`(512×512) 고해상도 에셋 준비 완료 |
-| HACS-04 | PASS | `manifest.json` `"version": "2.1.1"` 및 최신 태그 일치 |
+| HACS-04 | PASS | `manifest.json` `"version": "2.1.2"` 및 최신 태그 일치 |
 | HACS-06 | PASS | `hacs.json` 유효 필드(`name`, `country`, `homeassistant`) 확인 |
 | CI-01, CI-02 | PASS | `tests.yml`, `validate.yml` 공통 reusable workflow 호출 |
 | CI-03, CI-05 | PASS | workflow `permissions: contents: read`, `concurrency` 설정, 공통 workflow 전체 SHA 고정 |
@@ -68,7 +68,7 @@
 | DOC-02 | PASS | `README.md`(영어)와 `README.ko.md`(한국어) 상호 전환 링크, 동일 배지 유지 |
 | DOC-03, DOC-04, DOC-05 | PASS | `sync_badges.py --check` 통과 (HACS Custom → Release → HA minimum → Tests → Validate → License → Usage) |
 | DOC-07 | N/A | Bluetooth 미사용 |
-| REL-01, REL-02, REL-03, REL-05 | PASS | SemVer(2.1.1) 준수, 최소 HA 2026.9.0 보존, 표준 채택 분리 |
+| REL-01, REL-02, REL-03, REL-05 | PASS | SemVer(2.1.2) 준수, 최소 HA 2026.9.0 보존, 표준 채택 분리 |
 | REL-04 | N/A | 현행 유지보수 리포로 이전/중단 없음 |
 
 ## 남은 작업
