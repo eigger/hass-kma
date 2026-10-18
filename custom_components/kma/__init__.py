@@ -2,6 +2,7 @@
 
 부모 엔트리는 API 클라이언트를 공유하고, Zone 서브엔트리마다 코디네이터를 둔다.
 """
+
 from __future__ import annotations
 
 import asyncio

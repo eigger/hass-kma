@@ -9,7 +9,9 @@ def test_image_unique_id():
     device_info = MagicMock()
 
     subentry_id = "test_subentry_id"
-    entity = KmaRadarImage(hass, coordinator, subentry_id=subentry_id, device_info=device_info)
+    entity = KmaRadarImage(
+        hass, coordinator, subentry_id=subentry_id, device_info=device_info
+    )
 
     assert entity.unique_id == "test_subentry_id_radar_image"
     assert entity.device_info == device_info

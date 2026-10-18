@@ -1,4 +1,5 @@
 """AWS(관측소 1분 자료) 파서/클라이언트 단위 테스트."""
+
 from __future__ import annotations
 
 import asyncio
@@ -47,8 +48,24 @@ def _row(
     """원시 18컬럼 라인 생성 (YYMMDDHHMI STN WD1 WS1 WDS WSS WD10 WS10 TA RE ...)."""
     return ",".join(
         [
-            tm, stn, wd1, ws1, wds, wss, wd10, ws10, ta, re,
-            rn15, rn60, rn12, rntd, hm, pa, ps, td,
+            tm,
+            stn,
+            wd1,
+            ws1,
+            wds,
+            wss,
+            wd10,
+            ws10,
+            ta,
+            re,
+            rn15,
+            rn60,
+            rn12,
+            rntd,
+            hm,
+            pa,
+            ps,
+            td,
         ]
     )
 
@@ -69,9 +86,7 @@ def test_parse_aws_response_returns_full_snapshot() -> None:
     assert isinstance(obs, AwsObservation)
     assert obs.stn == "108"
     assert obs.tm == "202607031431"
-    assert obs.observed_at == datetime.datetime(
-        2026, 7, 3, 14, 31, tzinfo=_KST
-    )
+    assert obs.observed_at == datetime.datetime(2026, 7, 3, 14, 31, tzinfo=_KST)
     assert obs.temperature == 23.1
     assert obs.humidity == 71.0
     assert obs.dew_point == 17.7
@@ -141,7 +156,9 @@ def test_parse_aws_response_skips_comment_lines_between_markers() -> None:
         "#START3\n#3END\n",
     ],
 )
-def test_parse_aws_response_rejects_unterminated_or_markerless_payloads(text: str) -> None:
+def test_parse_aws_response_rejects_unterminated_or_markerless_payloads(
+    text: str,
+) -> None:
     with pytest.raises(KmaApiError):
         _parse_aws_response(text, 108)
 
@@ -158,14 +175,25 @@ def test_parse_aws_response_requires_valid_row_for_station() -> None:
 def _missing_row(tm: str = "202607031431", **overrides) -> str:
     """모든 측정 컬럼이 결측 센티널인 행(구조는 유효)."""
     row = _row(tm=tm)
-    sentinel_parts = [row.split(",")[0], row.split(",")[1]] + [
-        "-99.9"
-    ] * (18 - 2)
+    sentinel_parts = [row.split(",")[0], row.split(",")[1]] + ["-99.9"] * (18 - 2)
     for key, value in overrides.items():
         index = {
-            "wd1": 2, "ws1": 3, "wds": 4, "wss": 5, "wd10": 6, "ws10": 7,
-            "ta": 8, "re": 9, "rn15": 10, "rn60": 11, "rn12": 12,
-            "rntd": 13, "hm": 14, "pa": 15, "ps": 16, "td": 17,
+            "wd1": 2,
+            "ws1": 3,
+            "wds": 4,
+            "wss": 5,
+            "wd10": 6,
+            "ws10": 7,
+            "ta": 8,
+            "re": 9,
+            "rn15": 10,
+            "rn60": 11,
+            "rn12": 12,
+            "rntd": 13,
+            "hm": 14,
+            "pa": 15,
+            "ps": 16,
+            "td": 17,
         }[key]
         sentinel_parts[index] = value
     return ",".join(sentinel_parts)
@@ -248,10 +276,10 @@ def test_parse_aws_line_skips_unparseable_timestamp() -> None:
 @pytest.mark.parametrize(
     "tm",
     [
-        "20260703143",     # 11자리 — strptime 이 허용하지만 계약은 정확히 12자리
+        "20260703143",  # 11자리 — strptime 이 허용하지만 계약은 정확히 12자리
         "2026070314315",  # 13자리
-        "20260703143a",   # 비숫자 포함
-        "20260703143 ",   # 공백(토큰 단위 거절)
+        "20260703143a",  # 비숫자 포함
+        "20260703143 ",  # 공백(토큰 단위 거절)
         "２０２６０７０３１４３１",  # 전각 숫자 — isdigit() 은 True 이지만 ASCII 가 아니다
         "٢٠٢٦٠٧٠٣١٤٣١",  # 아라비아-인도 숫자 — 유니코드 숫자
     ],
@@ -295,15 +323,17 @@ def test_parse_aws_line_skips_wrong_column_count() -> None:
         ("", None),
     ],
 )
-def test_to_aws_float_sentinels_and_preservation(raw: str, expected: float | None) -> None:
+def test_to_aws_float_sentinels_and_preservation(
+    raw: str, expected: float | None
+) -> None:
     assert _to_aws_float(raw) == expected
 
 
 @pytest.mark.parametrize(
     "raw,expected",
     [
-        ("0", 0.0),       # 북 — 0도는 값으로 보존
-        ("360", None),    # 무풍 표기 — 북풍이 아니다
+        ("0", 0.0),  # 북 — 0도는 값으로 보존
+        ("360", None),  # 무풍 표기 — 북풍이 아니다
         ("360.0", None),
         ("180", 180.0),
         ("-99.9", None),
@@ -346,7 +376,9 @@ def test_async_get_aws_observation_builds_window_and_endpoint() -> None:
     assert obs.tm == "202607031431"
     endpoint, params = client._request.call_args.args
     assert endpoint == AWS_ENDPOINT
-    assert endpoint.startswith("https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-aws2_min")
+    assert endpoint.startswith(
+        "https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-aws2_min"
+    )
     assert params["stn"] == 108
     assert params["disp"] == 1
     assert params["help"] == 0

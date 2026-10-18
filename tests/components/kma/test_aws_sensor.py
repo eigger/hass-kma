@@ -1,21 +1,23 @@
 """AWS 센서 엔티티/디스크립션 단위 테스트."""
+
 from __future__ import annotations
 
 import asyncio
 import datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from custom_components.kma.api import AwsObservation
 from custom_components.kma.const import DOMAIN
-from conftest import make_aws_observation as _obs
 from custom_components.kma.sensor import (
     AWS_SENSOR_DESCRIPTIONS,
     KmaAwsSensor,
     async_setup_entry,
 )
+
+from .conftest import make_aws_observation as _obs
 
 _KST = datetime.timezone(datetime.timedelta(hours=9))
 OBSERVED_AT = datetime.datetime(2026, 7, 3, 14, 31, tzinfo=_KST)
@@ -70,7 +72,7 @@ def _real_aws_coordinator(*, entry_id: str, station: int, subentry_id: str):
     from custom_components.kma.const import CONF_AWS_STATION_ID
     from custom_components.kma.coordinator import KmaAwsCoordinator
 
-    entry = SimpleNamespace(entry_id=entry_id)
+    entry = SimpleNamespace(entry_id=entry_id, async_on_unload=MagicMock())
     subentry = SimpleNamespace(
         subentry_id=subentry_id, data={CONF_AWS_STATION_ID: station}
     )
@@ -128,7 +130,11 @@ def test_rolling_rain_windows_are_not_total_increasing() -> None:
 
 
 def test_wind_direction_uses_measurement_angle_state_class() -> None:
-    for key in ("aws_wind_direction_1m", "aws_gust_direction", "aws_wind_direction_10m"):
+    for key in (
+        "aws_wind_direction_1m",
+        "aws_gust_direction",
+        "aws_wind_direction_10m",
+    ):
         desc = _by_key(key)
         assert desc.device_class == "wind_direction", key
         assert desc.state_class == "measurement_angle", key
@@ -174,15 +180,23 @@ def test_unique_id_is_stable_across_subentry_recreation() -> None:
     확인한다(서브엔트리 ID에 의존하면 이 테스트가 실패한다).
     """
     desc = _by_key("aws_temperature")
-    first = _real_aws_coordinator(entry_id="entry-1", station=108, subentry_id="sub-old")
-    second = _real_aws_coordinator(entry_id="entry-1", station=108, subentry_id="sub-new")
+    first = _real_aws_coordinator(
+        entry_id="entry-1", station=108, subentry_id="sub-old"
+    )
+    second = _real_aws_coordinator(
+        entry_id="entry-1", station=108, subentry_id="sub-new"
+    )
 
     assert first.subentry.subentry_id != second.subentry.subentry_id
     assert first.aws_unique_key == second.aws_unique_key == "entry-1_aws_108"
 
     sensor1 = _sensor(desc, first)
     sensor2 = _sensor(desc, second)
-    assert sensor1._attr_unique_id == sensor2._attr_unique_id == "entry-1_aws_108_temperature"
+    assert (
+        sensor1._attr_unique_id
+        == sensor2._attr_unique_id
+        == "entry-1_aws_108_temperature"
+    )
     assert (
         sensor1._attr_device_info["identifiers"]
         == sensor2._attr_device_info["identifiers"]
@@ -195,9 +209,7 @@ def test_unique_id_differs_for_different_parent_entries() -> None:
     b = _sensor(desc, _coordinator(_obs(), entry_id="entry-b", station=108))
 
     assert a._attr_unique_id != b._attr_unique_id
-    assert (
-        a._attr_device_info["identifiers"] != b._attr_device_info["identifiers"]
-    )
+    assert a._attr_device_info["identifiers"] != b._attr_device_info["identifiers"]
 
 
 @pytest.mark.parametrize(
@@ -259,7 +271,9 @@ def test_availability_is_false_when_coordinator_update_fails() -> None:
 
 
 def test_extra_state_attributes_expose_station_and_observation_time() -> None:
-    attrs = _sensor(_by_key("aws_temperature"), _coordinator(_obs())).extra_state_attributes
+    attrs = _sensor(
+        _by_key("aws_temperature"), _coordinator(_obs())
+    ).extra_state_attributes
 
     assert attrs["station_id"] == 108
     assert attrs["observation_time"] == OBSERVED_AT
@@ -268,7 +282,9 @@ def test_extra_state_attributes_expose_station_and_observation_time() -> None:
 
 
 def test_extra_state_attributes_without_snapshot() -> None:
-    attrs = _sensor(_by_key("aws_temperature"), _coordinator(None)).extra_state_attributes
+    attrs = _sensor(
+        _by_key("aws_temperature"), _coordinator(None)
+    ).extra_state_attributes
 
     assert attrs["station_id"] == 108
     assert attrs["observation_time"] is None
@@ -276,7 +292,9 @@ def test_extra_state_attributes_without_snapshot() -> None:
 
 def _setup(aws_coordinators, coordinators=None):
     entry_id = "entry-1"
-    subentry = SimpleNamespace(subentry_id="sub-1", title="Home", data={"zone_name": "Home"})
+    subentry = SimpleNamespace(
+        subentry_id="sub-1", title="Home", data={"zone_name": "Home"}
+    )
     store = {
         "coordinators": coordinators or {},
         "aws_coordinators": aws_coordinators,
@@ -284,9 +302,7 @@ def _setup(aws_coordinators, coordinators=None):
         "hub_coordinator": None,
         "image_coordinator": None,
     }
-    entry = SimpleNamespace(
-        entry_id=entry_id, subentries={"sub-1": subentry}
-    )
+    entry = SimpleNamespace(entry_id=entry_id, subentries={"sub-1": subentry})
     hass = MagicMock()
     hass.data = {DOMAIN: {entry_id: store}}
     added = []
@@ -315,7 +331,9 @@ def test_setup_creates_no_aws_entities_without_station_id() -> None:
 
 def test_setup_passes_config_subentry_id_for_aws_entities() -> None:
     entry_id = "entry-1"
-    subentry = SimpleNamespace(subentry_id="sub-1", title="Home", data={"zone_name": "Home"})
+    subentry = SimpleNamespace(
+        subentry_id="sub-1", title="Home", data={"zone_name": "Home"}
+    )
     store = {
         "coordinators": {},
         "aws_coordinators": {"sub-1": _coordinator(_obs())},
@@ -338,7 +356,10 @@ def test_setup_passes_config_subentry_id_for_aws_entities() -> None:
 
 
 def test_aws_object_id_names_cover_all_sensors() -> None:
-    from custom_components.kma.sensor import AWS_OBJECT_ID_NAMES, AWS_SENSOR_DESCRIPTIONS
+    from custom_components.kma.sensor import (
+        AWS_OBJECT_ID_NAMES,
+        AWS_SENSOR_DESCRIPTIONS,
+    )
 
     assert set(AWS_OBJECT_ID_NAMES) == {d.key for d in AWS_SENSOR_DESCRIPTIONS}
 
@@ -358,7 +379,9 @@ def test_restored_value_is_shown_until_first_observation() -> None:
     sensor = _sensor(desc, _coordinator(None))
     assert sensor.available is False  # 관측도 복원값도 없음
 
-    sensor._test_last_sensor_data = SimpleNamespace(native_value=19.5, native_unit_of_measurement=None)
+    sensor.async_get_last_sensor_data = AsyncMock(
+        return_value=SimpleNamespace(native_value=19.5, native_unit_of_measurement=None)
+    )
     asyncio.run(sensor.async_added_to_hass())
 
     assert sensor.available is True
@@ -369,7 +392,9 @@ def test_restored_value_is_replaced_by_live_observation() -> None:
     desc = _by_key("aws_temperature")
     coordinator = _coordinator(None)
     sensor = _sensor(desc, coordinator)
-    sensor._test_last_sensor_data = SimpleNamespace(native_value=19.5, native_unit_of_measurement=None)
+    sensor.async_get_last_sensor_data = AsyncMock(
+        return_value=SimpleNamespace(native_value=19.5, native_unit_of_measurement=None)
+    )
     asyncio.run(sensor.async_added_to_hass())
 
     coordinator.aws_observation = _obs()
@@ -379,7 +404,7 @@ def test_restored_value_is_replaced_by_live_observation() -> None:
 
 def test_nothing_restored_stays_unavailable() -> None:
     sensor = _sensor(_by_key("aws_temperature"), _coordinator(None))
-    sensor._test_last_sensor_data = None
+    sensor.async_get_last_sensor_data = AsyncMock(return_value=None)
     asyncio.run(sensor.async_added_to_hass())
 
     assert sensor.available is False

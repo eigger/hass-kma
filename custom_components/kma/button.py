@@ -1,4 +1,5 @@
 """기상청(KMA) 버튼(Button) 플랫폼 구현."""
+
 from __future__ import annotations
 
 import logging

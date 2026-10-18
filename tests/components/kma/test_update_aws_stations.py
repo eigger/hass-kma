@@ -5,6 +5,7 @@ HTML and temporary catalog files — no network, no committed full HTML, no
 addresses/coordinates/observations/auth. The real bundled catalog is only touched
 by a read-only ``--check`` subprocess run.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -16,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 _SCRIPT = _REPO_ROOT / "scripts" / "update_aws_stations.py"
 
 _spec = importlib.util.spec_from_file_location("update_aws_stations", _SCRIPT)
@@ -26,7 +27,12 @@ _spec.loader.exec_module(tool)
 
 
 def _station(aws_id, name, region, stn_sp="SA"):
-    return {"awsId": str(aws_id), "nameKo": name, "stnSp": stn_sp, "addr": f"{region} 어딘가읍"}
+    return {
+        "awsId": str(aws_id),
+        "nameKo": name,
+        "stnSp": stn_sp,
+        "addr": f"{region} 어딘가읍",
+    }
 
 
 def _html(regions):
@@ -43,7 +49,9 @@ def _write_html(tmp_path, regions, name="page.html"):
 
 def _write_catalog(tmp_path, catalog, *, date="2026-10-08", name="aws_stations.py"):
     items = [f'{k}: ("{n}", "{r}")' for k, (n, r) in sorted(catalog.items())]
-    rows = ["    " + ",    ".join(items[i : i + 4]) + "," for i in range(0, len(items), 4)]
+    rows = [
+        "    " + ",    ".join(items[i : i + 4]) + "," for i in range(0, len(items), 4)
+    ]
     body = "{\n" + "\n".join(rows) + "\n}"
     path = tmp_path / name
     path.write_bytes(
@@ -62,17 +70,20 @@ def _args(*argv):
 
 # --- parsing / filtering ---------------------------------------------------
 
+
 def test_parse_source_filters_to_sa_ss_sg_and_maps_region():
-    html = _html({
-        "11": [
-            _station(1, "서울", "서울특별시", "SA"),
-            _station(2, "부산", "부산광역시", "SS"),
-            _station(3, "남면", "경기도", "SG"),
-            _station(4, "공항", "제주특별자치도", "AM"),
-            _station(5, "무인", "강원특별자치도", "SW"),
-            _station(6, "해상", "인천광역시", "OA"),
-        ]
-    })
+    html = _html(
+        {
+            "11": [
+                _station(1, "서울", "서울특별시", "SA"),
+                _station(2, "부산", "부산광역시", "SS"),
+                _station(3, "남면", "경기도", "SG"),
+                _station(4, "공항", "제주특별자치도", "AM"),
+                _station(5, "무인", "강원특별자치도", "SW"),
+                _station(6, "해상", "인천광역시", "OA"),
+            ]
+        }
+    )
     assert tool.parse_source(html) == {
         1: ("서울", "서울특별시"),
         2: ("부산", "부산광역시"),
@@ -86,18 +97,22 @@ def test_parse_source_region_is_first_addr_token():
 
 
 def test_parse_source_deduplicates_exact_duplicates():
-    html = _html({
-        "11": [_station(1, "서울", "서울특별시")],
-        "26": [_station(1, "서울", "서울특별시")],  # exact duplicate across regions
-    })
+    html = _html(
+        {
+            "11": [_station(1, "서울", "서울특별시")],
+            "26": [_station(1, "서울", "서울특별시")],  # exact duplicate across regions
+        }
+    )
     assert tool.parse_source(html) == {1: ("서울", "서울특별시")}
 
 
 def test_parse_source_rejects_conflicting_duplicates():
-    html = _html({
-        "11": [_station(1, "서울", "서울특별시")],
-        "26": [_station(1, "다른이름", "부산광역시")],
-    })
+    html = _html(
+        {
+            "11": [_station(1, "서울", "서울특별시")],
+            "26": [_station(1, "다른이름", "부산광역시")],
+        }
+    )
     with pytest.raises(tool.SourceError, match="conflicting duplicate"):
         tool.parse_source(html)
 
@@ -108,7 +123,9 @@ def test_parse_source_rejects_conflicting_duplicates():
         "<html>no marker</html>",
         '<script>var sidoStations = JSON.parse("{}");</script>',  # empty object
         '<script>var sidoStations = JSON.parse("not json");</script>',  # bad inner
-        _html({"11": [_station(9, "무관", "제주특별자치도", "AM")]}),  # only excluded types
+        _html(
+            {"11": [_station(9, "무관", "제주특별자치도", "AM")]}
+        ),  # only excluded types
     ],
 )
 def test_parse_source_rejects_empty_or_malformed(html):
@@ -118,7 +135,12 @@ def test_parse_source_rejects_empty_or_malformed(html):
 
 @pytest.mark.parametrize("bad_id", ["abc", "0", "-1", "", None])
 def test_parse_source_rejects_invalid_aws_id(bad_id):
-    station = {"awsId": bad_id, "nameKo": "서울", "stnSp": "SA", "addr": "서울특별시 강남"}
+    station = {
+        "awsId": bad_id,
+        "nameKo": "서울",
+        "stnSp": "SA",
+        "addr": "서울특별시 강남",
+    }
     with pytest.raises(tool.SourceError, match="invalid awsId"):
         tool.parse_source(_html({"11": [station]}))
 
@@ -137,6 +159,7 @@ def test_parse_source_rejects_invalid_name_or_region(station):
 
 # --- read / render ---------------------------------------------------------
 
+
 def test_read_catalog_parses_without_importing(tmp_path):
     path = _write_catalog(tmp_path, {1: ("서울", "서울특별시"), 3: ("남면", "경기도")})
     _source, catalog = tool.read_catalog(path)[:2]
@@ -154,7 +177,9 @@ def test_added_rows_are_sorted_and_roundtrip(tmp_path):
         ]
     }
     html_path = _write_html(tmp_path, stations)
-    assert tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 0
+    assert (
+        tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 0
+    )
     _source, catalog = tool.read_catalog(cat_path)[:2]
     assert sorted(catalog) == [1, 2, 3]
     last_row = cat_path.read_text(encoding="utf-8").splitlines()[-2]
@@ -179,7 +204,9 @@ def test_write_roundtrips_quotes_backslashes_unicode(tmp_path):
         + [_station(k, n, r) for k, (n, r) in sorted(tricky.items())]
     }
     html_path = _write_html(tmp_path, stations)
-    assert tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 0
+    assert (
+        tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 0
+    )
     _source, catalog = tool.read_catalog(cat_path)[:2]
     assert catalog == {1: ("서울", "서울특별시"), **tricky}
     # and it is still importable/valid Python
@@ -188,20 +215,41 @@ def test_write_roundtrips_quotes_backslashes_unicode(tmp_path):
 
 # --- check mode ------------------------------------------------------------
 
+
 def test_check_in_sync_exit_zero_and_no_write(tmp_path):
     catalog = {1: ("서울", "서울특별시"), 2: ("남면", "경기도")}
     cat_path = _write_catalog(tmp_path, catalog)
-    html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]})
+    html_path = _write_html(
+        tmp_path,
+        {
+            "11": [
+                _station(1, "서울", "서울특별시"),
+                _station(2, "남면", "경기도", "SG"),
+            ]
+        },
+    )
     before = cat_path.read_bytes()
-    assert tool.run(_args("--check", "--html", str(html_path)), catalog_path=cat_path) == 0
+    assert (
+        tool.run(_args("--check", "--html", str(html_path)), catalog_path=cat_path) == 0
+    )
     assert cat_path.read_bytes() == before
 
 
 def test_check_drift_exit_nonzero_and_no_write(tmp_path, capsys):
     cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
-    html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]})
+    html_path = _write_html(
+        tmp_path,
+        {
+            "11": [
+                _station(1, "서울", "서울특별시"),
+                _station(2, "남면", "경기도", "SG"),
+            ]
+        },
+    )
     before = cat_path.read_bytes()
-    assert tool.run(_args("--check", "--html", str(html_path)), catalog_path=cat_path) == 1
+    assert (
+        tool.run(_args("--check", "--html", str(html_path)), catalog_path=cat_path) == 1
+    )
     assert cat_path.read_bytes() == before
     assert "added" in capsys.readouterr().out
 
@@ -209,34 +257,65 @@ def test_check_drift_exit_nonzero_and_no_write(tmp_path, capsys):
 def test_check_rejects_date_option(tmp_path):
     cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
     html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시")]})
-    assert tool.run(_args("--check", "--date", "2026-01-01", "--html", str(html_path)), catalog_path=cat_path) == 2
+    assert (
+        tool.run(
+            _args("--check", "--date", "2026-01-01", "--html", str(html_path)),
+            catalog_path=cat_path,
+        )
+        == 2
+    )
 
 
 # --- write mode ------------------------------------------------------------
 
+
 def test_write_refuses_removals_by_default(tmp_path, capsys):
-    cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시"), 2: ("남면", "경기도")})
+    cat_path = _write_catalog(
+        tmp_path, {1: ("서울", "서울특별시"), 2: ("남면", "경기도")}
+    )
     html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시")]})
     before = cat_path.read_bytes()
-    assert tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 2
+    assert (
+        tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 2
+    )
     assert cat_path.read_bytes() == before
     assert "refusing to remove" in capsys.readouterr().err
 
 
 def test_write_allows_removals_with_flag(tmp_path):
-    cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시"), 2: ("남면", "경기도")})
+    cat_path = _write_catalog(
+        tmp_path, {1: ("서울", "서울특별시"), 2: ("남면", "경기도")}
+    )
     html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시")]})
-    assert tool.run(_args("--write", "--allow-removals", "--html", str(html_path)), catalog_path=cat_path) == 0
+    assert (
+        tool.run(
+            _args("--write", "--allow-removals", "--html", str(html_path)),
+            catalog_path=cat_path,
+        )
+        == 0
+    )
     _src, catalog = tool.read_catalog(cat_path)[:2]
     assert catalog == {1: ("서울", "서울특별시")}
 
 
 def test_write_updates_map_and_date(tmp_path):
     cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")}, date="2026-10-08")
-    html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]})
-    assert tool.run(
-        _args("--write", "--date", "2026-11-30", "--html", str(html_path)), catalog_path=cat_path
-    ) == 0
+    html_path = _write_html(
+        tmp_path,
+        {
+            "11": [
+                _station(1, "서울", "서울특별시"),
+                _station(2, "남면", "경기도", "SG"),
+            ]
+        },
+    )
+    assert (
+        tool.run(
+            _args("--write", "--date", "2026-11-30", "--html", str(html_path)),
+            catalog_path=cat_path,
+        )
+        == 0
+    )
     source, catalog, _node = tool.read_catalog(cat_path)
     assert catalog == {1: ("서울", "서울특별시"), 2: ("남면", "경기도")}
     assert "추출일: 2026-11-30." in source
@@ -245,21 +324,37 @@ def test_write_updates_map_and_date(tmp_path):
 def test_write_unchanged_map_preserves_literal(tmp_path):
     catalog = {1: ("서울", "서울특별시"), 2: ("남면", "경기도")}
     cat_path = _write_catalog(tmp_path, catalog, date="2026-10-08")
-    html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]})
+    html_path = _write_html(
+        tmp_path,
+        {
+            "11": [
+                _station(1, "서울", "서울특별시"),
+                _station(2, "남면", "경기도", "SG"),
+            ]
+        },
+    )
     before = cat_path.read_bytes()
     # same date + unchanged map -> byte-identical (no whole-catalog reflow)
-    assert tool.run(
-        _args("--write", "--date", "2026-10-08", "--html", str(html_path)), catalog_path=cat_path
-    ) == 0
+    assert (
+        tool.run(
+            _args("--write", "--date", "2026-10-08", "--html", str(html_path)),
+            catalog_path=cat_path,
+        )
+        == 0
+    )
     assert cat_path.read_bytes() == before
 
 
 def test_write_rejects_bad_date(tmp_path):
     cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
     html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시")]})
-    assert tool.run(
-        _args("--write", "--date", "2026/01/01", "--html", str(html_path)), catalog_path=cat_path
-    ) == 2
+    assert (
+        tool.run(
+            _args("--write", "--date", "2026/01/01", "--html", str(html_path)),
+            catalog_path=cat_path,
+        )
+        == 2
+    )
 
 
 def test_write_requires_extraction_date_field(tmp_path):
@@ -277,7 +372,9 @@ def test_write_requires_extraction_date_field(tmp_path):
     assert path.read_bytes() == before
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX 권한 비트는 Windows에서 유지되지 않음")
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="POSIX 권한 비트는 Windows에서 유지되지 않음"
+)
 def test_write_preserves_mode_and_leaves_no_temp(tmp_path):
     import stat
 
@@ -285,11 +382,20 @@ def test_write_preserves_mode_and_leaves_no_temp(tmp_path):
     os.chmod(cat_path, 0o640)
     html_path = _write_html(
         tmp_path,
-        {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]},
+        {
+            "11": [
+                _station(1, "서울", "서울특별시"),
+                _station(2, "남면", "경기도", "SG"),
+            ]
+        },
     )
-    assert tool.run(
-        _args("--write", "--date", "2026-11-30", "--html", str(html_path)), catalog_path=cat_path
-    ) == 0
+    assert (
+        tool.run(
+            _args("--write", "--date", "2026-11-30", "--html", str(html_path)),
+            catalog_path=cat_path,
+        )
+        == 0
+    )
     assert stat.S_IMODE(cat_path.stat().st_mode) == 0o640
     assert not list(tmp_path.glob("*.tmp"))
 
@@ -300,11 +406,20 @@ def test_write_preserves_line_endings(tmp_path, eol):
     cat_path.write_bytes(cat_path.read_bytes().replace(b"\n", eol))
     html_path = _write_html(
         tmp_path,
-        {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]},
+        {
+            "11": [
+                _station(1, "서울", "서울특별시"),
+                _station(2, "남면", "경기도", "SG"),
+            ]
+        },
     )
-    assert tool.run(
-        _args("--write", "--date", "2026-11-30", "--html", str(html_path)), catalog_path=cat_path
-    ) == 0
+    assert (
+        tool.run(
+            _args("--write", "--date", "2026-11-30", "--html", str(html_path)),
+            catalog_path=cat_path,
+        )
+        == 0
+    )
     out = cat_path.read_bytes()
     assert b"2026-11-30" in out
     if eol == b"\n":
@@ -319,11 +434,20 @@ def test_write_refuses_mixed_line_endings(tmp_path):
     cat_path.write_bytes(raw)
     html_path = _write_html(
         tmp_path,
-        {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]},
+        {
+            "11": [
+                _station(1, "서울", "서울특별시"),
+                _station(2, "남면", "경기도", "SG"),
+            ]
+        },
     )
-    assert tool.run(
-        _args("--write", "--date", "2026-11-30", "--html", str(html_path)), catalog_path=cat_path
-    ) == 2
+    assert (
+        tool.run(
+            _args("--write", "--date", "2026-11-30", "--html", str(html_path)),
+            catalog_path=cat_path,
+        )
+        == 2
+    )
     assert cat_path.read_bytes() == raw
     assert not list(tmp_path.glob("*.tmp"))
 
@@ -332,20 +456,31 @@ def test_write_validates_generated_source_before_replace(tmp_path, monkeypatch):
     cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
     html_path = _write_html(
         tmp_path,
-        {"11": [_station(1, "서울", "서울특별시"), _station(2, "남면", "경기도", "SG")]},
+        {
+            "11": [
+                _station(1, "서울", "서울특별시"),
+                _station(2, "남면", "경기도", "SG"),
+            ]
+        },
     )
     before = cat_path.read_bytes()
     monkeypatch.setattr(tool, "apply_targeted", lambda *_a, **_k: "{ not valid python")
-    assert tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 2
+    assert (
+        tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 2
+    )
     assert cat_path.read_bytes() == before
 
 
 def test_check_rejects_allow_removals(tmp_path):
     cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
     html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시")]})
-    assert tool.run(
-        _args("--check", "--allow-removals", "--html", str(html_path)), catalog_path=cat_path
-    ) == 2
+    assert (
+        tool.run(
+            _args("--check", "--allow-removals", "--html", str(html_path)),
+            catalog_path=cat_path,
+        )
+        == 2
+    )
 
 
 def test_html_non_utf8_exit_two(tmp_path):
@@ -366,6 +501,7 @@ def test_fetch_failure_exit_two(tmp_path):
 
 # --- true CLI behavioral check --------------------------------------------
 
+
 def test_cli_subprocess_check_reports_drift(tmp_path):
     """Run the real CLI: a small synthetic page drifts from the bundled catalog."""
     html_path = _write_html(tmp_path, {"11": [_station(1, "서울", "서울특별시")]})
@@ -382,8 +518,10 @@ def test_cli_subprocess_check_reports_drift(tmp_path):
 
 # --- strict network UTF-8 --------------------------------------------------
 
+
 def test_fetch_html_rejects_invalid_utf8(monkeypatch):
     """The network response must not be silently repaired with U+FFFD."""
+
     class _Response:
         def read(self):
             return b"<html>\xff\xfe\x00broken</html>"
@@ -399,7 +537,9 @@ def test_fetch_html_rejects_invalid_utf8(monkeypatch):
         tool.fetch_html()
 
 
-def test_online_invalid_utf8_exits_2_and_leaves_catalog_untouched(tmp_path, monkeypatch):
+def test_online_invalid_utf8_exits_2_and_leaves_catalog_untouched(
+    tmp_path, monkeypatch
+):
     cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시")})
     before = cat_path.read_bytes()
 
@@ -419,6 +559,7 @@ def test_online_invalid_utf8_exits_2_and_leaves_catalog_untouched(tmp_path, monk
 
 
 # --- minimal-diff writes ---------------------------------------------------
+
 
 def _diff_lines(old_source: str, new_source: str) -> list[str]:
     import difflib
@@ -478,7 +619,9 @@ def test_added_and_removed_records_touch_only_one_row():
 
 def test_write_roundtrip_reproduces_catalog_and_reruns_clean(tmp_path):
     """Writing a refreshed catalog then re-checking it yields no further change."""
-    cat_path = _write_catalog(tmp_path, {1: ("서울", "서울특별시"), 2: ("남면", "경기도")})
+    cat_path = _write_catalog(
+        tmp_path, {1: ("서울", "서울특별시"), 2: ("남면", "경기도")}
+    )
     stations = {
         "11": [
             _station(1, "서울", "서울특별시"),
@@ -487,11 +630,16 @@ def test_write_roundtrip_reproduces_catalog_and_reruns_clean(tmp_path):
         ]
     }
     html_path = _write_html(tmp_path, stations)
-    assert tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 0
-    assert tool.run(_args("--check", "--html", str(html_path)), catalog_path=cat_path) == 0
+    assert (
+        tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 0
+    )
+    assert (
+        tool.run(_args("--check", "--html", str(html_path)), catalog_path=cat_path) == 0
+    )
 
 
 # --- unsupported body shapes are refused, never silently rewritten --------
+
 
 def _write_modified_catalog(tmp_path, text: str) -> Path:
     path = tmp_path / "aws_stations.py"
@@ -504,7 +652,9 @@ def _bundled_source() -> str:
     return catalog.read_text(encoding="utf-8")
 
 
-def _html_for(tmp_path, overrides: dict[int, tuple[str, str]], base: Path | None = None) -> Path:
+def _html_for(
+    tmp_path, overrides: dict[int, tuple[str, str]], base: Path | None = None
+) -> Path:
     """A page that renames exactly ``overrides`` and leaves every other station as-is.
 
     Defaults to the bundled catalog; pass ``base`` to build a page that carries an
@@ -571,15 +721,20 @@ def test_write_refuses_unsupported_body_and_leaves_file_unchanged(tmp_path, muta
     before = cat_path.read_bytes()
     html_path = _html_for(tmp_path, {400: ("바뀐이름", "서울특별시")})
 
-    assert tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 2
+    assert (
+        tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 2
+    )
     assert cat_path.read_bytes() == before
 
 
 def test_refusal_explains_the_offending_line(capsys, tmp_path):
     cat_path = _write_modified_catalog(
-        tmp_path, _bundled_source().replace("= {\n", "= {\n    # retained provenance\n", 1)
+        tmp_path,
+        _bundled_source().replace("= {\n", "= {\n    # retained provenance\n", 1),
     )
     html_path = _html_for(tmp_path, {400: ("바뀐이름", "서울특별시")})
-    assert tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 2
+    assert (
+        tool.run(_args("--write", "--html", str(html_path)), catalog_path=cat_path) == 2
+    )
     err = capsys.readouterr().err
     assert "line " in err and "provenance" in err

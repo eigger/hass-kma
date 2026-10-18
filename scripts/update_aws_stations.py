@@ -24,6 +24,7 @@ Notes:
     changes, review the reported station changes and update that fixture by hand;
     do not derive the tests' expected values from the modified catalog.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -72,7 +73,7 @@ def _positive_int(raw: object) -> int | None:
         return None
     try:
         value = int(str(raw).strip())
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
     return value if value > 0 else None
 
@@ -91,7 +92,9 @@ def parse_source(html: str) -> dict[int, tuple[str, str]]:
         decoded = json.loads(match.group(1))
         regions = json.loads(decoded)
     except (ValueError, TypeError) as err:
-        raise SourceError(f"sidoStations is not valid double-encoded JSON: {err}") from err
+        raise SourceError(
+            f"sidoStations is not valid double-encoded JSON: {err}"
+        ) from err
     if not isinstance(regions, dict) or not regions:
         raise SourceError("sidoStations is empty or not an object")
 
@@ -100,7 +103,10 @@ def parse_source(html: str) -> dict[int, tuple[str, str]]:
         if not isinstance(stations, list):
             raise SourceError("sidoStations region entry is not a list")
         for station in stations:
-            if not isinstance(station, dict) or station.get("stnSp") not in INCLUDED_STN_SP:
+            if (
+                not isinstance(station, dict)
+                or station.get("stnSp") not in INCLUDED_STN_SP
+            ):
                 continue
             station_id = _positive_int(station.get("awsId"))
             if station_id is None:
@@ -140,7 +146,9 @@ def read_catalog(path: Path) -> tuple[str, dict[int, tuple[str, str]], ast.AST]:
             try:
                 catalog = ast.literal_eval(node.value)
             except (ValueError, SyntaxError) as err:
-                raise CatalogError(f"AWS_STATION_CATALOG is not a literal: {err}") from err
+                raise CatalogError(
+                    f"AWS_STATION_CATALOG is not a literal: {err}"
+                ) from err
             return source, catalog, node.value
     raise CatalogError("AWS_STATION_CATALOG annotated assignment not found")
 
@@ -154,9 +162,13 @@ def format_changes(
     changed = sorted(k for k in set(old) & set(new) if old[k] != new[k])
     lines: list[str] = []
     if added:
-        lines.append("added %d: %s" % (len(added), ", ".join(f"{k} {new[k]}" for k in added)))
+        lines.append(
+            "added %d: %s" % (len(added), ", ".join(f"{k} {new[k]}" for k in added))
+        )
     if removed:
-        lines.append("removed %d: %s" % (len(removed), ", ".join(str(k) for k in removed)))
+        lines.append(
+            "removed %d: %s" % (len(removed), ", ".join(str(k) for k in removed))
+        )
     if changed:
         lines.append(
             "changed %d: %s"
@@ -220,9 +232,13 @@ def _assert_supported_shape(
     if last - first < 2:
         raise CatalogError("catalog literal does not open and close on separate lines")
     if lines[first - 1][value_node.col_offset + 1 :].strip():
-        raise CatalogError(f"line {first}: nothing may follow the catalog's opening brace")
+        raise CatalogError(
+            f"line {first}: nothing may follow the catalog's opening brace"
+        )
     if lines[last - 1][: value_node.end_col_offset - 1].strip():
-        raise CatalogError(f"line {last}: nothing may precede the catalog's closing brace")
+        raise CatalogError(
+            f"line {last}: nothing may precede the catalog's closing brace"
+        )
 
     row_lines = set(rows)
     for lineno in range(first + 1, last):
@@ -278,7 +294,10 @@ def apply_targeted(
     stations_on_row: dict[int, list[int]] = {}
     for index, value in enumerate(values):
         stations_on_row.setdefault(value.lineno, []).append(index)
-    rows = {lineno: [ast.literal_eval(keys[i]) for i in idx] for lineno, idx in stations_on_row.items()}
+    rows = {
+        lineno: [ast.literal_eval(keys[i]) for i in idx]
+        for lineno, idx in stations_on_row.items()
+    }
 
     _assert_supported_shape(source, value_node, rows, old)
 
@@ -290,9 +309,7 @@ def apply_targeted(
             continue  # whole row removed
         original = lines[lineno - 1]
         indent = original[: len(original) - len(original.lstrip())]
-        out_rows.append(
-            _row_text(indent, [_entry_text(s, *new[s]) for s in kept])
-        )
+        out_rows.append(_row_text(indent, [_entry_text(s, *new[s]) for s in kept]))
 
     added = sorted(set(new) - set(old))
     for start in range(0, len(added), PER_LINE):
@@ -335,7 +352,9 @@ def detect_newline(raw: bytes) -> str:
     crlf = raw.count(b"\r\n")
     lf = raw.count(b"\n") - crlf
     if crlf and lf:
-        raise CatalogError("catalog mixes LF and CRLF line endings; normalise them first")
+        raise CatalogError(
+            "catalog mixes LF and CRLF line endings; normalise them first"
+        )
     return "\r\n" if crlf else "\n"
 
 
@@ -366,7 +385,9 @@ def atomic_write_catalog(
     mode = path.stat().st_mode
     # 원본 줄바꿈(LF/CRLF)을 유지한다. 텍스트 모드 기본값은 Windows에서 LF를 CRLF로 바꾼다.
     newline = detect_newline(path.read_bytes())
-    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=path.name + ".", suffix=".tmp")
+    fd, tmp_name = tempfile.mkstemp(
+        dir=path.parent, prefix=path.name + ".", suffix=".tmp"
+    )
     try:
         with os.fdopen(fd, "w", encoding="utf-8", newline=newline) as handle:
             handle.write(new_source)
@@ -405,7 +426,9 @@ def run(
         try:
             html = raw.decode("utf-8")
         except UnicodeDecodeError as err:
-            print(f"error: --html {args.html} is not valid UTF-8: {err}", file=sys.stderr)
+            print(
+                f"error: --html {args.html} is not valid UTF-8: {err}", file=sys.stderr
+            )
             return 2
     else:
         try:
@@ -457,7 +480,9 @@ def run(
         date_str = _dt.date.today().isoformat()
 
     try:
-        new_source = build_written_source(source, value_node, old_map, new_map, date_str)
+        new_source = build_written_source(
+            source, value_node, old_map, new_map, date_str
+        )
     except CatalogError as err:
         print(f"error: {err}", file=sys.stderr)
         return 2
@@ -482,16 +507,31 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--check", action="store_true",
-                      help="compare with the official source; exit 1 on drift (never writes)")
-    mode.add_argument("--write", action="store_true",
-                      help="update the bundled catalog from the official source")
-    parser.add_argument("--html", metavar="FILE",
-                        help="parse a saved page instead of fetching the network")
-    parser.add_argument("--date", metavar="ISO",
-                        help="snapshot date for --write (default: today, ISO YYYY-MM-DD)")
-    parser.add_argument("--allow-removals", action="store_true",
-                        help="permit removing existing station ids on --write")
+    mode.add_argument(
+        "--check",
+        action="store_true",
+        help="compare with the official source; exit 1 on drift (never writes)",
+    )
+    mode.add_argument(
+        "--write",
+        action="store_true",
+        help="update the bundled catalog from the official source",
+    )
+    parser.add_argument(
+        "--html",
+        metavar="FILE",
+        help="parse a saved page instead of fetching the network",
+    )
+    parser.add_argument(
+        "--date",
+        metavar="ISO",
+        help="snapshot date for --write (default: today, ISO YYYY-MM-DD)",
+    )
+    parser.add_argument(
+        "--allow-removals",
+        action="store_true",
+        help="permit removing existing station ids on --write",
+    )
     return parser
 
 

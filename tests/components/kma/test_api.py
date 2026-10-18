@@ -1,4 +1,5 @@
 """api.py 순수 함수 단위 테스트 — 네트워크 호출 없음."""
+
 import json
 
 import pytest
@@ -6,10 +7,10 @@ import pytest
 from custom_components.kma.api import (
     KmaActivationRequiredError,
     KmaApiError,
-    KmaTransientError,
     KmaAuthError,
-    Pm10Observation,
+    KmaTransientError,
     Pm10HourlyStats,
+    Pm10Observation,
     SnowObservation,
     StationBulletin,
     _hourly_current,
@@ -140,12 +141,14 @@ class TestParseTyp02Items:
         body: dict = {}
         if items is not None:
             body = {"items": {"item": items}}
-        return json.dumps({
-            "response": {
-                "header": {"resultCode": result_code, "resultMsg": result_msg},
-                "body": body,
+        return json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": result_code, "resultMsg": result_msg},
+                    "body": body,
+                }
             }
-        })
+        )
 
     def test_success_single_item(self):
         payload = self._wrap("00", "OK", [{"category": "T1H", "obsrValue": "22.5"}])
@@ -185,7 +188,9 @@ class TestParseTyp02Items:
     def test_nodata_99_returns_empty(self):
         # 생활기상지수/보건기상지수 API(예: 꽃가루)는 서비스 기간이 아니거나 지역코드에
         # 자료가 없을 때 커스텀 메시지와 함께 99를 반환한다 — NODATA로 취급해야 한다.
-        payload = self._wrap("99", "해당지수자료 제공기간이 아닙니다! [자료제공기간 3월 ~ 6월]")
+        payload = self._wrap(
+            "99", "해당지수자료 제공기간이 아닙니다! [자료제공기간 3월 ~ 6월]"
+        )
         result = _parse_typ02_items(payload, "test")
         assert result == []
 
@@ -201,12 +206,14 @@ class TestParseTyp02Items:
     def test_single_item_wrapped_in_list(self):
         # item 이 dict 하나(리스트 아님)인 경우
         single = {"category": "T1H", "obsrValue": "20.0"}
-        payload = json.dumps({
-            "response": {
-                "header": {"resultCode": "00", "resultMsg": "OK"},
-                "body": {"items": {"item": single}},
+        payload = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "OK"},
+                    "body": {"items": {"item": single}},
+                }
             }
-        })
+        )
         result = _parse_typ02_items(payload, "test")
         assert len(result) == 1
         assert result[0]["category"] == "T1H"
@@ -268,7 +275,12 @@ class TestRaiseForErrorPayload:
 class TestParsePm10Line:
     def test_normal_line(self):
         obs = _parse_pm10_line("202607011800,   108,   39,000000,,=")
-        assert obs == Pm10Observation(stn="108", tm="202607011800", pm10=pytest.approx(39.0), raw="202607011800,   108,   39,000000,,=")
+        assert obs == Pm10Observation(
+            stn="108",
+            tm="202607011800",
+            pm10=pytest.approx(39.0),
+            raw="202607011800,   108,   39,000000,,=",
+        )
 
     def test_zero_reading(self):
         obs = _parse_pm10_line("202607012230,   100,    0,000000,,=")
@@ -327,7 +339,10 @@ class TestIsPng:
     def test_euc_kr_error_text_is_not_png(self):
         # 아직 게시되지 않은 경우 "# file not exist" 같은 EUC-KR 텍스트가
         # HTTP 200으로 오는 것이 확인됨 — 실제 PNG가 아님.
-        assert _is_png("# file not exist (RDR_CMB_202607012320.png)".encode("euc-kr")) is False
+        assert (
+            _is_png("# file not exist (RDR_CMB_202607012320.png)".encode("euc-kr"))
+            is False
+        )
 
     def test_empty_bytes_is_not_png(self):
         assert _is_png(b"") is False
@@ -343,7 +358,9 @@ class TestParseSnowLine:
     def test_normal_line(self):
         line = "202601151800,    93,           북춘천, 127.75443000,  37.94738000, 000-----,    0.5,="
         obs = _parse_snow_line(line)
-        assert obs == SnowObservation(stn="93", tm="202601151800", depth=pytest.approx(0.5))
+        assert obs == SnowObservation(
+            stn="93", tm="202601151800", depth=pytest.approx(0.5)
+        )
 
     def test_zero_depth(self):
         line = "202607021900,   108,             서울, 126.96590000,  37.57140000, 000-----,    0.0,="
@@ -365,8 +382,11 @@ class TestParsePm10HourlyLine:
         line = "2026.07.02.17:00   kma     90     14(12)      6     22"
         stats = _parse_pm10_hourly_line(line)
         assert stats == Pm10HourlyStats(
-            stn="90", tm="2026.07.02.17:00", avg=pytest.approx(14.0),
-            min=pytest.approx(6.0), max=pytest.approx(22.0),
+            stn="90",
+            tm="2026.07.02.17:00",
+            avg=pytest.approx(14.0),
+            min=pytest.approx(6.0),
+            max=pytest.approx(22.0),
         )
 
     def test_non_kma_org_returns_none(self):
@@ -398,7 +418,8 @@ class TestParseStationBulletins:
         assert len(bulletins) == 1
         b = bulletins[0]
         assert b == StationBulletin(
-            stn="109", issued_at="202606280010",
+            stn="109",
+            issued_at="202606280010",
             title="오늘까지 서해중부해상 바다 안개, 해상 안전사고 유의",
             body="<안개 현황 및 전망>\n본문 내용 첫째줄\n본문 내용 둘째줄",
         )
@@ -429,13 +450,7 @@ class TestParseStationBulletins:
 # ---------------------------------------------------------------------------
 class TestSplitBulletinSections:
     def test_multiple_sections(self):
-        body = (
-            "<중점 사항>\n"
-            "오늘 소나기 예보\n"
-            "\n"
-            "<기온 및 하늘상태>\n"
-            "낮 기온 30도 안팎"
-        )
+        body = "<중점 사항>\n오늘 소나기 예보\n\n<기온 및 하늘상태>\n낮 기온 30도 안팎"
         sections = split_bulletin_sections(body)
         assert sections == {
             "중점 사항": "오늘 소나기 예보",

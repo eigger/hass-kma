@@ -1,4 +1,5 @@
 """기상청(KMA) 바이너리 센서(Binary Sensor) 플랫폼 구현."""
+
 from __future__ import annotations
 
 import datetime
@@ -148,7 +149,9 @@ async def async_setup_entry(
         async_add_entities(entities)
 
 
-class KmaWarningBinarySensor(CoordinatorEntity[KmaForecastCoordinator], BinarySensorEntity):
+class KmaWarningBinarySensor(
+    CoordinatorEntity[KmaForecastCoordinator], BinarySensorEntity
+):
     """기상청 특보 경보 바이너리 센서."""
 
     _attr_has_entity_name = True
@@ -181,24 +184,28 @@ class KmaWarningBinarySensor(CoordinatorEntity[KmaForecastCoordinator], BinarySe
     def extra_state_attributes(self) -> dict[str, Any]:
         """특보 상세 내역 속성 반환."""
         warnings = self.coordinator.data.get("warnings", [])
-        
+
         # 언어 판단 (한국어 설정 여부 확인)
         lang = "en"
-        if self.hass and hasattr(self.hass, "config") and self.hass.config.language == "ko":
+        if (
+            self.hass
+            and hasattr(self.hass, "config")
+            and self.hass.config.language == "ko"
+        ):
             lang = "ko"
 
         warnings_detail = []
         for w in warnings:
             wrn_code = w.get("WRN", "")
             lvl_code = w.get("LVL", "")
-            
+
             if lang == "ko":
                 wrn_name = WARNING_TYPES_KO.get(wrn_code, wrn_code)
                 lvl_name = WARNING_LEVELS_KO.get(lvl_code, lvl_code)
             else:
                 wrn_name = WARNING_TYPES_EN.get(wrn_code, wrn_code)
                 lvl_name = WARNING_LEVELS_EN.get(lvl_code, lvl_code)
-            
+
             warnings_detail.append(
                 {
                     "region": w.get("REG_KO"),
@@ -210,7 +217,7 @@ class KmaWarningBinarySensor(CoordinatorEntity[KmaForecastCoordinator], BinarySe
                     "release_time": w.get("TM_FC"),
                 }
             )
-            
+
         return {
             "warnings_count": len(warnings),
             "active_warnings": warnings_detail,
@@ -220,8 +227,13 @@ class KmaWarningBinarySensor(CoordinatorEntity[KmaForecastCoordinator], BinarySe
 PRECIP_WINDOW_HOURS = 6
 
 PTY_NAMES_KO = {
-    "1": "비", "2": "비/눈", "3": "눈", "4": "소나기",
-    "5": "빗방울", "6": "빗방울/눈날림", "7": "눈날림",
+    "1": "비",
+    "2": "비/눈",
+    "3": "눈",
+    "4": "소나기",
+    "5": "빗방울",
+    "6": "빗방울/눈날림",
+    "7": "눈날림",
 }
 
 
@@ -283,7 +295,8 @@ class KmaPrecipitationBinarySensor(
 
 
 class KmaApiStatusBinarySensor(
-    CoordinatorEntity[KmaForecastCoordinator | KmaImageCoordinator | KmaHubCoordinator], BinarySensorEntity
+    CoordinatorEntity[KmaForecastCoordinator | KmaImageCoordinator | KmaHubCoordinator],
+    BinarySensorEntity,
 ):
     """허브 단위 API 활용신청/접근 상태 센서.
 

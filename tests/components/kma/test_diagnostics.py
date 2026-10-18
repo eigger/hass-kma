@@ -1,10 +1,67 @@
-"""diagnostics.py 단위 테스트."""
+"""Tests for KMA diagnostics."""
+
 from __future__ import annotations
 
 import datetime
 from unittest.mock import MagicMock
 
-from custom_components.kma.diagnostics import _zone_diagnostics
+from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.kma.diagnostics import (
+    _aws_diagnostics,
+    _zone_diagnostics,
+    async_get_config_entry_diagnostics,
+)
+
+
+async def test_diagnostics(
+    hass: HomeAssistant,
+    mock_config_entry: MockConfigEntry,
+    mock_kma_api,
+) -> None:
+    """Test config entry diagnostics data structure and redaction."""
+    assert await hass.config_entries.async_setup(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
+
+    diagnostics_data = await async_get_config_entry_diagnostics(hass, mock_config_entry)
+
+    assert "entry" in diagnostics_data
+    assert diagnostics_data["entry"]["entry_id"] == mock_config_entry.entry_id
+    assert "zones" in diagnostics_data
+    assert "aws" in diagnostics_data
+    assert "images" in diagnostics_data
+    assert "hub" in diagnostics_data
+
+    # Verify sensitive data is not leaked
+    raw_str = str(diagnostics_data)
+    assert "test_auth_key" not in raw_str
+
+    # Verify zone diagnostics
+    zones = diagnostics_data["zones"]
+    assert len(zones) >= 1
+    zone_data = next(iter(zones.values()))
+    assert "zone_name" in zone_data
+    assert "current_data_source" in zone_data
+    assert "record_counts" in zone_data
+
+    # Verify AWS diagnostics
+    aws = diagnostics_data["aws"]
+    assert len(aws) >= 1
+    aws_data = next(iter(aws.values()))
+    assert "station_id" in aws_data
+    assert "status" in aws_data
+    assert "observation" in aws_data
+
+    # Verify Images diagnostics
+    images = diagnostics_data["images"]
+    assert "image_available" in images
+    assert "api_status" in images
+
+    # Verify Hub diagnostics
+    hub = diagnostics_data["hub"]
+    assert "data_available" in hub
+    assert "api_status" in hub
 
 
 def test_zone_diagnostics_includes_mapping_and_source() -> None:
@@ -61,7 +118,7 @@ def test_zone_diagnostics_formats_last_error_time() -> None:
     assert result["coordinator"]["last_exception"] == "boom"
 
 
-def _aws_coordinator() -> MagicMock:
+def _make_mock_aws_coordinator() -> MagicMock:
     observed = datetime.datetime(
         2026, 7, 3, 14, 31, tzinfo=datetime.timezone(datetime.timedelta(hours=9))
     )
@@ -91,7 +148,9 @@ def _aws_coordinator() -> MagicMock:
     )
     coordinator.data = {
         "status": coordinator.aws_status,
-        "last_attempt": datetime.datetime(2026, 7, 3, 14, 41, tzinfo=datetime.timezone.utc),
+        "last_attempt": datetime.datetime(
+            2026, 7, 3, 14, 41, tzinfo=datetime.timezone.utc
+        ),
         "last_success": None,
         "error_count": 3,
         "last_error": "403 authKey=TOPSECRET rejected",
@@ -105,9 +164,7 @@ def _aws_coordinator() -> MagicMock:
 
 
 def test_aws_diagnostics_exposes_station_status_and_snapshot() -> None:
-    from custom_components.kma.diagnostics import _aws_diagnostics
-
-    result = _aws_diagnostics(_aws_coordinator(), "zone-1")
+    result = _aws_diagnostics(_make_mock_aws_coordinator(), "zone-1")
 
     assert result["subentry_id"] == "zone-1"
     assert result["station_id"] == 108
@@ -123,19 +180,16 @@ def test_aws_diagnostics_exposes_station_status_and_snapshot() -> None:
 
 
 def test_aws_diagnostics_redacts_auth_key() -> None:
-    from custom_components.kma.diagnostics import _aws_diagnostics
-
-    result = _aws_diagnostics(_aws_coordinator(), "zone-1")
+    result = _aws_diagnostics(_make_mock_aws_coordinator(), "zone-1")
 
     assert "TOPSECRET" not in result["status"]
     assert "TOPSECRET" not in result["last_error"]
     assert "authKey=***" in result["status"]
+    assert "authKey=***" in result["last_error"]
 
 
 def test_aws_diagnostics_without_snapshot() -> None:
-    from custom_components.kma.diagnostics import _aws_diagnostics
-
-    coordinator = _aws_coordinator()
+    coordinator = _make_mock_aws_coordinator()
     coordinator.aws_observation = None
     coordinator.data = {"error_count": 0, "last_error": None, "last_success": None}
 

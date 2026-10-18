@@ -2,6 +2,7 @@
 
 부모 엔트리는 API 키만 보유하고, 각 Zone은 서브엔트리(서브 디바이스)로 등록한다.
 """
+
 from __future__ import annotations
 
 import logging
@@ -345,9 +346,9 @@ class KmaOptionsFlowHandler(config_entries.OptionsFlow):
         scan_interval = self.config_entry.options.get("scan_interval", 10)
         options_schema = vol.Schema(
             {
-                vol.Required(
-                    "scan_interval", default=scan_interval
-                ): vol.All(vol.Coerce(int), vol.Range(min=5, max=180)),
+                vol.Required("scan_interval", default=scan_interval): vol.All(
+                    vol.Coerce(int), vol.Range(min=5, max=180)
+                ),
             }
         )
         return self.async_show_form(step_id="init", data_schema=options_schema)

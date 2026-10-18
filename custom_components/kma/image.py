@@ -32,6 +32,7 @@ HA 공식 문서에 따르면 `image_last_updated`는 코디네이터 갱신 시
 `unavailable`(이미지·아이콘 없음)로 보이는 문제가 생긴다(실측 확인됨).
 그래서 `async_added_to_hass`를 오버라이드해 초기 상태를 즉시 동기화한다.
 """
+
 from __future__ import annotations
 
 import logging
@@ -73,7 +74,7 @@ async def async_setup_entry(
             model="KMA APIhub Forecast",
             via_device_id=store["hub_device_id"],
         )
-        
+
         entities = []
         for entity_cls in _IMAGE_ENTITY_CLASSES:
             entities.append(
@@ -84,7 +85,7 @@ async def async_setup_entry(
                     device_info=zone_device,
                 )
             )
-            
+
         async_add_entities(
             entities,
             config_subentry_id=subentry_id,

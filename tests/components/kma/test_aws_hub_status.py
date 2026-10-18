@@ -1,14 +1,16 @@
 """AWS API 상태의 허브 집계 + 실제 시도만 기록 검증."""
+
 from __future__ import annotations
 
 import asyncio
 import datetime
 from unittest.mock import MagicMock
 
-from conftest import make_aws_observation as _obs
 from custom_components.kma.api import KmaActivationRequiredError, KmaApiError
 from custom_components.kma.const import CONF_AWS_STATION_ID
 from custom_components.kma.coordinator import KmaAwsCoordinator, KmaHubCoordinator
+
+from .conftest import make_aws_observation as _obs
 
 _KST = datetime.timezone(datetime.timedelta(hours=9))
 T0 = datetime.datetime(2026, 7, 3, 14, 31, tzinfo=_KST)
@@ -164,7 +166,6 @@ def test_aws_coordinator_publishes_only_actual_attempts() -> None:
     assert hub.attempts == [(108, "ok")]
 
 
-
 def test_aws_coordinator_publishes_failure_and_recovery() -> None:
     client = _AwsClient(result=_obs())
     coordinator = _aws_coordinator(client)
@@ -188,11 +189,7 @@ def test_aws_coordinator_publishes_failure_and_recovery() -> None:
 def test_aws_coordinator_publishes_brief_error_summary_only() -> None:
     """허브에는 URL/토큰 없는 짧은 요약만, 관측소 자체 상태는 상세(redacted) 유지."""
     coordinator = _aws_coordinator(
-        _AwsClient(
-            error=KmaApiError(
-                "https://apihub.kma.go.kr/x?authKey=SECRET boom"
-            )
-        )
+        _AwsClient(error=KmaApiError("https://apihub.kma.go.kr/x?authKey=SECRET boom"))
     )
     hub = _HubRecorder()
     coordinator.hub_coordinator = hub

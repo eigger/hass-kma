@@ -1,54 +1,38 @@
+# Shared standards; upstream action SHAs verified 2026-10-18.
 name: Tests
-
 on:
   push:
-    branches: [main, master]
+    branches:
+      - main
   pull_request:
-
+  workflow_dispatch:
+  schedule:
+    - cron: "23 4 * * 1"
+permissions:
+  contents: read
 concurrency:
-  group: tests-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Lint
-        run: python -m ruff check custom_components/ tests/ scripts/
-
-  test:
-    runs-on: ubuntu-latest
-    needs: lint
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13", "3.14"]
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          pip install --upgrade pip
-          # voluptuous 는 Home Assistant가 런타임에 제공하는 의존성이라
-          # manifest requirements에는 없지만, config_flow 스키마를 단위 테스트하기
-          # 위해 테스트 전용으로 설치한다.
-          pip install pytest voluptuous
-
-      - name: Run tests
-        run: python -m pytest tests/ -v
+  current:
+    uses: eigger/hass-repo-standards/.github/workflows/python-tests.yml@1524e4d71b0976812bb854f9e390b94408a96b52
+    with:
+      domain: kma
+      python-versions: '["3.14"]'
+      lint-python-version: '3.14'
+      requirements: requirements_test.txt
+      expected-ha-version: '2026.10.2'
+      test-profile: ha
+      ha-components: 'weather sensor binary_sensor button image'
+      dependency-modes: '["current"]'
+  minimum-ha:
+    uses: eigger/hass-repo-standards/.github/workflows/python-tests.yml@1524e4d71b0976812bb854f9e390b94408a96b52
+    with:
+      domain: kma
+      python-versions: '["3.14"]'
+      lint-python-version: '3.14'
+      requirements: requirements_test_min.txt
+      expected-ha-version: '2026.9.0'
+      test-profile: ha
+      ha-components: 'weather sensor binary_sensor button image'
+      dependency-modes: '["current"]'

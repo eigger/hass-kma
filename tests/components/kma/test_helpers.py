@@ -1,4 +1,5 @@
 """helpers.py 단위 테스트 — parse_pcp, parse_sno, 좌표 변환, 등급 분류 함수."""
+
 import pytest
 
 from custom_components.kma.helpers import (
@@ -518,9 +519,7 @@ class TestRedactAuthKey:
         )
 
     def test_masks_auth_key_in_query_string(self):
-        redacted = redact_auth_key(
-            "GET ...?disp=1&authKey=TOPSECRET&help=0"
-        )
+        redacted = redact_auth_key("GET ...?disp=1&authKey=TOPSECRET&help=0")
         assert "TOPSECRET" not in redacted
         assert "authKey=***" in redacted
         assert "disp=1" in redacted

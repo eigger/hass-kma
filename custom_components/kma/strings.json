@@ -679,6 +679,11 @@
         "name": "AWS Observation API"
       }
     },
+    "button": {
+      "refresh": {
+        "name": "Manual Refresh"
+      }
+    },
     "image": {
       "radar_image": {
         "name": "Radar Composite Image"

@@ -1,4 +1,5 @@
 """KmaAwsCoordinator 단위 테스트 — 스로틀/오류 격리/신선도."""
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +14,6 @@ from custom_components.kma.api import (
     KmaActivationRequiredError,
     KmaApiError,
 )
-from conftest import CALL_LATER_CALLS, make_aws_observation as _obs
 from custom_components.kma.const import (
     API_STATUS_AWS_KEYS,
     API_STATUS_HUB_KEYS,
@@ -25,6 +25,9 @@ from custom_components.kma.const import (
     AWS_POLL_INTERVAL_SECONDS,
 )
 from custom_components.kma.coordinator import KmaAwsCoordinator
+
+from .conftest import CALL_LATER_CALLS
+from .conftest import make_aws_observation as _obs
 
 _KST = datetime.timezone(datetime.timedelta(hours=9))
 T0 = datetime.datetime(2026, 7, 3, 14, 31, tzinfo=_KST)
@@ -162,8 +165,11 @@ def test_network_attempts_are_throttled_for_five_minutes() -> None:
     assert data["last_attempt"] == T0
 
     # 정확히 5분 뒤 — 시도한다.
-    coordinator._now = lambda: T0 + datetime.timedelta(  # type: ignore[method-assign]
-        minutes=AWS_ATTEMPT_INTERVAL_MINUTES
+    coordinator._now = lambda: (
+        T0
+        + datetime.timedelta(  # type: ignore[method-assign]
+            minutes=AWS_ATTEMPT_INTERVAL_MINUTES
+        )
     )
     _update(coordinator)
     assert client.calls == 2
@@ -216,8 +222,11 @@ def test_freshness_is_evaluated_against_current_time(delta_minutes, expected) ->
     coordinator = _coordinator(client)
     coordinator.data = {"observation": _obs()}
 
-    coordinator._now = lambda: T0 + datetime.timedelta(  # type: ignore[method-assign]
-        minutes=delta_minutes
+    coordinator._now = lambda: (
+        T0
+        + datetime.timedelta(  # type: ignore[method-assign]
+            minutes=delta_minutes
+        )
     )
 
     assert coordinator.aws_observation_fresh is expected
@@ -289,10 +298,10 @@ def test_poll_interval_is_301s_and_attempt_guard_stays_300s() -> None:
     client = _Client()
     coordinator = _coordinator(client)
 
-    kwargs = coordinator._mock_init_kwargs
-    assert kwargs["update_interval"] == datetime.timedelta(
-        seconds=AWS_POLL_INTERVAL_SECONDS
+    interval = getattr(coordinator, "_mock_init_kwargs", {}).get(
+        "update_interval", coordinator.update_interval
     )
+    assert interval == datetime.timedelta(seconds=AWS_POLL_INTERVAL_SECONDS)
     # 자동 폴링은 1초 여유(301s)를 두되 요청 가드는 300s 를 유지한다.
     assert AWS_POLL_INTERVAL_SECONDS == 301
     assert AWS_ATTEMPT_INTERVAL_MINUTES == 5
@@ -321,8 +330,11 @@ def test_poll_margin_covers_ha_scheduling_rounding() -> None:
     coordinator = _coordinator(client)
     _update(coordinator)
     elapsed = next_refresh(AWS_POLL_INTERVAL_SECONDS) - loop_attempt
-    coordinator._now = lambda: T0 + datetime.timedelta(  # type: ignore[method-assign]
-        seconds=elapsed
+    coordinator._now = lambda: (
+        T0
+        + datetime.timedelta(  # type: ignore[method-assign]
+            seconds=elapsed
+        )
     )
     _update(coordinator)
     assert client.calls == 2
@@ -335,15 +347,21 @@ def test_manual_refresh_boundary_is_strict_at_300_seconds() -> None:
     assert client.calls == 1
 
     # 299.999초 — 아직 스로틀.
-    coordinator._now = lambda: T0 + datetime.timedelta(  # type: ignore[method-assign]
-        seconds=299.999
+    coordinator._now = lambda: (
+        T0
+        + datetime.timedelta(  # type: ignore[method-assign]
+            seconds=299.999
+        )
     )
     _update(coordinator)
     assert client.calls == 1
 
     # 정확히 300초 — 허용.
-    coordinator._now = lambda: T0 + datetime.timedelta(  # type: ignore[method-assign]
-        seconds=300
+    coordinator._now = lambda: (
+        T0
+        + datetime.timedelta(  # type: ignore[method-assign]
+            seconds=300
+        )
     )
     _update(coordinator)
     assert client.calls == 2
@@ -357,7 +375,6 @@ def test_forecast_update_path_has_no_aws_dependency() -> None:
 
     source = inspect.getsource(KmaForecastCoordinator._async_update_data)
     assert "aws" not in source.lower()
-
 
 
 def test_no_timers_are_scheduled_and_last_value_is_kept_when_stale() -> None:
