@@ -37,7 +37,9 @@ def parse_pcp(val: str | float | None) -> float | None:
     if not val or "강수없음" in val or val in ("0", "0.0"):
         return 0.0
     try:
-        val_clean = val.replace("mm", "").replace("미만", "").replace("이상", "").strip()
+        val_clean = (
+            val.replace("mm", "").replace("미만", "").replace("이상", "").strip()
+        )
         if "~" in val_clean:
             parts = val_clean.split("~")
             return (float(parts[0]) + float(parts[1])) / 2.0
@@ -103,13 +105,13 @@ def latlon_to_grid(lat: float, lon: float) -> tuple[int, int]:
     공식 기상청 알고리즘을 준수하여 (lat, lon) -> (nx, ny)를 반환합니다.
     """
     RE = 6371.00877  # 지구 반경(km)
-    GRID = 5.0       # 격자 간격(km)
-    SLAT1 = 30.0     # 투영 위도1(degree)
-    SLAT2 = 60.0     # 투영 위도2(degree)
-    OLON = 126.0     # 기준점 경도(degree)
-    OLAT = 38.0      # 기준점 위도(degree)
-    XO = 43          # 기준점 X좌표(GRID)
-    YO = 136         # 기준점 Y좌표(GRID)
+    GRID = 5.0  # 격자 간격(km)
+    SLAT1 = 30.0  # 투영 위도1(degree)
+    SLAT2 = 60.0  # 투영 위도2(degree)
+    OLON = 126.0  # 기준점 경도(degree)
+    OLAT = 38.0  # 기준점 위도(degree)
+    XO = 43  # 기준점 X좌표(GRID)
+    YO = 136  # 기준점 Y좌표(GRID)
 
     DEGRAD = math.pi / 180.0
 
@@ -146,8 +148,12 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     R = 6371.00877  # 지구 평균 반경 (km)
     d_lat = math.radians(lat2 - lat1)
     d_lon = math.radians(lon2 - lon1)
-    a = (math.sin(d_lat / 2.0) ** 2 +
-         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(d_lon / 2.0) ** 2)
+    a = (
+        math.sin(d_lat / 2.0) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(d_lon / 2.0) ** 2
+    )
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
     return R * c
 

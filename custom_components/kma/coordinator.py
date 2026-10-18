@@ -1,4 +1,5 @@
 """DataUpdateCoordinator for KMA integration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -68,16 +69,16 @@ _STALE_FOR_API = {
 class CurrentWeather:
     """현재 날씨(실황 우선, 없으면 단기예보 폴백)를 표현하는 통합 값."""
 
-    tmp: float | None     # 기온 (℃)
-    reh: float | None     # 습도 (%)
-    wsd: float | None     # 풍속 (m/s)
-    vec: float | None     # 풍향 (deg)
-    pty: str | None       # 강수형태
-    sky: str | None       # 하늘상태
-    pcp: float | None     # 1시간 강수량 (mm)
-    sno: float | None     # 1시간 신적설 (cm, 예보값 — 실황엔 없음)
-    pop: float | None     # 강수확률 (%, 예보값)
-    source: str           # "ncst"(실황) | "village"(단기예보) | "none"
+    tmp: float | None  # 기온 (℃)
+    reh: float | None  # 습도 (%)
+    wsd: float | None  # 풍속 (m/s)
+    vec: float | None  # 풍향 (deg)
+    pty: str | None  # 강수형태
+    sky: str | None  # 하늘상태
+    pcp: float | None  # 1시간 강수량 (mm)
+    sno: float | None  # 1시간 신적설 (cm, 예보값 — 실황엔 없음)
+    pop: float | None  # 강수확률 (%, 예보값)
+    source: str  # "ncst"(실황) | "village"(단기예보) | "none"
 
 
 @dataclass(frozen=True)
@@ -91,9 +92,9 @@ class ForecastPoint:
     reh: float | None
     wsd: float | None
     vec: float | None
-    pop: float | None        # 강수확률 (%)
-    pcp: float | None        # 1시간 강수량 (mm)
-    sno: float | None        # 1시간 신적설 (cm)
+    pop: float | None  # 강수확률 (%)
+    pcp: float | None  # 1시간 강수량 (mm)
+    sno: float | None  # 1시간 신적설 (cm)
 
 
 class _ApiStatusMixin:
@@ -108,7 +109,9 @@ class _ApiStatusMixin:
 
     def _init_api_status(self, keys: list[str]) -> None:
         self._api_error_counts: dict[str, int] = {k: 0 for k in keys}
-        self._api_last_error_time: dict[str, datetime.datetime | None] = {k: None for k in keys}
+        self._api_last_error_time: dict[str, datetime.datetime | None] = {
+            k: None for k in keys
+        }
         self._api_cooldown_until: dict[str, datetime.datetime] = {}
         self._transient_retries: dict[str, int] = {}
         self._cooldown_unsub: Callable[[], None] | None = None
@@ -122,7 +125,9 @@ class _ApiStatusMixin:
 
     def _in_cooldown(self, api_key: str) -> bool:
         until = self._api_cooldown_until.get(api_key)
-        return until is not None and datetime.datetime.now(datetime.timezone.utc) < until
+        return (
+            until is not None and datetime.datetime.now(datetime.timezone.utc) < until
+        )
 
     def _begin_update(self) -> None:
         """수집 주기·재시작 조회는 재시도 횟수를 새로 센다. 5분 재시도 갱신은 이어서 센다."""
@@ -157,7 +162,9 @@ class _ApiStatusMixin:
         super()._schedule_refresh()
         if holding or not getattr(self, "_update_interval_seconds", None):
             return
-        self._next_full_refresh_at = self.hass.loop.time() + self._update_interval_seconds
+        self._next_full_refresh_at = (
+            self.hass.loop.time() + self._update_interval_seconds
+        )
 
     def _skip_healthy(self, api_key: str) -> bool:
         """5분 재시도에서는 직전에 일시 오류가 난 API만 다시 호출한다."""
@@ -244,7 +251,9 @@ class _ApiStatusMixin:
             if self._retry_keys is not None and api_key not in self._retry_keys:
                 continue
             if isinstance(api_stat, str) and api_stat.startswith("error"):
-                self._api_error_counts[api_key] = self._api_error_counts.get(api_key, 0) + 1
+                self._api_error_counts[api_key] = (
+                    self._api_error_counts.get(api_key, 0) + 1
+                )
                 self._api_last_error_time[api_key] = now_utc
 
     @property
@@ -280,9 +289,15 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         self.ny = subentry.data["ny"]
         self.land_reg = subentry.data["land_reg"]
         self.marine_reg = subentry.data["marine_reg"]
-        self.stn = LAND_ZONE_TO_PM10_STN.get(self.land_reg, 108)  # PM10/적설/미세먼지 시간통계 관측지점(기본값 서울)
-        self.area_no = LAND_ZONE_TO_AREA_NO.get(self.land_reg, "1100000000")  # 생활/보건기상지수 지역코드
-        self.office_stn = LAND_ZONE_TO_OFFICE_STN.get(self.land_reg, 109)  # 지방기상청 관서코드(기본값 서울)
+        self.stn = LAND_ZONE_TO_PM10_STN.get(
+            self.land_reg, 108
+        )  # PM10/적설/미세먼지 시간통계 관측지점(기본값 서울)
+        self.area_no = LAND_ZONE_TO_AREA_NO.get(
+            self.land_reg, "1100000000"
+        )  # 생활/보건기상지수 지역코드
+        self.office_stn = LAND_ZONE_TO_OFFICE_STN.get(
+            self.land_reg, 109
+        )  # 지방기상청 관서코드(기본값 서울)
         self.lat = subentry.data["latitude"]
         self.lon = subentry.data["longitude"]
 
@@ -326,7 +341,9 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         504·타임아웃 같은 일시 오류는 바로 멈추고 쿨다운한다.
         """
         if self._skip_healthy("village_forecast"):
-            prev_status = (self.data or {}).get("api_status", {}).get("village_forecast", "ok")
+            prev_status = (
+                (self.data or {}).get("api_status", {}).get("village_forecast", "ok")
+            )
             return (self.data or {}).get("village", []), prev_status, None
         if self._in_cooldown("village_forecast"):
             _LOGGER.debug("동네예보 쿨다운 중이라 호출을 건너뜁니다.")
@@ -351,7 +368,9 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
                 break
             except KmaApiError as err:
                 last_error = str(err)
-                _LOGGER.debug("동네예보 base_time=%s%s 호출 실패: %s", base_date, base_time, err)
+                _LOGGER.debug(
+                    "동네예보 base_time=%s%s 호출 실패: %s", base_date, base_time, err
+                )
                 continue
             village_status = "ok"
             last_error = None
@@ -360,7 +379,9 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
             if village_forecasts:
                 break
         status = (
-            f"error: {last_error}" if village_status == "error" and last_error else village_status
+            f"error: {last_error}"
+            if village_status == "error" and last_error
+            else village_status
         )
         return village_forecasts, status, last_error
 
@@ -403,99 +424,125 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         ) = await asyncio.gather(
             self._fetch_village(now),
             self._fetch_optional(
-                "ncst", "초단기실황", lambda: self.client.async_get_ultra_ncst(self.nx, self.ny),
+                "ncst",
+                "초단기실황",
+                lambda: self.client.async_get_ultra_ncst(self.nx, self.ny),
                 previous=(self.data or {}).get("ncst"),
             ),
             self._fetch_optional(
-                "ultra", "초단기예보",
+                "ultra",
+                "초단기예보",
                 lambda: self.client.async_get_ultra_fcst(self.nx, self.ny),
                 default=[],
                 previous=(self.data or {}).get("ultra", []),
             ),
             self._fetch_optional(
-                "land_forecast", "육상예보",
+                "land_forecast",
+                "육상예보",
                 lambda: self.client.async_get_land_forecast(self.land_reg),
                 default=[],
                 previous=(self.data or {}).get("land", []),
             ),
             self._fetch_optional(
-                "marine_forecast", "해상예보",
+                "marine_forecast",
+                "해상예보",
                 lambda: self.client.async_get_marine_forecast(self.marine_reg),
                 default=[],
                 previous=(self.data or {}).get("marine", []),
             ),
             self._fetch_optional(
-                "pm10", "미세먼지(PM10)",
+                "pm10",
+                "미세먼지(PM10)",
                 lambda: self.client.async_get_pm10_now(stn=self.stn),
                 previous=(self.data or {}).get("pm10"),
             ),
             self._fetch_optional(
-                "uv_index", "자외선지수",
+                "uv_index",
+                "자외선지수",
                 lambda: self.client.async_get_uv_index(area_no=self.area_no),
                 previous=(self.data or {}).get("uv_index"),
             ),
             self._fetch_optional(
-                "air_stagnation", "대기정체지수",
-                lambda: self.client.async_get_air_stagnation_index(area_no=self.area_no),
+                "air_stagnation",
+                "대기정체지수",
+                lambda: self.client.async_get_air_stagnation_index(
+                    area_no=self.area_no
+                ),
                 previous=(self.data or {}).get("air_stagnation"),
             ),
             self._fetch_optional(
-                "oak_pollen", "꽃가루(참나무)",
+                "oak_pollen",
+                "꽃가루(참나무)",
                 lambda: self.client.async_get_oak_pollen_risk(area_no=self.area_no),
                 previous=(self.data or {}).get("oak_pollen"),
             ),
             self._fetch_optional(
-                "pine_pollen", "꽃가루(소나무)",
+                "pine_pollen",
+                "꽃가루(소나무)",
                 lambda: self.client.async_get_pine_pollen_risk(area_no=self.area_no),
                 previous=(self.data or {}).get("pine_pollen"),
             ),
             self._fetch_optional(
-                "weed_pollen", "꽃가루(잡초류)",
+                "weed_pollen",
+                "꽃가루(잡초류)",
                 lambda: self.client.async_get_weed_pollen_risk(area_no=self.area_no),
                 previous=(self.data or {}).get("weed_pollen"),
             ),
             self._fetch_optional(
-                "radar_precipitation", "레이더 강수강도",
-                lambda: self.client.async_get_radar_precipitation(dong_code=self.area_no),
+                "radar_precipitation",
+                "레이더 강수강도",
+                lambda: self.client.async_get_radar_precipitation(
+                    dong_code=self.area_no
+                ),
                 previous=(self.data or {}).get("radar_precipitation"),
             ),
             self._fetch_optional(
-                "sfc_observation", "고해상도 지상관측",
-                lambda: self.client.async_get_sfc_observation(lat=self.lat, lon=self.lon),
+                "sfc_observation",
+                "고해상도 지상관측",
+                lambda: self.client.async_get_sfc_observation(
+                    lat=self.lat, lon=self.lon
+                ),
                 previous=(self.data or {}).get("sfc_observation"),
             ),
             self._fetch_optional(
-                "heat_wave_risk", "영향예보(폭염)",
+                "heat_wave_risk",
+                "영향예보(폭염)",
                 lambda: self.client.async_get_heat_wave_risk(stn=self.office_stn),
                 previous=(self.data or {}).get("heat_wave_risk"),
             ),
             self._fetch_optional(
-                "cold_wave_risk", "영향예보(한파)",
+                "cold_wave_risk",
+                "영향예보(한파)",
                 lambda: self.client.async_get_cold_wave_risk(stn=self.office_stn),
                 previous=(self.data or {}).get("cold_wave_risk"),
             ),
             self._fetch_optional(
-                "hazard_info", "기상정보",
+                "hazard_info",
+                "기상정보",
                 lambda: self.client.async_get_hazard_info(stn=self.office_stn),
                 previous=(self.data or {}).get("hazard_info"),
             ),
             self._fetch_optional(
-                "weather_commentary", "날씨해설",
+                "weather_commentary",
+                "날씨해설",
                 lambda: self.client.async_get_weather_commentary(stn=self.office_stn),
                 previous=(self.data or {}).get("weather_commentary"),
             ),
             self._fetch_optional(
-                "snow_depth", "적설관측",
+                "snow_depth",
+                "적설관측",
                 lambda: self.client.async_get_snow_depth(stn=self.stn),
                 previous=(self.data or {}).get("snow_depth"),
             ),
             self._fetch_optional(
-                "pm10_hourly", "미세먼지 시간통계",
+                "pm10_hourly",
+                "미세먼지 시간통계",
                 lambda: self.client.async_get_pm10_hourly_stats(stn=self.stn),
                 previous=(self.data or {}).get("pm10_hourly"),
             ),
             self._fetch_optional(
-                "warning_now", "기상특보",
+                "warning_now",
+                "기상특보",
                 lambda: self.client.async_get_warning_now(),
                 default=[],
                 previous=(self.data or {}).get("warnings", []),
@@ -600,7 +647,9 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
             data["pm10_hourly"] = pm10_hourly_obs
 
         # 특보 호출 실패·쿨다운 시에는 이전 특보를 유지하고, 성공했으나 내용이 없으면 빈 목록으로 갱신한다.
-        warning_failed = status["warning_now"] == "cooldown" or status["warning_now"].startswith("error")
+        warning_failed = status["warning_now"] == "cooldown" or status[
+            "warning_now"
+        ].startswith("error")
         if warning_failed and self.data and "warnings" in self.data:
             data["warnings"] = self.data["warnings"]
             refresh_meta["warnings_stale"] = True
@@ -655,7 +704,9 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         best, best_diff = None, None
         for vf in village:
             try:
-                vdt = datetime.datetime.strptime(f"{vf.fcst_date}{vf.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
+                vdt = datetime.datetime.strptime(
+                    f"{vf.fcst_date}{vf.fcst_time}", "%Y%m%d%H%M"
+                )  # noqa: DTZ007
             except ValueError:
                 continue
             diff = abs((vdt - now).total_seconds())
@@ -680,18 +731,37 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
 
         if ncst is not None:
             sky = ultra[0].sky if ultra else (vf.sky if vf else None)
-            pty = ncst.pty if ncst.pty is not None else (ultra[0].pty if ultra else None)
+            pty = (
+                ncst.pty if ncst.pty is not None else (ultra[0].pty if ultra else None)
+            )
             return CurrentWeather(
-                tmp=ncst.t1h, reh=ncst.reh, wsd=ncst.wsd, vec=ncst.vec,
-                pty=pty, sky=sky, pcp=ncst.rn1, sno=sno, pop=pop, source="ncst",
+                tmp=ncst.t1h,
+                reh=ncst.reh,
+                wsd=ncst.wsd,
+                vec=ncst.vec,
+                pty=pty,
+                sky=sky,
+                pcp=ncst.rn1,
+                sno=sno,
+                pop=pop,
+                source="ncst",
             )
         if vf is not None:
             return CurrentWeather(
-                tmp=vf.tmp, reh=vf.reh, wsd=vf.wsd, vec=vf.vec,
-                pty=vf.pty, sky=vf.sky, pcp=parse_pcp(vf.pcp), sno=sno,
-                pop=vf.pop, source="village",
+                tmp=vf.tmp,
+                reh=vf.reh,
+                wsd=vf.wsd,
+                vec=vf.vec,
+                pty=vf.pty,
+                sky=vf.sky,
+                pcp=parse_pcp(vf.pcp),
+                sno=sno,
+                pop=vf.pop,
+                source="village",
             )
-        return CurrentWeather(None, None, None, None, None, None, None, None, None, "none")
+        return CurrentWeather(
+            None, None, None, None, None, None, None, None, None, "none"
+        )
 
     def forecast_points(self) -> list[ForecastPoint]:
         """시간별 예보를 초단기예보(앞 6시간) + 단기예보로 병합해 시간순 반환.
@@ -717,9 +787,15 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
             v = vmap.get(key)
             points.append(
                 ForecastPoint(
-                    dt=dt, tmp=u.t1h, sky=u.sky, pty=u.pty, reh=u.reh,
-                    wsd=u.wsd, vec=u.vec,
-                    pop=(v.pop if v else None), pcp=parse_pcp(u.rn1),
+                    dt=dt,
+                    tmp=u.t1h,
+                    sky=u.sky,
+                    pty=u.pty,
+                    reh=u.reh,
+                    wsd=u.wsd,
+                    vec=u.vec,
+                    pop=(v.pop if v else None),
+                    pcp=parse_pcp(u.rn1),
                     sno=(parse_sno(v.sno) if v else None),
                 )
             )
@@ -735,8 +811,15 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
                 continue
             points.append(
                 ForecastPoint(
-                    dt=dt, tmp=v.tmp, sky=v.sky, pty=v.pty, reh=v.reh,
-                    wsd=v.wsd, vec=v.vec, pop=v.pop, pcp=parse_pcp(v.pcp),
+                    dt=dt,
+                    tmp=v.tmp,
+                    sky=v.sky,
+                    pty=v.pty,
+                    reh=v.reh,
+                    wsd=v.wsd,
+                    vec=v.vec,
+                    pop=v.pop,
+                    pcp=parse_pcp(v.pcp),
                     sno=parse_sno(v.sno),
                 )
             )
@@ -777,11 +860,11 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         # 예보는 발표 시간 15분 후에 정식 제공되므로 15분 차감하여 계산
         check_time = now - datetime.timedelta(minutes=15)
         hour = check_time.hour
-        
+
         forecast_hours = [2, 5, 8, 11, 14, 17, 20, 23]
         target_hour = 23
         target_date = check_time
-        
+
         for h in reversed(forecast_hours):
             if hour >= h:
                 target_hour = h
@@ -789,7 +872,7 @@ class KmaForecastCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, An
         else:
             target_hour = 23
             target_date = check_time - datetime.timedelta(days=1)
-            
+
         base_date = target_date.strftime("%Y%m%d")
         base_time = f"{target_hour:02d}00"
         return base_date, base_time
@@ -881,8 +964,10 @@ class KmaAwsCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if obs is None:
             return False
         age = self._now() - obs.observed_at.astimezone(datetime.timezone.utc)
-        return -timedelta(minutes=AWS_FUTURE_TOLERANCE_MINUTES) <= age < timedelta(
-            minutes=AWS_MAX_OBSERVATION_AGE_MINUTES
+        return (
+            -timedelta(minutes=AWS_FUTURE_TOLERANCE_MINUTES)
+            <= age
+            < timedelta(minutes=AWS_MAX_OBSERVATION_AGE_MINUTES)
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -988,7 +1073,9 @@ class KmaImageCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]
     유지한다(에러는 아니므로 상태는 "ok"로 기록).
     """
 
-    def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
+    def __init__(
+        self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry
+    ) -> None:
         self.client = client
         self._init_api_status(API_STATUS_IMAGE_KEYS)
         super().__init__(
@@ -1045,26 +1132,40 @@ class KmaImageCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]
             status["satellite_water_vapor"],
             status["dust_satellite"],
         ) = await asyncio.gather(
-            self._fetch_image(data, "radar", "레이더 이미지", self.client.async_get_radar_image),
-            self._fetch_image(data, "satellite", "위성 이미지", self.client.async_get_satellite_image),
             self._fetch_image(
-                data, "precipitation_forecast", "강수예측 이미지",
+                data, "radar", "레이더 이미지", self.client.async_get_radar_image
+            ),
+            self._fetch_image(
+                data, "satellite", "위성 이미지", self.client.async_get_satellite_image
+            ),
+            self._fetch_image(
+                data,
+                "precipitation_forecast",
+                "강수예측 이미지",
                 self.client.async_get_precipitation_forecast_image,
             ),
             self._fetch_image(
-                data, "satellite_visible", "위성 가시광선 이미지",
+                data,
+                "satellite_visible",
+                "위성 가시광선 이미지",
                 lambda: self.client.async_get_satellite_image(obs="vi006"),
             ),
             self._fetch_image(
-                data, "satellite_shortwave_ir", "위성 단파적외 이미지",
+                data,
+                "satellite_shortwave_ir",
+                "위성 단파적외 이미지",
                 lambda: self.client.async_get_satellite_image(obs="sw038"),
             ),
             self._fetch_image(
-                data, "satellite_water_vapor", "위성 수증기 이미지",
+                data,
+                "satellite_water_vapor",
+                "위성 수증기 이미지",
                 lambda: self.client.async_get_satellite_image(obs="wv069"),
             ),
             self._fetch_image(
-                data, "dust_satellite", "황사위성영상",
+                data,
+                "dust_satellite",
+                "황사위성영상",
                 self.client.async_get_dust_satellite_image,
             ),
         )
@@ -1082,7 +1183,9 @@ class KmaHubCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
     API이므로, 다른 허브 데이터와 같은 10분 주기로 통일한다.
     """
 
-    def __init__(self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry) -> None:
+    def __init__(
+        self, hass: HomeAssistant, client: KmaApiClient, config_entry: ConfigEntry
+    ) -> None:
         self.client = client
         # AWS 관측소별 "실제 시도" 결과(지점번호 -> ok/not_applied/error: …).
         # 허브가 모든 관측소를 최악값으로 집계해 기존 진단 센서로 노출한다.
@@ -1143,13 +1246,20 @@ class KmaHubCoordinator(_ApiStatusMixin, DataUpdateCoordinator[dict[str, Any]]):
         data: dict[str, Any] = dict(self.data or dict.fromkeys(API_STATUS_HUB_KEYS))
         status: dict[str, str] = {}
 
-        (eq_obs, status["earthquake"]), (typhoon_obs, status["typhoon"]) = await asyncio.gather(
+        (
+            (eq_obs, status["earthquake"]),
+            (typhoon_obs, status["typhoon"]),
+        ) = await asyncio.gather(
             self._fetch_optional(
-                "earthquake", "지진정보", self.client.async_get_earthquake_recent,
+                "earthquake",
+                "지진정보",
+                self.client.async_get_earthquake_recent,
                 previous=(self.data or {}).get("earthquake"),
             ),
             self._fetch_optional(
-                "typhoon", "태풍정보", self.client.async_get_typhoon_now,
+                "typhoon",
+                "태풍정보",
+                self.client.async_get_typhoon_now,
                 previous=(self.data or {}).get("typhoon"),
             ),
         )

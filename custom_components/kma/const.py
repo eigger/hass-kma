@@ -43,16 +43,34 @@ AWS_FUTURE_TOLERANCE_MINUTES = 5
 #
 # Zone별 예·특보/생활기상지수 API — KmaForecastCoordinator가 관리.
 API_STATUS_ZONE_KEYS = [
-    "village_forecast", "land_forecast", "marine_forecast", "warning_now", "pm10",
-    "uv_index", "air_stagnation", "oak_pollen", "pine_pollen", "weed_pollen",
-    "radar_precipitation", "sfc_observation", "heat_wave_risk", "cold_wave_risk",
-    "hazard_info", "weather_commentary", "snow_depth", "pm10_hourly",
+    "village_forecast",
+    "land_forecast",
+    "marine_forecast",
+    "warning_now",
+    "pm10",
+    "uv_index",
+    "air_stagnation",
+    "oak_pollen",
+    "pine_pollen",
+    "weed_pollen",
+    "radar_precipitation",
+    "sfc_observation",
+    "heat_wave_risk",
+    "cold_wave_risk",
+    "hazard_info",
+    "weather_commentary",
+    "snow_depth",
+    "pm10_hourly",
 ]
 
 # 허브 단위(Zone 무관, 전국 단일 세트) 레이더/위성 이미지 API — KmaImageCoordinator가 관리.
 API_STATUS_IMAGE_KEYS = [
-    "radar", "satellite", "precipitation_forecast",
-    "satellite_visible", "satellite_shortwave_ir", "satellite_water_vapor",
+    "radar",
+    "satellite",
+    "precipitation_forecast",
+    "satellite_visible",
+    "satellite_shortwave_ir",
+    "satellite_water_vapor",
     "dust_satellite",
 ]
 
@@ -106,7 +124,7 @@ LAND_ZONE_TO_PM10_STN: dict[str, int] = {
     "11B10101": 108,  # 서울 (FCT_ID 일치, 1.2km)
     "11B20201": 201,  # 인천 → 강화 (FCT_ID 일치, 36km)
     "11B20601": 119,  # 수원 (FCT_ID 일치, 4.0km)
-    "11D10301": 93,   # 춘천 → 북춘천 (FCT_ID 일치, 7.7km)
+    "11D10301": 93,  # 춘천 → 북춘천 (FCT_ID 일치, 7.7km)
     "11D20501": 100,  # 강릉 → 대관령 (최근접, 16.2km)
     "11C10301": 232,  # 청주 → 천안 (최근접, 22.4km)
     "11C20401": 232,  # 대전 → 천안 (최근접, 46.5km)
@@ -155,9 +173,9 @@ LAND_ZONE_TO_AREA_NO: dict[str, str] = {
     "11C20401": "3000000000",  # 대전광역시
     "11F10201": "5211100000",  # 전북특별자치도 전주시완산구 — 표준코드 45가 아니라 52
     "11F20501": "2900000000",  # 광주광역시(구코드). 2026년 "전남광주통합특별시"(1200000000)로
-                                # 개편되었으나 이 API는 아직 신코드를 인식하지 못해(2026-07-01
-                                # 확인, 신코드 조회 시 99/검색결과없음) 구코드를 그대로 사용한다.
-                                # API가 갱신되면 재확인 필요.
+    # 개편되었으나 이 API는 아직 신코드를 인식하지 못해(2026-07-01
+    # 확인, 신코드 조회 시 99/검색결과없음) 구코드를 그대로 사용한다.
+    # API가 갱신되면 재확인 필요.
     "11H10701": "2700000000",  # 대구광역시
     "11H20201": "2600000000",  # 부산광역시
     "11G00201": "5000000000",  # 제주특별자치도

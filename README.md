@@ -1,333 +1,58 @@
-# 기상청 APIhub 연동 홈어시스턴트 통합 구성요소 (hass-kma)
+# KMA Weather (기상청 APIhub)
 
-[![GitHub Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat-square)](https://github.com/eigger/hass-kma/releases)
-[![License](https://img.shields.io/github/license/eigger/hass-kma?style=flat-square)](LICENSE)
-[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-![integration usage](https://img.shields.io/badge/dynamic/json?color=41BDF5&logo=home-assistant&label=usage&suffix=%20installs&cacheSeconds=15600&query=%24.kma.total&url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json)
+<!-- hass-standards:badges:start -->
+[![Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat)](https://github.com/eigger/hass-kma/releases)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5?style=flat)](#installation)
+[![Home Assistant minimum](https://img.shields.io/badge/HA-%E2%89%A5%202026.9.0-41BDF5?style=flat)](hacs.json)
+[![Tests](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/tests.yml?branch=main&style=flat&label=Tests)](https://github.com/eigger/hass-kma/actions/workflows/tests.yml)
+[![Validate](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/validate.yml?branch=main&style=flat&label=Validate)](https://github.com/eigger/hass-kma/actions/workflows/validate.yml)
+[![License](https://img.shields.io/github/license/eigger/hass-kma?style=flat)](LICENSE)
+[![Analytics reporting installs](https://img.shields.io/badge/dynamic/json?style=flat&color=41BDF5&label=Usage&query=%24.kma.total&url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json)](https://analytics.home-assistant.io/)
+<!-- hass-standards:badges:end -->
 
-기상청 APIhub(apihub.kma.go.kr) 공식 텍스트 및 개방형 API를 연동하여 홈어시스턴트(Home Assistant)에 실시간 기상 상태, 상세 관측값, 중단기 예보, 생활기상지수·미세먼지·자외선지수·대기정체지수·꽃가루위험지수 및 재난 기상특보 경보를 제공하는 통합 구성요소입니다.
+English | [한국어 (Korean)](README.ko.md)
 
----
+Home Assistant custom component for integrating Korea Meteorological Administration (KMA) APIhub services (`apihub.kma.go.kr`). Provides real-time observations, village forecasts, life weather indices, safety warnings, and satellite/radar imagery.
 
-## 🌟 주요 기능
+## Features
 
-* **표준 날씨 엔티티 (`weather.kma_*`)**
-  * 현재 날씨 상태 및 기온·습도·풍향·풍속.
-  * **시간별 예보**: 향후 3일간의 시간별 동네예보.
-  * **일별 예보**: 3일간 동네예보를 일 단위로 집계하고, 4~10일차는 육상예보(`fct_afs_dl`)와 병합하여 최대 10일간의 연속 일별 예보를 제공합니다.
-  * 예보 요약 문구(`land_forecast_summary`, `marine_forecast_summary`) 및 발효된 기상특보 목록을 엔티티 속성으로 제공합니다.
-* **상세 기상 센서 (`sensor.kma_*`)**
-  * 기온, 습도, 풍속, 강수확률, 1시간 강수량.
-  * **육상/해상 예보 요약**: 대시보드에 바로 표시 가능한 한국어 예보 문구.
-  * **오늘 최저/최고기온**: 동네예보 극값 스캔.
-  * **비/눈 예보 탐색**: 향후 24시간 이내 강수를 감시하며, 3/6/12시간 이내 강수 여부를 속성으로 제공.
-  * **한 줄 기상 요약**: 현재 상태·기온·오늘 극값·가장 가까운 강수 예보를 하나의 문자열로 요약 (전자라벨/E-Paper 연동에 적합).
-  * **체감온도 / 이슬점 / 불쾌지수**: Steadman/Magnus-Tetens 공식 기반 실시간 계산. 불쾌지수는 등급 ENUM 센서(`discomfort_grade`)를 함께 제공합니다.
-* **생활기상지수 4종**
-  * 빨래 건조 지수, 세차 지수, 동파 가능 지수, 식중독 지수 — 각각 0~100 수치 센서와 등급 ENUM 센서(`*_grade`) 쌍으로 제공됩니다. 등급 상태값은 홈어시스턴트 시스템 언어에 맞춰 자동 번역됩니다.
-* **미세먼지(PM10)**
-  * 지상관측 PM10 자료(5분 간격)로 가장 가까운 관측지점의 농도(`pm10`)와 환경부 기준 등급(`pm10_grade`)을 제공합니다. 시간 평균/최소/최대 통계(`pm10_hourly_avg`)도 별도로 제공됩니다.
-* **자외선지수 / 대기정체지수 / 꽃가루농도위험지수**
-  * 기상청 생활기상지수·보건기상지수 API를 사용하며 기존 authKey로 동작합니다.
-  * 자외선지수, 대기정체지수는 3시간 간격, 꽃가루위험지수(참나무/소나무/잡초류)는 일 2회 갱신되며 계절 서비스 기간 외에는 정상적으로 "데이터 없음" 상태가 됩니다.
-* **레이더 강수강도 및 레이더/위성/강수예측 이미지**
-  * Zone 행정구역 기준 레이더 반사도(dBZ) 수치 센서.
-  * 레이더 합성 영상, 위성(적외/가시광선/단파적외/수증기) 영상, 60분 뒤 강수예측(QPF) 영상, 위성 황사 영상을 Picture Entity로 바로 표시할 수 있는 PNG 이미지 엔티티로 제공합니다.
-* **고해상도 지상관측 / 영향예보 / 실측 적설**
-  * 위경도 기반 실측 체감온도(`apparent_temperature_observed`).
-  * 기상청 공식 폭염/한파 영향예보 위험수준(`heat_wave_risk`/`cold_wave_risk`, ENUM).
-  * 관측소 실측 적설(`snow_depth_observed`).
-* **기상정보 / 날씨해설 텍스트**
-  * 지방기상청 예보관이 작성하는 위험기상 속보(`hazard_info`)와 일일 날씨 해설(`weather_commentary`)을 소제목 기준 섹션으로 나눠 제공합니다.
-* **지진정보 / 태풍정보**
-  * 최신 지진 통보문과 활성 태풍의 위치·중심기압·최대풍속·이동방향을 제공합니다(활성 태풍이 없으면 정상적으로 "없음" 상태).
-* **재난 기상특보 안전 센서 (`binary_sensor.kma_*_warning`)**
-  * 거주 지역(광역자치단체 기준)에 특보(호우, 대설, 강풍, 폭염, 한파, 태풍, 황사 등)가 발효되면 즉시 `on` 상태가 되며, 특보 개수·명칭·발효시간·상세 목록을 속성으로 제공합니다.
-* **API 활용신청 상태 진단**
-  * 이 통합이 호출하는 모든 API에 대해 활용신청 여부(`binary_sensor.kma_activation_*`)와 누적 에러 횟수(`sensor.kma_error_count_*`, 마지막 에러 시각 포함) 진단 센서를 자동 생성합니다.
-* **간편한 설정 흐름**
-  * 홈어시스턴트 Zone 엔티티(`zone.*`)를 선택하면 위경도로부터 기상청 격자좌표(nx, ny) 및 최적의 육상/해상 예보구역을 자동 매핑합니다.
-  * 데이터 갱신 주기(기본 10분, 5~180분)를 옵션 화면에서 변경할 수 있습니다.
+- **Standard Weather Platform**: Hourly forecasts (up to 3 days) and daily forecasts (up to 10 days).
+- **Comprehensive Sensors**: Temperature, humidity, wind, rainfall probability, PM10, UV index, and discomfort index.
+- **Safety Warnings**: Instant `binary_sensor` activation upon regional weather advisories (heavy rain, typhoons, heatwaves, etc.).
+- **Radar & Satellite Imagery**: Composite radar reflectance and GK2A satellite infrared images exposed as `image` entities.
+- **Diagnostics**: Built-in API authorization tracking and error rate counters.
 
----
+## Quick start
 
-## 📋 센서 목록
+Add your API Key from [KMA APIhub](https://apihub.kma.go.kr/) and select your Home Assistant zone:
 
-상태값이 어떻게 표현되는지 감이 오도록 **예시 값**을 함께 표시했습니다. 등급(`_grade`) 계열은 `device_class: enum`이라 홈어시스턴트 시스템 언어에 맞춰 상태값 자체가 자동 번역됩니다(예시는 한국어 기준).
+1. Obtain an API key from the KMA APIhub portal.
+2. In Home Assistant, go to **Settings → Devices & Services → Add Integration**.
+3. Search for **KMA Weather (기상청 APIhub)**.
+4. Enter your API key and configure your location zones.
 
-| 기기 | 센서 ID | 센서 이름 | 사용 API | 예시 값 | 갱신 주기 |
-| --- | --- | --- | --- | --- | --- |
-| 기상청 날씨 | `weather.kma_<지역>` | 날씨 (Weather) | 동네예보 (`getVilageFcst`) | `sunny`(맑음) 등 HA 표준 condition | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_temperature` | 기온 | 동네예보 | `22.5` ℃ | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_humidity` | 습도 | 동네예보 | `65` % | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_wind_speed` | 풍속 | 동네예보 | `3.2` m/s | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_pop` | 강수확률 | 동네예보 | `30` % | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_pcp` | 1시간 강수량 | 동네예보 | `0.0` / `5.0` mm | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_snowfall` | 1시간 예상 신적설 | 동네예보(SNO, 예보 전용) | `0.0` / `2.0` cm | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_temp_min` | 오늘 최저기온 | 동네예보 극값 스캔 | `11.0` ℃ | 매시간 |
-| 기상청 날씨 | `sensor.kma_<지역>_temp_max` | 오늘 최고기온 | 동네예보 극값 스캔 | `26.0` ℃ | 매시간 |
-| 기상청 날씨 | `sensor.kma_<지역>_rain_snow_expected` | 비/눈 예보 탐색 | 동네예보 24시간 스캔 | `none`/`rain`/`rain_snow`/`snow`/`shower` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_precipitation_expected_time` | 강수 예상 시각 | 동네예보+초단기예보 병합 | `2026-07-03T16:00:00+09:00` (타임스탬프) | 10분 |
-| 기상청 날씨 | `binary_sensor.kma_<지역>_precipitation_expected` | 곧 강수 예보 | 강수 예상 시각 6시간 이내 여부 | `on`/`off` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_apparent_temperature` | 체감온도 | Steadman 공식 | `21.8` ℃ | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_dew_point` | 이슬점 | Magnus-Tetens 공식 | `15.2` ℃ | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_discomfort_index` / `_grade` | 불쾌지수 / 등급 | 기온·습도 기반 연산 | `72.3` / `보통` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_laundry_index` / `_grade` | 빨래 건조 지수 / 등급 | 기온·습도·풍속·강수예보 종합 | `85` / `좋음` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_car_wash_index` / `_grade` | 세차 지수 / 등급 | 72시간 내 강수 예보 | `90` / `매우 좋음` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_freeze_risk_index` / `_grade` | 동파 가능 지수 / 등급 | 48시간 내 최저 예보기온 | `10` / `낮음` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_food_poisoning_index` / `_grade` | 식중독 지수 / 등급 | 기온·습도 기반 예측 연산 | `42` / `관심` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_one_line_summary` | 한 줄 기상 요약 | 현재 날씨·극값·강수·특보 종합 | `맑음, 19.5°C (11.0°C/26.0°C)` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_land_forecast_summary` | 육상 예보 요약 | 단기육상예보조회 (`fct_afs_dl`) | `가끔 구름많음` | 매일 5시, 17시 |
-| 기상청 날씨 | `sensor.kma_<지역>_marine_forecast_summary` | 해상 예보 요약 | 단기해상예보조회 (`fct_afs_do`) | `물결 0.5~1.0m` | 매일 5시, 17시 |
-| 기상청 날씨 | `sensor.kma_<지역>_pm10` / `_grade` | 미세먼지(PM10) / 등급 | PM10 관측자료 (`kma_pm10.php`) | `28` ㎍/㎥ / `좋음` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_pm10_hourly_avg` | 미세먼지 시간평균 | `dst_pm10_hr.php` | `31.5` ㎍/㎥ (최소/최대는 속성) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_uv_index` / `_grade` | 자외선지수 / 등급 | `LivingWthrIdxServiceV3/getUVIdxV3` | `6` / `높음` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_air_stagnation_index` / `_grade` | 대기정체지수 / 등급 | `LivingWthrIdxServiceV3/getAirDiffusionIdxV3` | `50` / `보통` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_oak_pollen_risk` / `_grade` | 꽃가루위험지수(참나무) / 등급 | `HealthWthrIdxServiceV2/getOakPollenRiskIdxV2` (서비스기간 3~6월) | `1` / `보통` (기간 외 `데이터 없음`) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_pine_pollen_risk` / `_grade` | 꽃가루위험지수(소나무) / 등급 | `HealthWthrIdxServiceV2/getPinePollenRiskIdxV2` (서비스기간 3~6월) | `1` / `보통` (기간 외 `데이터 없음`) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_weed_pollen_risk` / `_grade` | 꽃가루위험지수(잡초류) / 등급 | `HealthWthrIdxServiceV2/getWeedsPollenRiskndxV2` (서비스기간 8~10월) | `1` / `보통` (기간 외 `데이터 없음`) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation` | 레이더 강수강도(dBZ) | `WthrRadarInfoService/getCompCappiQcdArea` | `32.5` dBZ | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_radar_precipitation_grade` | 레이더 강수강도 등급 | dBZ 값 기반 강수강도 등급 분류 (ENUM) | `약한비` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_apparent_temperature_observed` | 실측 체감온도 | `sfc_nc_var.php` (고해상도 지상관측) | `27.0` ℃ | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_heat_wave_risk` / `_cold_wave_risk` | 폭염 / 한파 영향예보 위험수준 | `ifs_fct_pstt.php` (ENUM) | `영향없음` / `주의` | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_snow_depth_observed` | 실측 적설 | `kma_snow1.php` | `0.0` cm | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_hazard_info` (+ `_section_1`~`_3`) | 기상정보 | `wrn_inf_rpt.php` | `안개 위험기상 정보`(제목, 전문은 속성) | 10분 |
-| 기상청 날씨 | `sensor.kma_<지역>_weather_commentary` (+ `_section_1`~`_8`) | 날씨해설 | `wthr_cmt_rpt.php` | `오늘의 날씨 해설`(제목, 전문은 속성) | 10분 |
-| 기상청 날씨 | `binary_sensor.kma_<지역>_warning` | 기상특보 안전 센서 | 기상특보현황 (`wrn_now_data`) | `on`/`off` | 10분 |
-| 각 Zone | `sensor.kma_recent_earthquake` | 최근 지진정보 | `typ09/eqk/urlNewNotiEqk.do` | `4.3`(규모, 위치·시각은 속성) | 10분 |
-| 각 Zone | `sensor.kma_typhoon_number` | 태풍 번호 | `typ_now.php` | `0`(활성 없음) / `5`(5호 태풍) | 10분 |
-| 각 Zone | `image.kma_radar_image` | 레이더 합성 영상 | `typ04/rdr_cmp_file.php` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 Zone | `image.kma_satellite_image` | 위성(GK2A) 적외 영상 | `typ03/nph-gk2a_img` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 Zone | `image.kma_precipitation_forecast_image` | 레이더 초단기 예측 강수 영상(60분 뒤) | `typ03/nph-qpf_ana_img` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 Zone | `image.kma_satellite_visible_image` | 위성(GK2A) 가시광선 영상 | `typ03/nph-gk2a_img?obs=vi006` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 Zone | `image.kma_satellite_shortwave_ir_image` | 위성(GK2A) 단파적외 영상 | `typ03/nph-gk2a_img?obs=sw038` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 Zone | `image.kma_satellite_water_vapor_image` | 위성(GK2A) 수증기 영상 | `typ03/nph-gk2a_img?obs=wv069` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 Zone | `image.kma_dust_satellite_image` | 위성 황사 영상(IDI) | `YdstInfoService/getYdstSatlitImg` | 상태=최근 갱신 시각, 화면=PNG | 10분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_observation_time` | 관측 시각 | 관측소 1분 자료 (`nph-aws2_min`) | `2026-07-03T14:31:00+09:00` (타임스탬프) | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_temperature` | 기온 | 관측소 1분 자료 | `23.1` ℃ | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_humidity` | 습도 | 관측소 1분 자료 | `71` % | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_dew_point` | 이슬점 온도 | 관측소 1분 자료 | `17.7` ℃ | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_wind_direction_1_min` | 1분 평균 풍향 | 관측소 1분 자료 (WD1) | `225` ° (무풍 360은 `unknown`) | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_wind_speed_1_min` | 1분 평균 풍속 | 관측소 1분 자료 (WS1) | `1.8` m/s | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_gust_direction` | 돌풍 풍향 | 관측소 1분 자료 (WDS) | `180` ° | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_gust_speed` | 돌풍 풍속 | 관측소 1분 자료 (WSS) | `6.2` m/s | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_wind_direction_10_min` | 10분 평균 풍향 | 관측소 1분 자료 (WD10) | `190` ° | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_wind_speed_10_min` | 10분 평균 풍속 | 관측소 1분 자료 (WS10) | `2.4` m/s | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_rain_15_min` | 15분 강수량 | 관측소 1분 자료 (RN-15m) | `0.5` mm | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_rain_60_min` | 60분 강수량 | 관측소 1분 자료 (RN-60m) | `2.0` mm | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_rain_12_h` | 12시간 강수량 | 관측소 1분 자료 (RN-12H) | `8.5` mm | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_rain_today` | 오늘 강수량 | 관측소 1분 자료 (RN-DAY) | `14.0` mm | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_station_pressure` | 현지기압 | 관측소 1분 자료 (PA) | `1013.4` hPa | 약 5분 |
-| 각 AWS 관측소 | `sensor.aws_<지점>_sea_level_pressure` | 해면기압 | 관측소 1분 자료 (PS) | `1015.8` hPa | 약 5분 |
+## Installation
 
-> 지진정보·태풍정보·레이더/위성/강수예측/황사위성 이미지는 Zone과 무관한 전국 단위 자료라 실제 API 호출은 1세트만 발생하지만, 각 Zone 디바이스에서 동일하게 조회할 수 있도록 Zone별로 엔티티를 배치합니다(허브 디바이스에는 진단 센서만 있습니다).
->
-> **이미지 엔티티의 "상태(state)"는 PNG 자체가 아니라 마지막 갱신 시각(타임스탬프)입니다.** 실제 이미지는 대시보드에 Picture Entity 카드로 추가해야 보입니다 — 자동화에서 이미지 갱신 여부를 감지하려면 이 타임스탬프 상태 변화를 트리거로 쓰면 됩니다.
+### HACS (Recommended)
 
----
+1. Ensure [HACS](https://hacs.xyz/) is installed.
+2. Add this repository as a Custom Repository under HACS with category `Integration`.
+3. Search for `KMA Weather` and click **Download**.
+4. Restart Home Assistant.
 
-## 🔍 주요 센서 상세 정보
+### Manual Installation
 
-### 한 줄 기상 요약 (`one_line_summary`)
-전자라벨(ESL), E-Paper 등 제한된 공간의 디스플레이에 기상 상황을 직관적으로 노출하기 위한 텍스트 센서입니다. 홈어시스턴트 시스템 언어 설정에 맞춰 메시지가 구성됩니다.
+1. Download the latest release archive.
+2. Copy `custom_components/kma` into your Home Assistant `<config_dir>/custom_components/`.
+3. Restart Home Assistant.
 
-* 출력 예시: `맑음, 19.5°C (11.0°C/26.0°C)`, `흐림, 15.0°C (12.0°C/18.0°C), 16시경 비 예보`, `맑음, 29.0°C (20.0°C/31.0°C) [폭염주의보]`
+## Documentation
 
-### 생활기상지수 4종
-각 지수는 0~100 수치 센서(`_index`)와 등급 ENUM 센서(`_grade`) 쌍으로 제공됩니다. 추천 가이드라인(`recommendation`)은 자유 텍스트라 `_index` 센서의 속성으로 제공됩니다.
+- [User Guide](docs/user-guide.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Development & Testing](docs/development.md)
 
-* **빨래 건조 지수**: 매우 좋음/좋음/보통/비추천
-* **세차 지수**: 매우 좋음/보류 권장/세차 비추/세차 금지
-* **동파 가능 지수**: 낮음/보통/높음/매우 높음
-* **식중독 지수**: 관심/주의/경고/위험
+## Support & Contributing
 
-### 미세먼지(PM10)
-지상관측 PM10 관측자료(5분 간격)를 사용하며, Zone에서 가장 가까운 관측지점의 값을 가져옵니다. 관측망이 ASOS보다 지점 수가 적어 일부 지역은 인접 지점 값으로 대체됩니다(청주·대전은 천안 지점을 공유). PM2.5(초미세먼지)는 이 API에서 제공되지 않아 지원 범위 밖입니다.
-
-* `pm10`: 농도 수치 (㎍/㎥)
-* `pm10_grade`: 환경부 기준 등급 (좋음 0~30 / 보통 31~80 / 나쁨 81~150 / 매우나쁨 151~)
-* `pm10_hourly_avg`: 5분 원시값과 별개로 시간 단위 평균/최소/최대 통계 제공
-* `pm10`/`pm10_hourly_avg` 모두 실제로 어느 관측소 값인지 알 수 있도록 `station_id`(지점번호)와 `station_name`(지점명, 예: "서울"/"강화"/"천안") 속성을 함께 제공합니다.
-
-### 레이더 강수강도 / 레이더·위성·강수예측 이미지
-* **레이더 강수강도**: Zone 행정구역코드로 조회하는 반사도(dBZ) 수치 센서입니다. 최신 데이터가 약 20분 지연 후 게시되므로 기본 조회 시각을 25분 전으로 설정합니다. dBZ 값은 강수량(mm)이 아니라 반사 에너지의 로그 스케일 지표라 그대로는 직관적이지 않으므로, 강수없음/안개비/약한비/보통비/강한비/장대비 6단계로 분류한 `radar_precipitation_grade`(ENUM) 센서를 함께 제공합니다. 무에코·관측범위밖 센티널 값(-250 근방)은 "강수없음"으로 처리됩니다.
-* **이미지 엔티티**: 레이더 합성 영상, 위성 적외/가시광선/단파적외/수증기 4채널, 60분 뒤 레이더 초단기 예측 강수(QPF, MAPLE 블렌딩 모델), 위성 황사(IDI) PNG를 Picture Entity 카드로 바로 표시할 수 있습니다. 약 10분 주기로 갱신됩니다.
-* 레이더/강수예측 이미지는 게시 지연(~15~20분)이 있어 아직 게시되지 않은 시각을 요청하면 오류 응답이 올 수 있으므로 PNG 매직바이트로 실제 이미지 여부를 확인합니다.
-* 위성 가시광선(`vi006`) 채널은 야간에는 관측되지 않아 검은 화면이 됩니다.
-
-**샘플 이미지** (실제 authKey로 받은 원본, 범례·시각 포함 — 이미지 엔티티 7종 전체):
-
-| `image.kma_radar_image` (레이더 합성 영상) | `image.kma_satellite_image` (위성 적외) |
-| --- | --- |
-| ![레이더 합성 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/radar_composite_sample.png) | ![위성 적외 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_ir105_sample.png) |
-
-| `image.kma_precipitation_forecast_image` (레이더 초단기 예측 강수 QPF) | `image.kma_satellite_visible_image` (위성 가시광선) |
-| --- | --- |
-| ![강수예측 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/precipitation_forecast_qpf_sample.png) | ![위성 가시광선 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_visible_sample.png) |
-
-| `image.kma_satellite_shortwave_ir_image` (위성 단파적외) | `image.kma_satellite_water_vapor_image` (위성 수증기) |
-| --- | --- |
-| ![위성 단파적외 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_shortwave_ir_sample.png) | ![위성 수증기 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/satellite_water_vapor_sample.png) |
-
-### 자외선지수 / 대기정체지수 / 꽃가루농도위험지수
-기상청 생활기상지수(`LivingWthrIdxServiceV3`)·보건기상지수(`HealthWthrIdxServiceV2`) API를 사용하며, 기존 authKey 그대로 동작합니다.
-
-* `uv_index`(3시간 간격) + `uv_index_grade`(낮음/보통/높음/매우높음/위험, WHO 표준)
-* `air_stagnation_index`(3시간 간격) + `air_stagnation_grade` — 지수값(25/50/75/100)이 그대로 등급에 대응
-* `oak_pollen_risk`/`pine_pollen_risk`/`weed_pollen_risk`(일 2회) + 각 `*_grade` — 지수값(0~3)이 그대로 등급에 대응. `tomorrow`/`day_after_tomorrow` 속성으로 내일·모레 예보도 제공
-* 꽃가루 3종은 계절 서비스입니다(참나무·소나무 3~6월, 잡초류 8~10월). 서비스 기간이 아니면 정상적으로 "데이터 없음" 상태가 되며 이전 시즌 값을 이어붙이지 않습니다
-* 가능한 지역은 시/군 단위로 조회해 정밀도를 높였으며, 광주는 행정구역 개편 이전 코드를 사용합니다(API가 신코드를 지원하지 않는 동안 유지)
-
-### 고해상도 지상관측 / 영향예보 / 실측 적설 / 미세먼지 시간평균
-* **실측 체감온도**(`apparent_temperature_observed`): 위경도 기반 특정지점 다중요소 관측(`sfc_nc_var.php`)에서 받은 실측 체감온도로, 계산값인 `apparent_temperature`를 보완합니다. 관측소가 아니라 Zone의 위경도를 직접 조회하는 방식이라, 조회에 쓰인 좌표를 `lat`/`lon` 속성으로 그대로 제공합니다.
-* **영향예보**(`heat_wave_risk`/`cold_wave_risk`): 기상청이 직접 발표하는 폭염/한파 위험수준(ENUM)입니다. Zone은 관할 지방기상청 코드로 매핑되며, 비시즌에는 정상적으로 "영향없음" 상태가 됩니다.
-* **실측 적설**(`snow_depth_observed`): 관측소 실측 적설로, 예보값인 `snowfall`을 보완합니다. PM10과 같은 관측지점 체계를 공유하여 `station_id`/`station_name` 속성을 제공합니다.
-* **미세먼지 시간평균**(`pm10_hourly_avg`): 5분 원시값과 별개로 해당 시간의 평균/최소/최대 통계를 제공합니다.
-
-### 기상정보 / 날씨해설
-지방기상청 예보관이 직접 작성하는 텍스트 속보입니다. 별도 활용신청 없이 바로 사용할 수 있습니다.
-
-* **기상정보**(`hazard_info`): 안개·소나기·뇌전 등 위험기상 실시간 안내문.
-* **날씨해설**(`weather_commentary`): 예보관이 작성한 일일 날씨 해설(기온/하늘상태/유의사항 등).
-* 대표 센서의 상태값은 제목만 담고, 전문은 `sections` 속성에 소제목 기준 딕셔너리로 제공됩니다. 이와 별도로 `_section_1`~`_8`(날씨해설)/`_section_1`~`_3`(기상정보) 고정 슬롯 센서를 제공하여, 발표할 때마다 달라지는 소제목이 있어도 엔티티 개수가 고정되도록 설계했습니다.
-* 관측소 지점이 아니라 **관할 지방기상청(관서) 단위**로 발표되는 정보라, 소속 관서를 `office_code`/`office_name`(예: "서울지방기상청") 속성으로 함께 제공합니다. 섹션 슬롯 센서에도 동일하게 포함됩니다. 폭염/한파 영향예보(`heat_wave_risk`/`cold_wave_risk`)도 같은 관서 체계를 공유합니다.
-
-### 지진정보 / 태풍정보
-Zone과 무관한 전국 단위 데이터입니다.
-
-* **지진정보**(`sensor.kma_recent_earthquake`): 국내외 최신 지진 통보문(규모, 위치, 발생시각).
-* **태풍정보**(`sensor.kma_typhoon_number`): 현재 활성 태풍의 위치·중심기압·최대풍속·이동방향(활성 태풍이 없으면 "없음" 상태).
-
-### 위성 황사 영상
-GK2A 위성 기반 황사지수(IDI) 이미지를 제공합니다(`image.kma_dust_satellite_image`).
-
-![위성 황사 영상 샘플](https://raw.githubusercontent.com/eigger/hass-kma/main/docs/images/dust_satellite_sample.png)
-
-### AWS 관측소 1분 자료 (선택 활성화)
-
-지점번호를 가진 관측소의 **1분 간격 실측 자료**를 제공합니다. **기본값은 꺼짐**이며, 통합 카드에서 **AWS 관측소 서브엔트리를 추가**하고 **관측소를 검색해 선택**하면(이름·지역·지점번호로 표시) 아래 센서 16종이 만들어집니다. 관측소 목록은 기상청 공개 AWS/ASOS 관측소 목록(2026-10-08 기준, ASOS/AWS 638지점)을 통합에 내장해 제공하므로 **추가 네트워크 요청 없이** 폼에서 바로 검색됩니다. 지점번호는 서브엔트리 고유ID라 **생성 후 변경할 수 없고**, 같은 부모 엔트리(API 키)에 같은 지점번호를 **중복 등록할 수 없습니다**(다른 API 키에는 같은 지점을 등록할 수 있습니다). 카탈로그에 없는 지점번호로 이미 저장된 항목은 그대로 로드되며, 이름·지역은 표시용 메타데이터일 뿐 식별자는 지점번호입니다.
-
-* **호출**: `nph-aws2_min`(`disp=1`, `help=0`), 조회 창은 현재 KST 시각 기준 10분 전 ~ 현재(`tm1`/`tm2`).
-* **갱신 주기**: 별도 코디네이터가 **301초 고정**이며 예보 갱신 주기(`scan_interval` 5~180분)와 무관합니다. 코디네이터가 실행되는 동안 네트워크 시도는 성공·실패·수동 갱신을 모두 포함해 **300초에 한 번**을 넘기지 않습니다. 통합을 재로드하면 처음부터 다시 조회합니다.
-* **독립 관리**: AWS 관측소는 Zone과 **별도 서브엔트리**라, Zone을 재구성하거나 삭제해도 AWS 설정에 영향이 없습니다. 관측소마다 코디네이터·디바이스가 하나씩 생기고, 디바이스/센서 고유 ID는 **부모 엔트리 ID + 지점번호** 기반이라 같은 지점을 삭제 후 다시 추가해도 동일한 고유 ID/식별자가 재사용됩니다.
-* **격리**: 예보 코디네이터·센서와 코디네이터/디바이스/고유ID가 완전히 분리되어, AWS 실패(인증·활용신청·네트워크)가 예보 갱신이나 기존 날씨 엔티티를 깨지 않습니다. 진단 파일의 `aws` 블록에서 `status`/`error_count`/`observation_fresh`를 확인할 수 있습니다.
-* **허브 진단 통합**: 설정된 **모든 AWS 관측소**의 활용신청/오류 상태를 허브 디바이스의 기존 진단 센서(`binary_sensor.activation_aws`, `sensor.error_count_aws`)로 집계합니다. 여러 관측소 중 하나라도 실패하면 상태가 내려가며, 성공한 관측소가 실패한 관측소를 지우지 않습니다. **실제 API 시도 결과만** 반영하고(스로틀 캐시 제외) 키·요청 URL·관측값은 노출하지 않습니다.
-* **신선도**: 마지막으로 수용한 관측값은 API가 실패해도 **계속 유지**됩니다(Zone 예보와 동일). 값이 얼마나 오래됐는지는 **관측 시각 센서**와 `observation_time` 속성으로 확인하고, `observation_fresh` 속성은 관측 나이가 15분 미만(미래 자료는 5분까지 허용)일 때만 `true`입니다. 신선도 때문에 센서가 `unavailable`이 되지는 않습니다.
-* **결측 처리**: 원시 결측 센티널(`-99.9`, `-99`, `-99.0`)과 비유한 실수는 값이 없으므로 해당 필드의 상태가 **`unknown`**입니다(센서 자체는 `available` 상태입니다). `-9.0`/`-9.9` 같은 음수 온도는 값으로 보존됩니다. **풍향 360**(무풍 표기)은 북풍이 아니므로 `unknown`으로 두고, 풍속 0은 정상 값입니다. 압력은 **`PA`(현지기압)**와 **`PS`(해면기압)** 두 센서로 나뉘며, 두 값 모두 위의 결측 센티널·비유한 수치 변환을 그대로 적용합니다(압력 전용 QC 규칙은 없습니다). 응답에서 **모든 측정 컬럼이 결측인 행**은 실측 자료가 아니므로 건너뛰고, 일부 컬럼만 결측인 행은 그대로 유지합니다. 새 관측을 수용하면 스냅샷을 통째로 교체하므로 빠진 필드를 이전 스냅샷으로 채우지 않습니다.
-* **강수**: `RN-15m`/`RN-60m`/`RN-12H`/`RN-DAY` 원시값을 그대로 제공하며, 롤링 창 특성상 통계 상태 클래스는 `total_increasing`이 아니라 `measurement`입니다. 강수감지 플래그(`RE`)는 상태/조건을 유도하는 데 쓰지 않습니다.
-* **`unavailable` vs `unknown`**: `unavailable`은 관측도, 재시작 전에 저장된 이전 값도 없는 경우(활용신청 미신청·최초 설치 직후 조회 실패)입니다. 한 번 관측을 받은 뒤에는 API가 계속 실패해도(활용신청 취소 등) 재시작 후에도 마지막 값이 계속 보이므로, 오래된 값인지는 관측 시각 센서로 확인하세요. HA를 재시작하면 센서가 마지막 값을 복원해 첫 조회가 성공할 때까지 보여줍니다(이때 `observation_fresh`는 `false`, 관측 시각 센서도 복원된 시각을 보여줍니다). 마지막 관측에서 결측(`unknown`)이던 필드는 재시작 직후 첫 조회 전까지 `unavailable`일 수 있습니다. `unknown`은 관측은 있으나 그 필드의 값이 결측인 경우입니다.
-* **속성**: 모든 AWS 센서는 `station_id`(지점번호), `observation_time`(관측시각), `observation_fresh`, `status`, `error_count` 속성을 공개합니다.
-
-> AWS는 **별도 활용신청**이 필요한 API입니다. 신청하지 않은 채로만 설정하면 예보 기능은 정상 동작하고 AWS 센서만 `unavailable`로 남습니다(활용신청이 필요하다는 메시지가 로그/진단에 남습니다).
-
----
-
-## 🔑 필수 사전 작업 (기상청 API 신청)
-
-통합 구성요소를 사용하려면 **기상청 APIhub** 계정 및 활용 신청이 완료된 인증키가 필요합니다.
-
-1. [기상청 APIhub 공식 웹사이트](https://apihub.kma.go.kr/)에 회원가입 및 로그인합니다.
-2. 마이페이지 또는 API 목록에서 아래 API들을 검색하여 **활용신청**을 진행하고 승인을 받습니다:
-    * 동네예보(단기예보) 지점자료 조회 (`getVilageFcst`)
-    * 단기육상예보조회 (`fct_afs_dl.php`)
-    * 단기해상예보조회 (`fct_afs_do.php`)
-    * 기상특보현황 (`wrn_now_data.php`)
-    * 예보구역 정보 (`fct_shrt_reg.php`) — API 키 정상 여부 검증용
-    * PM10(미세먼지) 관측자료 조회 (`kma_pm10.php`, 지상관측 > 황사관측(PM10))
-    * 황사(PM10) 시간통계자료 조회 (`dst_pm10_hr.php`)
-    * 생활기상지수 조회서비스 (`LivingWthrIdxServiceV3` — `getUVIdxV3`, `getAirDiffusionIdxV3`)
-    * 보건기상지수 조회서비스 (`HealthWthrIdxServiceV2` — `getOakPollenRiskIdxV2`, `getPinePollenRiskIdxV2`, `getWeedsPollenRiskndxV2`)
-    * 레이더영상 조회서비스 (`WthrRadarInfoService/getCompCappiQcdArea`)
-    * 레이더 합성자료 다운로드 (`typ04/rdr_cmp_file.php`)
-    * 천리안 2A호 위성 분포도 조회 (`typ03/nph-gk2a_img`) — 위성 적외/가시광선/단파적외/수증기 4종 공통
-    * 초단기 강수예측 그래픽 조회 (`typ03/nph-qpf_ana_img`)
-    * 고해상도 지상관측 (`sfc_nc_var.php`, 특정지점 다중요소)
-    * 영향예보(발표현황) 조회 (`ifs_fct_pstt.php`)
-    * 적설관측자료 조회 (`kma_snow1.php`)
-    * 지진정보(최근 발표 정보·속보) 조회 (`typ09/eqk/urlNewNotiEqk.do`)
-    * 태풍정보(기상청 발표) 조회 (`typ_now.php`)
-    * 황사정보(위성영상) 조회서비스 (`YdstInfoService/getYdstSatlitImg`)
-    * **[선택]** 관측소 1분 자료 조회 (`typ01/cgi-bin/url/nph-aws2_min`) — `aws_station_id`로 AWS 센서를 쓸 때만 필요합니다. 신청하지 않아도 예보 기능은 정상 동작합니다.
-    * 기상정보(`wrn_inf_rpt.php`)/날씨해설(`wthr_cmt_rpt.php`)은 별도 활용신청 없이 바로 동작합니다.
-3. 신청 완료 후 발급받은 **인증키(authKey)**를 준비합니다.
-
-### API 활용신청 상태를 확인하려면?
-
-각 API마다 활용신청을 깜빡했거나 승인 대기 중인지 확인할 수 있도록, **기상청 APIhub** 허브 디바이스에 이 통합이 사용하는 API 전체에 대해 진단 센서를 자동으로 생성합니다.
-
-* **`binary_sensor.kma_activation_<api>`**: 활용신청 완료 + 정상 응답이면 `on`, 미신청(403)이거나 오류면 `off`. `status` 속성에 `ok`/`not_applied`/`error: ...` 상세 상태가 표시됩니다.
-* **`sensor.kma_error_count_<api>`**: 해당 API의 누적 에러 횟수(진단 카테고리). `last_error_time`, `current_status` 속성도 함께 제공합니다.
-
-새로운 API가 추가되어도 코드 수정 없이 진단 센서가 자동으로 생성되도록 `const.py`의 `API_STATUS_ZONE_KEYS`/`API_STATUS_IMAGE_KEYS`/`API_STATUS_HUB_KEYS`/`API_STATUS_AWS_KEYS` 목록에서 단일 관리됩니다. AWS 관측소 자체의 `error_count`는 활용신청(403 포함) 실패까지 셉니다. 허브 집계 카운터는 기존 API 진단과 동일하게 `not_applied`를 제외합니다. 두 카운터 모두 메모리 내 값이며 부모 엔트리 리로드 시 초기화됩니다.
-
----
-
-## ⚙️ 설치 방법
-
-### 방법 1: HACS를 통한 설치 (추천)
-1. 홈어시스턴트에서 **HACS** 메뉴로 이동합니다.
-2. 우측 상단의 점 3개 메뉴를 누르고 **사용자 지정 저장소 (Custom Repositories)**를 선택합니다.
-3. 저장소 URL `https://github.com/eigger/hass-kma`를 입력하고 카테고리를 **통합 구성요소 (Integration)**로 설정한 뒤 추가합니다.
-4. 목록에 추가된 **기상청 APIhub** 통합 구성요소를 찾아 다운로드합니다.
-5. 홈어시스턴트를 재부팅합니다.
-
-### 방법 2: 수동 설치
-1. 본 저장소의 `custom_components/kma` 폴더 전체를 다운로드합니다.
-2. 홈어시스턴트 설정 디렉토리 내부의 `custom_components` 폴더 아래에 `kma` 폴더를 복사합니다.
-   * 경로 구조: `<config_dir>/custom_components/kma/__init__.py`, `manifest.json` 등
-3. 홈어시스턴트를 재부팅합니다.
-
----
-
-## 🛠️ 설정 및 사용 방법
-
-1. 홈어시스턴트의 **설정 → 기기 및 서비스 → 통합 구성요소 추가**로 이동합니다.
-2. 검색창에 `기상청` 또는 `KMA`를 입력해 선택합니다.
-3. **인증키(authKey)**를 입력합니다.
-4. 설정 완료 후 통합 구성요소 카드에서 **지역(Zone) 추가**를 눌러 날씨를 받을 위치를 하나 이상 등록합니다. 등록된 Zone의 위경도로부터 기상청 격자좌표 및 예보구역이 자동 매핑됩니다.
-5. **AWS 관측소 1분 자료(선택)**: 통합 카드에서 **AWS 관측소 추가**를 누르고 **관측소를 검색해 선택**하면(이름·지역·지점번호 표시) 해당 지점의 1분 실측 센서 16종이 추가됩니다. 목록은 기상청 공개 AWS/ASOS 관측소 목록을 내장해 추가 요청 없이 검색됩니다. 관측소는 Zone과 독립 서브엔트리라 Zone 관리와 무관하게 추가/삭제할 수 있습니다. 지점번호는 생성 후 변경할 수 없으며, 같은 API 키에 같은 지점을 중복 등록할 수 없습니다. 관측소 서브엔트리를 삭제하면 **AWS 폴링이 중단되고, 그 관측소의 엔티티·디바이스가 레지스트리에서 함께 제거됩니다**(HA가 서브엔트리 소속 레지스트리를 정리합니다). 같은 지점번호를 다시 추가하면 부모 엔트리 ID + 지점번호 기반의 **동일한 고유 ID/식별자**가 재사용됩니다.
-6. **옵션 변경**: 통합 구성요소 카드에서 `설정(Configure)`을 누르면 데이터 갱신 주기를 자유롭게 변경할 수 있습니다(예보 전용 — AWS 갱신 주기는 항상 약 5분(301초)).
-
----
-
-## 🤖 자동화(Automation) 작성 예제
-
-거주 지역에 **기상특보가 발효되었을 때 스마트폰으로 경고 푸시 알림**을 보내는 자동화 예제입니다.
-
-```yaml
-alias: "[기상] 우리 동네 특보 발효 시 스마트폰 경고"
-description: "기상청 특보 바이너리 센서가 켜지면 발효된 특보 상세 내역을 스마트폰으로 알립니다."
-trigger:
-  - platform: state
-    entity_id: binary_sensor.kma_home_warning  # 본인의 엔티티 ID에 맞게 수정하세요.
-    from: "off"
-    to: "on"
-condition: []
-action:
-  - service: notify.notify
-    data:
-      title: "⚠️ 기상청 특보 발효 경보"
-      message: >-
-        현재 지역에 {{ state_attr('binary_sensor.kma_home_warning', 'warnings_count') }}건의 기상 특보가 발효되었습니다.
-
-        세부 내역:
-        {% for w in state_attr('binary_sensor.kma_home_warning', 'active_warnings') %}
-        - {{ w.region }} {{ w.warning_name }}{{ w.level_name }} (발효시각: {{ w.effective_time }})
-        {% endfor %}
-mode: single
-```
-
----
-
-## 🛠️ 향후 로드맵
-
-검토했지만 아직 구현하지 않은 후보입니다.
-
-1. **해양관측(부이+연안) 연동**: `kma_buoy2.php`/`sea_obs.php`로 파고·수온·기압 실측치를 해상 Zone에 제공.
-2. **해구별 예측 정보**: `marine_small_zone.php`/`marine_large_zone.php`로 유의파고·최대파주기·파향 등 +75시간 예측. 대/소해구 번호를 해상 Zone에 매핑하는 참조 자료가 추가로 필요합니다.
-3. **영향예보 폭염/한파 위험수준 분포도 이미지**: `ifs_ilvl_dmap.php` — 전국 분포도 PNG를 이미지 엔티티로 추가할 수 있습니다.
-
----
-
-## 📄 라이선스
-This project is licensed under the MIT License - see the LICENSE file for details.
+- Report issues and request features on [GitHub Issues](https://github.com/eigger/hass-kma/issues).
+- Licensed under the [MIT License](LICENSE).

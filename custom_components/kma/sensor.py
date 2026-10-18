@@ -1,4 +1,5 @@
 """기상청(KMA) 센서(Sensor) 플랫폼 구현."""
+
 from __future__ import annotations
 
 import datetime
@@ -29,7 +30,8 @@ from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import dt as dt_util, slugify
+from homeassistant.util import dt as dt_util
+from homeassistant.util import slugify
 
 from .api import VillageForecast, bulletin_section, split_bulletin_sections
 from .const import (
@@ -156,7 +158,6 @@ CONDITION_MAP_EN = {
     "lightning-rainy": "Stormy",
     "exceptional": "Exceptional",
 }
-
 
 
 # KMA 센서 디스크립션 리스트
@@ -507,25 +508,144 @@ SENSOR_DESCRIPTIONS += [
 # TOTAL_INCREASING을 쓰지 않는다(창이 넘어갈 때 음수 급증 + 통계 오염 방지).
 # AWS 센서 16종 스펙: (key, AwsObservation 필드, device_class, 단위, state_class, icon).
 _AWS_SENSOR_SPECS: tuple[
-    tuple[str, str, SensorDeviceClass | None, str | None, SensorStateClass | None, str | None],
+    tuple[
+        str,
+        str,
+        SensorDeviceClass | None,
+        str | None,
+        SensorStateClass | None,
+        str | None,
+    ],
     ...,
 ] = (
-    ("aws_observation_time", "observed_at", SensorDeviceClass.TIMESTAMP, None, None, "mdi:clock-outline"),
-    ("aws_temperature", "temperature", SensorDeviceClass.TEMPERATURE, UnitOfTemperature.CELSIUS, SensorStateClass.MEASUREMENT, None),
-    ("aws_humidity", "humidity", SensorDeviceClass.HUMIDITY, PERCENTAGE, SensorStateClass.MEASUREMENT, None),
-    ("aws_dew_point", "dew_point", SensorDeviceClass.TEMPERATURE, UnitOfTemperature.CELSIUS, SensorStateClass.MEASUREMENT, None),
-    ("aws_wind_direction_1m", "wind_dir_1m", SensorDeviceClass.WIND_DIRECTION, DEGREE, SensorStateClass.MEASUREMENT_ANGLE, None),
-    ("aws_wind_speed_1m", "wind_speed_1m", SensorDeviceClass.WIND_SPEED, UnitOfSpeed.METERS_PER_SECOND, SensorStateClass.MEASUREMENT, None),
-    ("aws_gust_direction", "gust_dir", SensorDeviceClass.WIND_DIRECTION, DEGREE, SensorStateClass.MEASUREMENT_ANGLE, None),
-    ("aws_gust_speed", "gust_speed", SensorDeviceClass.WIND_SPEED, UnitOfSpeed.METERS_PER_SECOND, SensorStateClass.MEASUREMENT, None),
-    ("aws_wind_direction_10m", "wind_dir_10m", SensorDeviceClass.WIND_DIRECTION, DEGREE, SensorStateClass.MEASUREMENT_ANGLE, None),
-    ("aws_wind_speed_10m", "wind_speed_10m", SensorDeviceClass.WIND_SPEED, UnitOfSpeed.METERS_PER_SECOND, SensorStateClass.MEASUREMENT, None),
-    ("aws_rain_15m", "rain_15m", SensorDeviceClass.PRECIPITATION, UnitOfLength.MILLIMETERS, SensorStateClass.MEASUREMENT, None),
-    ("aws_rain_60m", "rain_60m", SensorDeviceClass.PRECIPITATION, UnitOfLength.MILLIMETERS, SensorStateClass.MEASUREMENT, None),
-    ("aws_rain_12h", "rain_12h", SensorDeviceClass.PRECIPITATION, UnitOfLength.MILLIMETERS, SensorStateClass.MEASUREMENT, None),
-    ("aws_rain_today", "rain_day", SensorDeviceClass.PRECIPITATION, UnitOfLength.MILLIMETERS, SensorStateClass.MEASUREMENT, None),
-    ("aws_pressure", "pressure", SensorDeviceClass.PRESSURE, UnitOfPressure.HPA, SensorStateClass.MEASUREMENT, None),
-    ("aws_sea_level_pressure", "sea_level_pressure", SensorDeviceClass.PRESSURE, UnitOfPressure.HPA, SensorStateClass.MEASUREMENT, None),
+    (
+        "aws_observation_time",
+        "observed_at",
+        SensorDeviceClass.TIMESTAMP,
+        None,
+        None,
+        "mdi:clock-outline",
+    ),
+    (
+        "aws_temperature",
+        "temperature",
+        SensorDeviceClass.TEMPERATURE,
+        UnitOfTemperature.CELSIUS,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_humidity",
+        "humidity",
+        SensorDeviceClass.HUMIDITY,
+        PERCENTAGE,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_dew_point",
+        "dew_point",
+        SensorDeviceClass.TEMPERATURE,
+        UnitOfTemperature.CELSIUS,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_wind_direction_1m",
+        "wind_dir_1m",
+        SensorDeviceClass.WIND_DIRECTION,
+        DEGREE,
+        SensorStateClass.MEASUREMENT_ANGLE,
+        None,
+    ),
+    (
+        "aws_wind_speed_1m",
+        "wind_speed_1m",
+        SensorDeviceClass.WIND_SPEED,
+        UnitOfSpeed.METERS_PER_SECOND,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_gust_direction",
+        "gust_dir",
+        SensorDeviceClass.WIND_DIRECTION,
+        DEGREE,
+        SensorStateClass.MEASUREMENT_ANGLE,
+        None,
+    ),
+    (
+        "aws_gust_speed",
+        "gust_speed",
+        SensorDeviceClass.WIND_SPEED,
+        UnitOfSpeed.METERS_PER_SECOND,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_wind_direction_10m",
+        "wind_dir_10m",
+        SensorDeviceClass.WIND_DIRECTION,
+        DEGREE,
+        SensorStateClass.MEASUREMENT_ANGLE,
+        None,
+    ),
+    (
+        "aws_wind_speed_10m",
+        "wind_speed_10m",
+        SensorDeviceClass.WIND_SPEED,
+        UnitOfSpeed.METERS_PER_SECOND,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_rain_15m",
+        "rain_15m",
+        SensorDeviceClass.PRECIPITATION,
+        UnitOfLength.MILLIMETERS,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_rain_60m",
+        "rain_60m",
+        SensorDeviceClass.PRECIPITATION,
+        UnitOfLength.MILLIMETERS,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_rain_12h",
+        "rain_12h",
+        SensorDeviceClass.PRECIPITATION,
+        UnitOfLength.MILLIMETERS,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_rain_today",
+        "rain_day",
+        SensorDeviceClass.PRECIPITATION,
+        UnitOfLength.MILLIMETERS,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_pressure",
+        "pressure",
+        SensorDeviceClass.PRESSURE,
+        UnitOfPressure.HPA,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
+    (
+        "aws_sea_level_pressure",
+        "sea_level_pressure",
+        SensorDeviceClass.PRESSURE,
+        UnitOfPressure.HPA,
+        SensorStateClass.MEASUREMENT,
+        None,
+    ),
 )
 
 AWS_SENSOR_DESCRIPTIONS: list[SensorEntityDescription] = [
@@ -571,7 +691,11 @@ def _resolve_bulletin_section_key(key: str) -> tuple[str, int, int] | None:
     이 패턴에 해당하지 않는 키는 None.
     """
     if key.startswith("weather_commentary_section_"):
-        return "weather_commentary", int(key.rsplit("_", 1)[1]), WEATHER_COMMENTARY_SECTION_SLOTS
+        return (
+            "weather_commentary",
+            int(key.rsplit("_", 1)[1]),
+            WEATHER_COMMENTARY_SECTION_SLOTS,
+        )
     if key.startswith("hazard_info_section_"):
         return "hazard_info", int(key.rsplit("_", 1)[1]), HAZARD_INFO_SECTION_SLOTS
     return None
@@ -607,10 +731,14 @@ async def async_setup_entry(
         if hub_coordinator is not None:
             zone_entities += [
                 KmaEarthquakeSensor(
-                    hub_coordinator, unique_id=f"{subentry_id}_recent_earthquake", device_info=zone_device,
+                    hub_coordinator,
+                    unique_id=f"{subentry_id}_recent_earthquake",
+                    device_info=zone_device,
                 ),
                 KmaTyphoonSensor(
-                    hub_coordinator, unique_id=f"{subentry_id}_typhoon_number", device_info=zone_device,
+                    hub_coordinator,
+                    unique_id=f"{subentry_id}_typhoon_number",
+                    device_info=zone_device,
                 ),
             ]
         async_add_entities(zone_entities, config_subentry_id=subentry_id)
@@ -737,7 +865,9 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
         `today_temp_low`/`today_temp_high`/`one_line_summary` 셋 다 동일한
         누적 규칙을 써야 값이 서로 어긋나지 않으므로 이 헬퍼로 공유한다.
         """
-        today_temps = [f.tmp for f in village if f.fcst_date == today_str and f.tmp is not None]
+        today_temps = [
+            f.tmp for f in village if f.fcst_date == today_str and f.tmp is not None
+        ]
         if curr.tmp is not None:
             try:
                 today_temps.append(float(curr.tmp))
@@ -752,8 +882,14 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
         if today_temps:
             new_low = min(today_temps)
             new_high = max(today_temps)
-            self._today_low = new_low if self._today_low is None else min(self._today_low, new_low)
-            self._today_high = new_high if self._today_high is None else max(self._today_high, new_high)
+            self._today_low = (
+                new_low if self._today_low is None else min(self._today_low, new_low)
+            )
+            self._today_high = (
+                new_high
+                if self._today_high is None
+                else max(self._today_high, new_high)
+            )
 
         return self._today_low, self._today_high
 
@@ -769,7 +905,9 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
 
         for f in village:
             try:
-                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
+                f_dt = datetime.datetime.strptime(
+                    f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M"
+                )  # noqa: DTZ007
                 diff = abs((f_dt - now).total_seconds())
                 if min_diff is None or diff < min_diff:
                     min_diff = diff
@@ -792,7 +930,10 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
             return None
 
     def _compute_laundry_index(
-        self, curr: CurrentWeather, village: list[VillageForecast], now: datetime.datetime
+        self,
+        curr: CurrentWeather,
+        village: list[VillageForecast],
+        now: datetime.datetime,
     ) -> int | None:
         """빨래 건조 지수 계산. `laundry_index`/`laundry_grade` 둘 다에서 재사용."""
         if curr.tmp is None or curr.reh is None or curr.wsd is None:
@@ -807,7 +948,9 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
             rain_expected = False
             for f in village:
                 try:
-                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
+                    f_dt = datetime.datetime.strptime(
+                        f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M"
+                    )  # noqa: DTZ007
                     if f_dt < now - datetime.timedelta(hours=1):
                         continue
                     diff_hours = (f_dt - now).total_seconds() / 3600.0
@@ -837,7 +980,9 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
         rain_hours = None
         for f in village:
             try:
-                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
+                f_dt = datetime.datetime.strptime(
+                    f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M"
+                )  # noqa: DTZ007
                 if f_dt < now - datetime.timedelta(hours=1):
                     continue
                 diff_hours = (f_dt - now).total_seconds() / 3600.0
@@ -862,7 +1007,9 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
         min_temp = None
         for f in village:
             try:
-                f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
+                f_dt = datetime.datetime.strptime(
+                    f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M"
+                )  # noqa: DTZ007
                 if f_dt < now - datetime.timedelta(hours=1):
                     continue
                 diff_hours = (f_dt - now).total_seconds() / 3600.0
@@ -936,16 +1083,21 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
             return get_air_stagnation_grade(air.current) if air is not None else None
 
         if key in (
-            "oak_pollen_risk", "oak_pollen_risk_grade",
-            "pine_pollen_risk", "pine_pollen_risk_grade",
-            "weed_pollen_risk", "weed_pollen_risk_grade",
+            "oak_pollen_risk",
+            "oak_pollen_risk_grade",
+            "pine_pollen_risk",
+            "pine_pollen_risk_grade",
+            "weed_pollen_risk",
+            "weed_pollen_risk_grade",
         ):
             data_key = key.replace("_risk_grade", "").replace("_risk", "")
             pollen = data.get(data_key)
             if pollen is None:
                 return None
             return (
-                get_pollen_risk_grade(pollen.today) if key.endswith("_grade") else pollen.today
+                get_pollen_risk_grade(pollen.today)
+                if key.endswith("_grade")
+                else pollen.today
             )
 
         if key == "radar_precipitation":
@@ -954,7 +1106,11 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
 
         if key == "radar_precipitation_grade":
             radar = data.get("radar_precipitation")
-            return get_radar_precipitation_grade(radar.value) if radar is not None else None
+            return (
+                get_radar_precipitation_grade(radar.value)
+                if radar is not None
+                else None
+            )
 
         if key == "apparent_temperature_observed":
             sfc = data.get("sfc_observation")
@@ -995,14 +1151,18 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
         today_str = now.strftime("%Y%m%d")
 
         if key in ("today_temp_low", "today_temp_high"):
-            low, high = self._get_today_temp_extremes(village, self.coordinator.get_current(), today_str)
+            low, high = self._get_today_temp_extremes(
+                village, self.coordinator.get_current(), today_str
+            )
             return low if key == "today_temp_low" else high
 
         if key == "rain_snow_expected":
             rain_type = "none"
             for f in village:
                 try:
-                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
+                    f_dt = datetime.datetime.strptime(
+                        f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M"
+                    )  # noqa: DTZ007
                     if f_dt < now - datetime.timedelta(hours=1):
                         continue
                     if (f_dt - now).total_seconds() > 24 * 3600:
@@ -1039,6 +1199,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
 
         if key == "apparent_temperature":
             import math
+
             if curr.tmp is not None and curr.reh is not None and curr.wsd is not None:
                 try:
                     temp = float(curr.tmp)
@@ -1053,6 +1214,7 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
 
         if key == "dew_point":
             import math
+
             if curr.tmp is not None and curr.reh is not None:
                 try:
                     temp = float(curr.tmp)
@@ -1102,32 +1264,38 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
                 try:
                     # Determine language
                     lang = "en"
-                    if self.hass and hasattr(self.hass, "config") and self.hass.config.language == "ko":
+                    if (
+                        self.hass
+                        and hasattr(self.hass, "config")
+                        and self.hass.config.language == "ko"
+                    ):
                         lang = "ko"
 
                     is_night = False
                     if self.hass:
                         sun_state = self.hass.states.get("sun.sun")
                         if sun_state is not None:
-                            is_night = (sun_state.state == "below_horizon")
+                            is_night = sun_state.state == "below_horizon"
                         else:
                             now_hour = now.hour
-                            is_night = (now_hour < 6 or now_hour >= 18)
+                            is_night = now_hour < 6 or now_hour >= 18
                     else:
                         now_hour = now.hour
-                        is_night = (now_hour < 6 or now_hour >= 18)
+                        is_night = now_hour < 6 or now_hour >= 18
 
                     cond = get_ha_condition(curr.sky, curr.pty, is_night)
-                    
+
                     if lang == "ko":
                         cond_str = CONDITION_MAP_KO.get(cond, "흐림")
                     else:
                         cond_str = CONDITION_MAP_EN.get(cond, "Cloudy")
 
                     cur_temp = float(curr.tmp)
-                    
+
                     # Today min/max temps (today_temp_low/high 센서와 동일한 누적 규칙 공유)
-                    t_low, t_high = self._get_today_temp_extremes(village, curr, today_str)
+                    t_low, t_high = self._get_today_temp_extremes(
+                        village, curr, today_str
+                    )
                     if t_low is None:
                         t_low = cur_temp
                     if t_high is None:
@@ -1138,7 +1306,9 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
                     rain_pty = None
                     for f in village:
                         try:
-                            f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
+                            f_dt = datetime.datetime.strptime(
+                                f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M"
+                            )  # noqa: DTZ007
                             if f_dt < now - datetime.timedelta(hours=1):
                                 continue
                             diff_hours = (f_dt - now).total_seconds() / 3600.0
@@ -1152,9 +1322,19 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
                     rain_str = ""
                     if rain_time is not None:
                         # 0:없음, 1:비, 2:비/눈, 3:눈, 4:소나기
-                        pty_names_ko = {"1": "비", "2": "비/눈", "3": "눈", "4": "소나기"}
-                        pty_names_en = {"1": "Rain", "2": "Rain/Snow", "3": "Snow", "4": "Shower"}
-                        
+                        pty_names_ko = {
+                            "1": "비",
+                            "2": "비/눈",
+                            "3": "눈",
+                            "4": "소나기",
+                        }
+                        pty_names_en = {
+                            "1": "Rain",
+                            "2": "Rain/Snow",
+                            "3": "Snow",
+                            "4": "Shower",
+                        }
+
                         expected_hour = rain_time.hour
                         if lang == "ko":
                             pty_name = pty_names_ko.get(rain_pty, "비")
@@ -1223,19 +1403,30 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
         if key in ("uv_index", "uv_index_grade"):
             uv = data.get("uv_index")
             if uv is not None:
-                return {"area_no": uv.area_no, "announced": uv.date, "hourly": uv.hourly}
+                return {
+                    "area_no": uv.area_no,
+                    "announced": uv.date,
+                    "hourly": uv.hourly,
+                }
             return None
 
         if key in ("air_stagnation_index", "air_stagnation_grade"):
             air = data.get("air_stagnation")
             if air is not None:
-                return {"area_no": air.area_no, "announced": air.date, "hourly": air.hourly}
+                return {
+                    "area_no": air.area_no,
+                    "announced": air.date,
+                    "hourly": air.hourly,
+                }
             return None
 
         if key in (
-            "oak_pollen_risk", "oak_pollen_risk_grade",
-            "pine_pollen_risk", "pine_pollen_risk_grade",
-            "weed_pollen_risk", "weed_pollen_risk_grade",
+            "oak_pollen_risk",
+            "oak_pollen_risk_grade",
+            "pine_pollen_risk",
+            "pine_pollen_risk_grade",
+            "weed_pollen_risk",
+            "weed_pollen_risk_grade",
         ):
             data_key = key.replace("_risk_grade", "").replace("_risk", "")
             pollen = data.get(data_key)
@@ -1339,8 +1530,13 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
             now = datetime.datetime.now()  # noqa: DTZ005
             hours = round((nxt.dt - now).total_seconds() / 3600.0, 1)
             pty_names = {
-                "1": "비", "2": "비/눈", "3": "눈", "4": "소나기",
-                "5": "빗방울", "6": "빗방울/눈날림", "7": "눈날림",
+                "1": "비",
+                "2": "비/눈",
+                "3": "눈",
+                "4": "소나기",
+                "5": "빗방울",
+                "6": "빗방울/눈날림",
+                "7": "눈날림",
             }
             return {
                 "expected": True,
@@ -1367,11 +1563,13 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
 
             for f in village:
                 try:
-                    f_dt = datetime.datetime.strptime(f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M")  # noqa: DTZ007
+                    f_dt = datetime.datetime.strptime(
+                        f"{f.fcst_date}{f.fcst_time}", "%Y%m%d%H%M"
+                    )  # noqa: DTZ007
                     if f_dt < now - datetime.timedelta(hours=1):
                         continue
                     diff_hours = (f_dt - now).total_seconds() / 3600.0
-                    
+
                     if f.pty and f.pty != "0":
                         if -1.0 <= diff_hours <= 3.0:
                             rain_3h = True
@@ -1379,8 +1577,12 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
                             rain_6h = True
                         if -1.0 <= diff_hours <= 12.0:
                             rain_12h = True
-                        
-                        if rain_start_dt is None and diff_hours >= -1.0 and diff_hours <= 24.0:
+
+                        if (
+                            rain_start_dt is None
+                            and diff_hours >= -1.0
+                            and diff_hours <= 24.0
+                        ):
                             rain_start_dt = f_dt
                             pty_code = f.pty
                             pop = f.pop
@@ -1396,22 +1598,27 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
 
             if rain_start_dt is not None:
                 from homeassistant.util import dt as dt_util
+
                 dt_localized = dt_util.as_utc(dt_util.as_local(rain_start_dt))
                 iso_time = dt_localized.isoformat()
 
-                attrs.update({
-                    "expected_time": iso_time,
-                    "pty_code": pty_code,
-                    "precipitation_probability": pop,
-                    "precipitation_amount": parse_pcp(pcp),
-                })
+                attrs.update(
+                    {
+                        "expected_time": iso_time,
+                        "pty_code": pty_code,
+                        "precipitation_probability": pop,
+                        "precipitation_amount": parse_pcp(pcp),
+                    }
+                )
             else:
-                attrs.update({
-                    "expected_time": None,
-                    "pty_code": "0",
-                    "precipitation_probability": None,
-                    "precipitation_amount": 0.0,
-                })
+                attrs.update(
+                    {
+                        "expected_time": None,
+                        "pty_code": "0",
+                        "precipitation_probability": None,
+                        "precipitation_amount": 0.0,
+                    }
+                )
             return attrs
 
         # 동네예보 기반 속성
@@ -1447,7 +1654,11 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
 
                 # Determine language
                 lang = "en"
-                if self.hass and hasattr(self.hass, "config") and self.hass.config.language == "ko":
+                if (
+                    self.hass
+                    and hasattr(self.hass, "config")
+                    and self.hass.config.language == "ko"
+                ):
                     lang = "ko"
 
                 # 등급(grade) 표시는 각각의 전용 _grade ENUM 센서(HA 상태 번역)가 담당하므로
@@ -1456,28 +1667,36 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
                     grade_key = get_laundry_grade(self.native_value)
                     if grade_key is not None:
                         attrs["recommendation"] = (
-                            LAUNDRY_RECS_KO[grade_key] if lang == "ko" else LAUNDRY_RECS_EN[grade_key]
+                            LAUNDRY_RECS_KO[grade_key]
+                            if lang == "ko"
+                            else LAUNDRY_RECS_EN[grade_key]
                         )
 
                 elif key == "car_wash_index":
                     grade_key = get_car_wash_grade(self.native_value)
                     if grade_key is not None:
                         attrs["recommendation"] = (
-                            CAR_WASH_RECS_KO[grade_key] if lang == "ko" else CAR_WASH_RECS_EN[grade_key]
+                            CAR_WASH_RECS_KO[grade_key]
+                            if lang == "ko"
+                            else CAR_WASH_RECS_EN[grade_key]
                         )
 
                 elif key == "freeze_risk_index":
                     grade_key = get_freeze_risk_grade(self.native_value)
                     if grade_key is not None:
                         attrs["recommendation"] = (
-                            FREEZE_RISK_RECS_KO[grade_key] if lang == "ko" else FREEZE_RISK_RECS_EN[grade_key]
+                            FREEZE_RISK_RECS_KO[grade_key]
+                            if lang == "ko"
+                            else FREEZE_RISK_RECS_EN[grade_key]
                         )
 
                 elif key == "food_poisoning_index":
                     grade_key = get_food_poisoning_grade(self.native_value)
                     if grade_key is not None:
                         attrs["recommendation"] = (
-                            FOOD_POISON_RECS_KO[grade_key] if lang == "ko" else FOOD_POISON_RECS_EN[grade_key]
+                            FOOD_POISON_RECS_KO[grade_key]
+                            if lang == "ko"
+                            else FOOD_POISON_RECS_EN[grade_key]
                         )
 
                 return attrs
@@ -1485,7 +1704,9 @@ class KmaSensor(CoordinatorEntity[KmaForecastCoordinator], RestoreEntity, Sensor
         return None
 
 
-class KmaCurrentDataSourceSensor(CoordinatorEntity[KmaForecastCoordinator], SensorEntity):
+class KmaCurrentDataSourceSensor(
+    CoordinatorEntity[KmaForecastCoordinator], SensorEntity
+):
     """현재값이 초단기실황/동네예보 중 어디서 왔는지 표시하는 진단 센서."""
 
     _attr_has_entity_name = True
@@ -1613,7 +1834,8 @@ class KmaTyphoonSensor(_KmaHubSensorBase):
 
 
 class KmaApiErrorCountSensor(
-    CoordinatorEntity[KmaForecastCoordinator | KmaImageCoordinator | KmaHubCoordinator], SensorEntity
+    CoordinatorEntity[KmaForecastCoordinator | KmaImageCoordinator | KmaHubCoordinator],
+    SensorEntity,
 ):
     """허브 단위 API별 누적 에러 카운트 진단 센서.
 
@@ -1659,7 +1881,9 @@ class KmaApiErrorCountSensor(
         last_time = self.coordinator.api_last_error_times.get(self._api_key)
         return {
             "last_error_time": (
-                dt_util.as_local(last_time).isoformat() if last_time is not None else None
+                dt_util.as_local(last_time).isoformat()
+                if last_time is not None
+                else None
             ),
             "current_status": self.coordinator.api_status.get(self._api_key, "unknown"),
         }
@@ -1702,7 +1926,10 @@ class KmaAwsSensor(CoordinatorEntity[KmaAwsCoordinator], RestoreSensor):
         if last is not None:
             # 단위가 바뀐 릴리스 직후에는 이전 단위의 값을 쓰지 않는다.
             unit = last.native_unit_of_measurement
-            if unit is None or unit == self.entity_description.native_unit_of_measurement:
+            if (
+                unit is None
+                or unit == self.entity_description.native_unit_of_measurement
+            ):
                 self._restored_value = last.native_value
 
     @property

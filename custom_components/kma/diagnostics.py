@@ -1,4 +1,5 @@
 """KMA 통합 구성요소 진단 정보."""
+
 from __future__ import annotations
 
 from dataclasses import fields as dataclass_fields
@@ -38,7 +39,9 @@ def _image_diagnostics(coordinator: KmaImageCoordinator) -> dict[str, Any]:
             key: dt_util.as_local(value).isoformat() if value is not None else None
             for key, value in coordinator.api_last_error_times.items()
         },
-        "image_available": {key: data.get(key) is not None for key in API_STATUS_IMAGE_KEYS},
+        "image_available": {
+            key: data.get(key) is not None for key in API_STATUS_IMAGE_KEYS
+        },
         "coordinator": {
             "last_update_success": coordinator.last_update_success,
             "last_exception": (
@@ -58,7 +61,9 @@ def _hub_diagnostics(coordinator: KmaHubCoordinator) -> dict[str, Any]:
             key: dt_util.as_local(value).isoformat() if value is not None else None
             for key, value in coordinator.api_last_error_times.items()
         },
-        "data_available": {key: data.get(key) is not None for key in API_STATUS_HUB_KEYS},
+        "data_available": {
+            key: data.get(key) is not None for key in API_STATUS_HUB_KEYS
+        },
         "coordinator": {
             "last_update_success": coordinator.last_update_success,
             "last_exception": (
@@ -207,7 +212,9 @@ async def async_get_config_entry_diagnostics(
             },
             "zones": zones,
             "aws": aws,
-            "images": _image_diagnostics(image_coordinator) if image_coordinator else None,
+            "images": _image_diagnostics(image_coordinator)
+            if image_coordinator
+            else None,
             "hub": _hub_diagnostics(hub_coordinator) if hub_coordinator else None,
         },
         REDACT_KEYS,

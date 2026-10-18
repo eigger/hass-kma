@@ -106,11 +106,11 @@ class KmaActivationRequiredError(KmaApiError):
 class ForecastRegion:
     """단기 예보구역 (fct_shrt_reg.php)."""
 
-    reg_id: str       # 예보구역코드
-    tm_st: str        # 시작시각 YYYYMMDDHHMM
-    tm_ed: str        # 종료시각 YYYYMMDDHHMM
-    reg_sp: str       # 특성코드 (A 육상광역, B 육상국지, C 도시, ...)
-    reg_name: str     # 예보구역명
+    reg_id: str  # 예보구역코드
+    tm_st: str  # 시작시각 YYYYMMDDHHMM
+    tm_ed: str  # 종료시각 YYYYMMDDHHMM
+    reg_sp: str  # 특성코드 (A 육상광역, B 육상국지, C 도시, ...)
+    reg_name: str  # 예보구역명
 
 
 @dataclass(frozen=True)
@@ -121,19 +121,19 @@ class LandForecast:
                  W1 T W2 TA ST SKY PREP WF
     """
 
-    reg_id: str          # 예보구역코드
-    tm_fc: str           # 발표시각 YYYYMMDDHHMM
-    tm_ef: str           # 발효시각 YYYYMMDDHHMM
-    mod: str             # 구간 (A01=24h, A02=12h)
-    ne: str              # 발효번호
-    stn: str             # 발표관서
-    wind_dir1: str       # 풍향1 (16방위)
-    wind_dir2: str       # 풍향2 (16방위)
-    ta: int | None       # 기온(℃), -99 → None
-    pop: int | None      # 강수확률(%), -99 → None
-    sky: str             # 하늘상태코드 (DB01~DB04)
-    prep: str            # 강수유무코드 (0~4)
-    wf: str              # 예보 문구
+    reg_id: str  # 예보구역코드
+    tm_fc: str  # 발표시각 YYYYMMDDHHMM
+    tm_ef: str  # 발효시각 YYYYMMDDHHMM
+    mod: str  # 구간 (A01=24h, A02=12h)
+    ne: str  # 발효번호
+    stn: str  # 발표관서
+    wind_dir1: str  # 풍향1 (16방위)
+    wind_dir2: str  # 풍향2 (16방위)
+    ta: int | None  # 기온(℃), -99 → None
+    pop: int | None  # 강수확률(%), -99 → None
+    sky: str  # 하늘상태코드 (DB01~DB04)
+    prep: str  # 강수유무코드 (0~4)
+    wf: str  # 예보 문구
 
     @property
     def sky_text(self) -> str:
@@ -152,21 +152,21 @@ class MarineForecast:
                  W1 T W2 S1 S2 WH1 WH2 SKY PREP WF
     """
 
-    reg_id: str          # 예보구역코드
-    tm_fc: str           # 발표시각 YYYYMMDDHHMM
-    tm_ef: str           # 발효시각 YYYYMMDDHHMM
-    mod: str             # 구간 (A01=24h, A02=12h)
-    ne: str              # 발효번호
-    stn: str             # 발표관서
-    wind_dir1: str       # 풍향1 (16방위)
-    wind_dir2: str       # 풍향2 (16방위)
-    wind_speed1: float | None # 풍속1 (m/s), -99 -> None
-    wind_speed2: float | None # 풍속2 (m/s), -99 -> None
-    wh_min: float | None # 최소 파고(m), -99 -> None
-    wh_max: float | None # 최대 파고(m), -99 -> None
-    sky: str             # 하늘상태코드 (DB01~DB04)
-    prep: str            # 강수유무코드 (0~4)
-    wf: str              # 예보 문구
+    reg_id: str  # 예보구역코드
+    tm_fc: str  # 발표시각 YYYYMMDDHHMM
+    tm_ef: str  # 발효시각 YYYYMMDDHHMM
+    mod: str  # 구간 (A01=24h, A02=12h)
+    ne: str  # 발효번호
+    stn: str  # 발표관서
+    wind_dir1: str  # 풍향1 (16방위)
+    wind_dir2: str  # 풍향2 (16방위)
+    wind_speed1: float | None  # 풍속1 (m/s), -99 -> None
+    wind_speed2: float | None  # 풍속2 (m/s), -99 -> None
+    wh_min: float | None  # 최소 파고(m), -99 -> None
+    wh_max: float | None  # 최대 파고(m), -99 -> None
+    sky: str  # 하늘상태코드 (DB01~DB04)
+    prep: str  # 강수유무코드 (0~4)
+    wf: str  # 예보 문구
 
     @property
     def sky_text(self) -> str:
@@ -181,19 +181,19 @@ class MarineForecast:
 class VillageForecast:
     """동네예보 지점 예보값 (getVilageFcst)."""
 
-    fcst_date: str       # 예보일자 YYYYMMDD
-    fcst_time: str       # 예보시각 HHMM
-    tmp: float | None    # 1시간 기온 (℃)
-    uuu: float | None    # 동서풍속 (m/s)
-    vvv: float | None    # 남북풍속 (m/s)
-    vec: float | None    # 풍향 (deg)
-    wsd: float | None    # 풍속 (m/s)
-    sky: str | None      # 하늘상태 (1:맑음, 3:구름많음, 4:흐림)
-    pty: str | None      # 강수형태 (0:없음, 1:비, 2:비/눈, 3:눈, 4:소나기)
-    pop: float | None    # 강수확률 (%)
-    pcp: str | None      # 1시간 강수량
-    sno: str | None      # 1시간 신적설
-    reh: float | None    # 습도 (%)
+    fcst_date: str  # 예보일자 YYYYMMDD
+    fcst_time: str  # 예보시각 HHMM
+    tmp: float | None  # 1시간 기온 (℃)
+    uuu: float | None  # 동서풍속 (m/s)
+    vvv: float | None  # 남북풍속 (m/s)
+    vec: float | None  # 풍향 (deg)
+    wsd: float | None  # 풍속 (m/s)
+    sky: str | None  # 하늘상태 (1:맑음, 3:구름많음, 4:흐림)
+    pty: str | None  # 강수형태 (0:없음, 1:비, 2:비/눈, 3:눈, 4:소나기)
+    pop: float | None  # 강수확률 (%)
+    pcp: str | None  # 1시간 강수량
+    sno: str | None  # 1시간 신적설
+    reh: float | None  # 습도 (%)
 
 
 @dataclass(frozen=True)
@@ -202,14 +202,16 @@ class UltraNcst:
 
     base_date: str
     base_time: str
-    t1h: float | None    # 기온 (℃)
-    rn1: float | None    # 1시간 강수량 (mm)
-    reh: float | None    # 습도 (%)
-    pty: str | None      # 강수형태 (0:없음,1:비,2:비/눈,3:눈,5:빗방울,6:빗방울눈날림,7:눈날림)
-    wsd: float | None    # 풍속 (m/s)
-    vec: float | None    # 풍향 (deg)
-    uuu: float | None    # 동서풍속
-    vvv: float | None    # 남북풍속
+    t1h: float | None  # 기온 (℃)
+    rn1: float | None  # 1시간 강수량 (mm)
+    reh: float | None  # 습도 (%)
+    pty: (
+        str | None
+    )  # 강수형태 (0:없음,1:비,2:비/눈,3:눈,5:빗방울,6:빗방울눈날림,7:눈날림)
+    wsd: float | None  # 풍속 (m/s)
+    vec: float | None  # 풍향 (deg)
+    uuu: float | None  # 동서풍속
+    vvv: float | None  # 남북풍속
 
 
 @dataclass(frozen=True)
@@ -218,13 +220,13 @@ class UltraFcst:
 
     fcst_date: str
     fcst_time: str
-    t1h: float | None    # 기온 (℃)
-    sky: str | None      # 하늘상태 (1:맑음,3:구름많음,4:흐림)
-    pty: str | None      # 강수형태
-    reh: float | None    # 습도 (%)
-    wsd: float | None    # 풍속 (m/s)
-    vec: float | None    # 풍향 (deg)
-    rn1: str | None      # 1시간 강수량 (범주 문자열, 예 "강수없음"/"1.0mm")
+    t1h: float | None  # 기온 (℃)
+    sky: str | None  # 하늘상태 (1:맑음,3:구름많음,4:흐림)
+    pty: str | None  # 강수형태
+    reh: float | None  # 습도 (%)
+    wsd: float | None  # 풍속 (m/s)
+    vec: float | None  # 풍향 (deg)
+    rn1: str | None  # 1시간 강수량 (범주 문자열, 예 "강수없음"/"1.0mm")
 
 
 @dataclass(frozen=True)
@@ -236,7 +238,7 @@ class Pm10Observation:
 
     stn: str
     tm: str
-    pm10: float | None   # PM10 농도 (㎍/㎥)
+    pm10: float | None  # PM10 농도 (㎍/㎥)
     raw: str
 
 
@@ -317,11 +319,11 @@ class SfcObservation:
     lat: float
     lon: float
     tm: str
-    temperature: float | None            # ta (기온, ℃)
-    dew_point: float | None              # td (이슬점온도, ℃)
-    humidity: float | None               # hm (상대습도, %)
-    apparent_temperature: float | None   # ta_chi (체감온도, ℃)
-    wind_speed: float | None             # ws_10m (10분 평균풍속, m/s)
+    temperature: float | None  # ta (기온, ℃)
+    dew_point: float | None  # td (이슬점온도, ℃)
+    humidity: float | None  # hm (상대습도, %)
+    apparent_temperature: float | None  # ta_chi (체감온도, ℃)
+    wind_speed: float | None  # ws_10m (10분 평균풍속, m/s)
 
 
 @dataclass(frozen=True)
@@ -333,7 +335,7 @@ class ImpactForecast:
     """
 
     stn: int
-    ifpar: str      # "hw"(폭염) | "cw"(한파)
+    ifpar: str  # "hw"(폭염) | "cw"(한파)
     level: int | None
     tm_fc: str | None
 
@@ -342,16 +344,16 @@ class ImpactForecast:
 class EarthquakeNotice:
     """최근 지진정보 통보문 (typ09/eqk/urlNewNotiEqk.do). [실측 검증 2026-07-02]"""
 
-    msg_code: str            # 통보문종류명 (예: 국내지진정보, 국외지진정보 등)
-    domestic: bool           # cntDiv == "Y"
-    location: str            # eqPt (발생위치)
-    issued_at: str           # tmIssue (발표시각)
-    occurred_at: str         # eqDate (발생시각)
+    msg_code: str  # 통보문종류명 (예: 국내지진정보, 국외지진정보 등)
+    domestic: bool  # cntDiv == "Y"
+    location: str  # eqPt (발생위치)
+    issued_at: str  # tmIssue (발표시각)
+    occurred_at: str  # eqDate (발생시각)
     magnitude: float | None  # magMl (규모)
-    depth: float | None      # eqDt (깊이, km)
-    lat: float | None        # eqLt
-    lon: float | None        # eqLn
-    reference: str | None    # ReFer (참고사항)
+    depth: float | None  # eqDt (깊이, km)
+    lat: float | None  # eqLt
+    lon: float | None  # eqLn
+    reference: str | None  # ReFer (참고사항)
 
 
 @dataclass(frozen=True)
@@ -364,16 +366,16 @@ class TyphoonInfo:
 
     ft: int
     year: int
-    typ_no: int              # TYP(태풍번호)
-    seq: int                 # SEQ(발표번호)
-    typ_tm: str               # 분석시각(UTC)
+    typ_no: int  # TYP(태풍번호)
+    seq: int  # SEQ(발표번호)
+    typ_tm: str  # 분석시각(UTC)
     lat: float | None
     lon: float | None
-    direction: str | None     # DIR(진행방향, 16방위)
-    speed: float | None       # SP(진행속도, km/h)
-    pressure: float | None    # PS(중심기압, hPa)
+    direction: str | None  # DIR(진행방향, 16방위)
+    speed: float | None  # SP(진행속도, km/h)
+    pressure: float | None  # PS(중심기압, hPa)
     wind_speed: float | None  # WS(최대풍속, m/s)
-    location: str | None      # LOC(위치 설명, 자연어)
+    location: str | None  # LOC(위치 설명, 자연어)
 
 
 @dataclass(frozen=True)
@@ -431,24 +433,24 @@ class AwsObservation:
     """
 
     stn: str
-    tm: str                     # 원시 관측시각(문자열, KST)
+    tm: str  # 원시 관측시각(문자열, KST)
     observed_at: datetime.datetime  # KST timezone-aware 관측시각
-    wind_dir_1m: float | None       # WD1 (deg)
-    wind_speed_1m: float | None     # WS1 (m/s)
-    gust_dir: float | None          # WDS (deg)
-    gust_speed: float | None        # WSS (m/s)
-    wind_dir_10m: float | None      # WD10 (deg)
-    wind_speed_10m: float | None    # WS10 (m/s)
-    temperature: float | None       # TA (℃)
-    rain_flag: int | None           # RE (0/1) — 상태 파생에는 사용하지 않음
-    rain_15m: float | None          # RN-15m (mm)
-    rain_60m: float | None          # RN-60m (mm)
-    rain_12h: float | None          # RN-12H (mm)
-    rain_day: float | None          # RN-DAY (mm)
-    humidity: float | None          # HM (%)
-    pressure: float | None          # PA (hPa, 현지기압)
+    wind_dir_1m: float | None  # WD1 (deg)
+    wind_speed_1m: float | None  # WS1 (m/s)
+    gust_dir: float | None  # WDS (deg)
+    gust_speed: float | None  # WSS (m/s)
+    wind_dir_10m: float | None  # WD10 (deg)
+    wind_speed_10m: float | None  # WS10 (m/s)
+    temperature: float | None  # TA (℃)
+    rain_flag: int | None  # RE (0/1) — 상태 파생에는 사용하지 않음
+    rain_15m: float | None  # RN-15m (mm)
+    rain_60m: float | None  # RN-60m (mm)
+    rain_12h: float | None  # RN-12H (mm)
+    rain_day: float | None  # RN-DAY (mm)
+    humidity: float | None  # HM (%)
+    pressure: float | None  # PA (hPa, 현지기압)
     sea_level_pressure: float | None  # PS (hPa, 해면기압)
-    dew_point: float | None         # TD (℃)
+    dew_point: float | None  # TD (℃)
 
 
 # 하늘상태코드
@@ -579,7 +581,13 @@ def _parse_pm10_hourly_line(line: str) -> Pm10HourlyStats | None:
         return None
     tm, _org, stn, avg_cnt, min_v, max_v = parts[:6]
     avg_str = avg_cnt.split("(")[0]
-    return Pm10HourlyStats(stn=stn, tm=tm, avg=_to_float(avg_str), min=_to_float(min_v), max=_to_float(max_v))
+    return Pm10HourlyStats(
+        stn=stn,
+        tm=tm,
+        avg=_to_float(avg_str),
+        min=_to_float(min_v),
+        max=_to_float(max_v),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -725,7 +733,7 @@ def _parse_aws_response(text: str, stn: int | str) -> AwsObservation:
 
     target = str(stn)
     newest: AwsObservation | None = None
-    for raw in lines[start + 1:end]:
+    for raw in lines[start + 1 : end]:
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
@@ -793,7 +801,9 @@ def _parse_station_bulletins(text: str) -> list[StationBulletin]:
         if stn is not None:
             bulletins.append(
                 StationBulletin(
-                    stn=stn, issued_at=tm_fc or "", title=title or "",
+                    stn=stn,
+                    issued_at=tm_fc or "",
+                    title=title or "",
                     body="\n".join(body_lines).strip(),
                 )
             )
@@ -805,12 +815,16 @@ def _parse_station_bulletins(text: str) -> list[StationBulletin]:
             parts = line.split("#")
             stn = parts[1] if len(parts) > 1 else ""
             tm_fc = parts[2] if len(parts) > 2 else ""
-            title = parts[-2] if len(parts) > 2 and parts[-1] == "" else (parts[-1] if len(parts) > 2 else "")
+            title = (
+                parts[-2]
+                if len(parts) > 2 and parts[-1] == ""
+                else (parts[-1] if len(parts) > 2 else "")
+            )
             body_lines = []
             in_body = False
         elif line.startswith("$1#"):
             in_body = True
-            rest = line[len("$1#"):]
+            rest = line[len("$1#") :]
             if rest:
                 body_lines.append(rest)
         elif line.strip() == "=":
@@ -877,7 +891,7 @@ def bulletin_section(
     if slot < total_slots or len(items) <= total_slots:
         return items[slot - 1]
 
-    remaining = items[slot - 1:]
+    remaining = items[slot - 1 :]
     if len(remaining) == 1:
         return remaining[0]
     heading = f"{remaining[0][0]} 외 {len(remaining) - 1}건"
@@ -907,7 +921,11 @@ def parse_header_columns(text: str) -> list[str]:
     """텍스트의 `#` 주석 라인 중에서 필드 목록을 정의한 라인을 찾아 컬럼 이름 리스트를 반환."""
     for line in text.splitlines():
         line = line.strip()
-        if line.startswith("#") and not line.startswith("#START") and not line.startswith("#7777"):
+        if (
+            line.startswith("#")
+            and not line.startswith("#START")
+            and not line.startswith("#7777")
+        ):
             parts = line[1:].strip().split()
             # 도움말 정의 라인(콜론 포함) 및 필드가 아주 적은 라인은 제외
             if (
@@ -1104,9 +1122,7 @@ class KmaApiClient:
                     pass
                 return body_str
             else:
-                _raise_for_error_payload(
-                    status, body_str, endpoint
-                )
+                _raise_for_error_payload(status, body_str, endpoint)
                 return body_str
 
         if status != 200:
@@ -1130,9 +1146,7 @@ class KmaApiClient:
                 continue
             reg_id, tm_st, tm_ed, reg_sp = parts[:4]
             reg_name = " ".join(parts[4:])  # 혹시 모를 공백 대비
-            regions.append(
-                ForecastRegion(reg_id, tm_st, tm_ed, reg_sp, reg_name)
-            )
+            regions.append(ForecastRegion(reg_id, tm_st, tm_ed, reg_sp, reg_name))
         _LOGGER.debug("예보구역 %d건 파싱", len(regions))
         return regions
 
@@ -1156,14 +1170,38 @@ class KmaApiClient:
                 _LOGGER.debug("육상예보 파싱 스킵(필드부족): %r", line)
                 continue
             (
-                reg_id, tm_fc, tm_ef, mod, ne, stn, _c, _man_id, _man_fc,
-                w1, _t, w2, ta, pop, sky, prep,
+                reg_id,
+                tm_fc,
+                tm_ef,
+                mod,
+                ne,
+                stn,
+                _c,
+                _man_id,
+                _man_fc,
+                w1,
+                _t,
+                w2,
+                ta,
+                pop,
+                sky,
+                prep,
             ) = head[:16]
             out.append(
                 LandForecast(
-                    reg_id=reg_id, tm_fc=tm_fc, tm_ef=tm_ef, mod=mod, ne=ne,
-                    stn=stn, wind_dir1=w1, wind_dir2=w2,
-                    ta=_to_int(ta), pop=_to_int(pop), sky=sky, prep=prep, wf=wf,
+                    reg_id=reg_id,
+                    tm_fc=tm_fc,
+                    tm_ef=tm_ef,
+                    mod=mod,
+                    ne=ne,
+                    stn=stn,
+                    wind_dir1=w1,
+                    wind_dir2=w2,
+                    ta=_to_int(ta),
+                    pop=_to_int(pop),
+                    sky=sky,
+                    prep=prep,
+                    wf=wf,
                 )
             )
         _LOGGER.debug("육상예보 %d구간 파싱(reg=%s)", len(out), reg)
@@ -1196,23 +1234,54 @@ class KmaApiClient:
                 _LOGGER.debug("해상예보 파싱 스킵(필드부족): %r", line)
                 continue
             (
-                reg_id, tm_fc, tm_ef, mod, ne, stn, _c, _man_id, _man_fc,
-                w1, _t1, w2, s1, s2, wh1, wh2, sky, prep,
+                reg_id,
+                tm_fc,
+                tm_ef,
+                mod,
+                ne,
+                stn,
+                _c,
+                _man_id,
+                _man_fc,
+                w1,
+                _t1,
+                w2,
+                s1,
+                s2,
+                wh1,
+                wh2,
+                sky,
+                prep,
             ) = head[:18]
             out.append(
                 MarineForecast(
-                    reg_id=reg_id, tm_fc=tm_fc, tm_ef=tm_ef, mod=mod, ne=ne,
-                    stn=stn, wind_dir1=w1, wind_dir2=w2,
-                    wind_speed1=_to_float(s1), wind_speed2=_to_float(s2),
-                    wh_min=_to_float(wh1), wh_max=_to_float(wh2),
-                    sky=sky, prep=prep, wf=wf,
+                    reg_id=reg_id,
+                    tm_fc=tm_fc,
+                    tm_ef=tm_ef,
+                    mod=mod,
+                    ne=ne,
+                    stn=stn,
+                    wind_dir1=w1,
+                    wind_dir2=w2,
+                    wind_speed1=_to_float(s1),
+                    wind_speed2=_to_float(s2),
+                    wh_min=_to_float(wh1),
+                    wh_max=_to_float(wh2),
+                    sky=sky,
+                    prep=prep,
+                    wf=wf,
                 )
             )
         _LOGGER.debug("해상예보 %d건 파싱(reg=%s)", len(out), reg)
         return out
 
     async def async_get_village_forecast(
-        self, nx: int, ny: int, *, base_date: str | None = None, base_time: str | None = None
+        self,
+        nx: int,
+        ny: int,
+        *,
+        base_date: str | None = None,
+        base_time: str | None = None,
     ) -> list[VillageForecast]:
         """동네예보(단기예보) 지점자료 조회 (getVilageFcst). [활용신청 완료, 검증됨]
 
@@ -1254,10 +1323,16 @@ class KmaApiClient:
             if result_code in ("03", "04"):
                 _LOGGER.debug(
                     "getVilageFcst NODATA: base=%s%s nx=%s ny=%s",
-                    base_date, base_time, nx, ny,
+                    base_date,
+                    base_time,
+                    nx,
+                    ny,
                 )
                 return []
-            if "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" in result_msg or "인증" in result_msg:
+            if (
+                "SERVICE_KEY_IS_NOT_REGISTERED_ERROR" in result_msg
+                or "인증" in result_msg
+            ):
                 raise KmaAuthError(f"getVilageFcst: {result_msg} ({result_code})")
             raise KmaApiError(f"getVilageFcst: {result_msg} ({result_code})")
 
@@ -1286,7 +1361,7 @@ class KmaApiClient:
         for key, data in sorted(grouped.items()):
             fcst_date = data["fcstDate"]
             fcst_time = data["fcstTime"]
-            
+
             tmp = _to_float(data.get("TMP"))
             uuu = _to_float(data.get("UUU"))
             vvv = _to_float(data.get("VVV"))
@@ -1332,9 +1407,13 @@ class KmaApiClient:
         text = await self._request(
             "api/typ02/openApi/VilageFcstInfoService_2.0/getUltraSrtNcst",
             {
-                "base_date": base_date, "base_time": base_time,
-                "nx": nx, "ny": ny, "dataType": "JSON",
-                "numOfRows": 60, "pageNo": 1,
+                "base_date": base_date,
+                "base_time": base_time,
+                "nx": nx,
+                "ny": ny,
+                "dataType": "JSON",
+                "numOfRows": 60,
+                "pageNo": 1,
             },
             is_json_api=True,
         )
@@ -1343,11 +1422,16 @@ class KmaApiClient:
             return None
         obs = {it.get("category"): it.get("obsrValue") for it in items}
         return UltraNcst(
-            base_date=base_date, base_time=base_time,
-            t1h=_to_float(obs.get("T1H")), rn1=_to_float(obs.get("RN1")),
-            reh=_to_float(obs.get("REH")), pty=obs.get("PTY"),
-            wsd=_to_float(obs.get("WSD")), vec=_to_float(obs.get("VEC")),
-            uuu=_to_float(obs.get("UUU")), vvv=_to_float(obs.get("VVV")),
+            base_date=base_date,
+            base_time=base_time,
+            t1h=_to_float(obs.get("T1H")),
+            rn1=_to_float(obs.get("RN1")),
+            reh=_to_float(obs.get("REH")),
+            pty=obs.get("PTY"),
+            wsd=_to_float(obs.get("WSD")),
+            vec=_to_float(obs.get("VEC")),
+            uuu=_to_float(obs.get("UUU")),
+            vvv=_to_float(obs.get("VVV")),
         )
 
     async def async_get_ultra_fcst(
@@ -1365,9 +1449,13 @@ class KmaApiClient:
         text = await self._request(
             "api/typ02/openApi/VilageFcstInfoService_2.0/getUltraSrtFcst",
             {
-                "base_date": base_date, "base_time": base_time,
-                "nx": nx, "ny": ny, "dataType": "JSON",
-                "numOfRows": 300, "pageNo": 1,
+                "base_date": base_date,
+                "base_time": base_time,
+                "nx": nx,
+                "ny": ny,
+                "dataType": "JSON",
+                "numOfRows": 300,
+                "pageNo": 1,
             },
             is_json_api=True,
         )
@@ -1375,17 +1463,24 @@ class KmaApiClient:
         grouped: dict[str, dict[str, Any]] = {}
         for it in items:
             key = f"{it.get('fcstDate')}{it.get('fcstTime')}"
-            grouped.setdefault(key, {"fcstDate": it.get("fcstDate"), "fcstTime": it.get("fcstTime")})
+            grouped.setdefault(
+                key, {"fcstDate": it.get("fcstDate"), "fcstTime": it.get("fcstTime")}
+            )
             grouped[key][it.get("category")] = it.get("fcstValue")
 
         out: list[UltraFcst] = []
         for _key, d in sorted(grouped.items()):
             out.append(
                 UltraFcst(
-                    fcst_date=d["fcstDate"], fcst_time=d["fcstTime"],
-                    t1h=_to_float(d.get("T1H")), sky=d.get("SKY"), pty=d.get("PTY"),
-                    reh=_to_float(d.get("REH")), wsd=_to_float(d.get("WSD")),
-                    vec=_to_float(d.get("VEC")), rn1=d.get("RN1"),
+                    fcst_date=d["fcstDate"],
+                    fcst_time=d["fcstTime"],
+                    t1h=_to_float(d.get("T1H")),
+                    sky=d.get("SKY"),
+                    pty=d.get("PTY"),
+                    reh=_to_float(d.get("REH")),
+                    wsd=_to_float(d.get("WSD")),
+                    vec=_to_float(d.get("VEC")),
+                    rn1=d.get("RN1"),
                 )
             )
         return out
@@ -1408,9 +1503,7 @@ class KmaApiClient:
         tm2 = tm2 or now.strftime("%Y%m%d%H%M")
         tm1 = tm1 or (now - datetime.timedelta(minutes=30)).strftime("%Y%m%d%H%M")
 
-        text = await self._request(
-            "kma_pm10.php", {"tm1": tm1, "tm2": tm2, "stn": stn}
-        )
+        text = await self._request("kma_pm10.php", {"tm1": tm1, "tm2": tm2, "stn": stn})
         lines = list(iter_data_lines(text))
         if not lines:
             return None
@@ -1429,8 +1522,11 @@ class KmaApiClient:
         text = await self._request(
             "api/typ02/openApi/LivingWthrIdxServiceV3/getUVIdxV3",
             {
-                "pageNo": 1, "numOfRows": 10, "dataType": "JSON",
-                "areaNo": area_no, "time": time,
+                "pageNo": 1,
+                "numOfRows": 10,
+                "dataType": "JSON",
+                "areaNo": area_no,
+                "time": time,
             },
             is_json_api=True,
         )
@@ -1440,8 +1536,10 @@ class KmaApiClient:
         item = items[0]
         hourly = {k: v for k, v in item.items() if k.startswith("h")}
         return UVIndexForecast(
-            area_no=area_no, date=item.get("date", ""),
-            current=_hourly_current(item), hourly=hourly,
+            area_no=area_no,
+            date=item.get("date", ""),
+            current=_hourly_current(item),
+            hourly=hourly,
         )
 
     async def async_get_air_stagnation_index(
@@ -1455,8 +1553,11 @@ class KmaApiClient:
         text = await self._request(
             "api/typ02/openApi/LivingWthrIdxServiceV3/getAirDiffusionIdxV3",
             {
-                "pageNo": 1, "numOfRows": 10, "dataType": "JSON",
-                "areaNo": area_no, "time": time,
+                "pageNo": 1,
+                "numOfRows": 10,
+                "dataType": "JSON",
+                "areaNo": area_no,
+                "time": time,
             },
             is_json_api=True,
         )
@@ -1466,8 +1567,10 @@ class KmaApiClient:
         item = items[0]
         hourly = {k: v for k, v in item.items() if k.startswith("h")}
         return AirStagnationForecast(
-            area_no=area_no, date=item.get("date", ""),
-            current=_hourly_current(item), hourly=hourly,
+            area_no=area_no,
+            date=item.get("date", ""),
+            current=_hourly_current(item),
+            hourly=hourly,
         )
 
     async def _async_get_pollen_risk(
@@ -1481,8 +1584,11 @@ class KmaApiClient:
         text = await self._request(
             f"api/typ02/openApi/HealthWthrIdxServiceV2/{operation}",
             {
-                "numOfRows": 10, "pageNo": 1, "dataType": "JSON",
-                "areaNo": area_no, "time": time,
+                "numOfRows": 10,
+                "pageNo": 1,
+                "dataType": "JSON",
+                "areaNo": area_no,
+                "time": time,
             },
             is_json_api=True,
         )
@@ -1548,15 +1654,21 @@ class KmaApiClient:
         if date_time is None:
             backoff = _now_kst() - datetime.timedelta(minutes=25)
             rounded = backoff - datetime.timedelta(
-                minutes=backoff.minute % 5, seconds=backoff.second, microseconds=backoff.microsecond
+                minutes=backoff.minute % 5,
+                seconds=backoff.second,
+                microseconds=backoff.microsecond,
             )
             date_time = rounded.strftime("%Y%m%d%H%M")
         text = await self._request(
             "api/typ02/openApi/WthrRadarInfoService/getCompCappiQcdArea",
             {
-                "pageNo": 1, "numOfRows": 10, "dataType": "JSON",
-                "dateTime": date_time, "compType": comp_type,
-                "dataTypeCd": data_type_cd, "dongCode": dong_code,
+                "pageNo": 1,
+                "numOfRows": 10,
+                "dataType": "JSON",
+                "dateTime": date_time,
+                "compType": comp_type,
+                "dataTypeCd": data_type_cd,
+                "dongCode": dong_code,
             },
             is_json_api=True,
         )
@@ -1587,7 +1699,9 @@ class KmaApiClient:
         if tm is None:
             backoff = _now_kst() - datetime.timedelta(minutes=20)
             rounded = backoff - datetime.timedelta(
-                minutes=backoff.minute % 5, seconds=backoff.second, microseconds=backoff.microsecond
+                minutes=backoff.minute % 5,
+                seconds=backoff.second,
+                microseconds=backoff.microsecond,
             )
             tm = rounded.strftime("%Y%m%d%H%M")
         raw, _content_type = await self._request_binary(
@@ -1596,7 +1710,11 @@ class KmaApiClient:
         )
         if not _is_png(raw):
             return None
-        return ImageBinary(data=raw, content_type="image/png", filename=f"RDR_CMP_{cmp.upper()}_{tm}.png")
+        return ImageBinary(
+            data=raw,
+            content_type="image/png",
+            filename=f"RDR_CMP_{cmp.upper()}_{tm}.png",
+        )
 
     async def async_get_satellite_image(
         self, *, tm: str | None = None, obs: str = "ir105", map: str = "HR"
@@ -1610,14 +1728,23 @@ class KmaApiClient:
         raw, _content_type = await self._request_binary(
             "https://apihub.kma.go.kr/api/typ03/cgi/sat/nph-gk2a_img",
             {
-                "tm": tm, "obs": obs, "map": map, "grid": 2, "legend": 1,
-                "size": 600, "itv": 5, "zoom_level": 0,
-                "zoom_x": "0000000", "zoom_y": "0000000",
+                "tm": tm,
+                "obs": obs,
+                "map": map,
+                "grid": 2,
+                "legend": 1,
+                "size": 600,
+                "itv": 5,
+                "zoom_level": 0,
+                "zoom_x": "0000000",
+                "zoom_y": "0000000",
             },
         )
         if not _is_png(raw):
             return None
-        return ImageBinary(data=raw, content_type="image/png", filename=f"GK2A_{obs}_{tm}.png")
+        return ImageBinary(
+            data=raw, content_type="image/png", filename=f"GK2A_{obs}_{tm}.png"
+        )
 
     async def async_get_precipitation_forecast_image(
         self, *, tm: str | None = None, ef: int = 60, qpf: str = "M"
@@ -1632,15 +1759,27 @@ class KmaApiClient:
         if tm is None:
             backoff = _now_kst() - datetime.timedelta(minutes=20)
             rounded = backoff - datetime.timedelta(
-                minutes=backoff.minute % 5, seconds=backoff.second, microseconds=backoff.microsecond
+                minutes=backoff.minute % 5,
+                seconds=backoff.second,
+                microseconds=backoff.microsecond,
             )
             tm = rounded.strftime("%Y%m%d%H%M")
         raw, _content_type = await self._request_binary(
             "https://apihub.kma.go.kr/api/typ03/cgi/rdr/nph-qpf_ana_img",
             {
-                "tm": tm, "qpf": qpf, "eva": 1, "option": 1, "ef": ef,
-                "map": "HR", "grid": 2, "legend": 1, "size": 600, "itv": 5,
-                "zoom_level": 0, "zoom_x": "0000000", "zoom_y": "0000000",
+                "tm": tm,
+                "qpf": qpf,
+                "eva": 1,
+                "option": 1,
+                "ef": ef,
+                "map": "HR",
+                "grid": 2,
+                "legend": 1,
+                "size": 600,
+                "itv": 5,
+                "zoom_level": 0,
+                "zoom_x": "0000000",
+                "zoom_y": "0000000",
             },
         )
         if not _is_png(raw):
@@ -1654,12 +1793,21 @@ class KmaApiClient:
 
         쉼표(,)로 구분된 특보 데이터를 파싱하여 반환합니다.
         """
-        text = await self._request(
-            "wrn_now_data.php", {"fe": fe, "disp": 0, "help": 0}
-        )
+        text = await self._request("wrn_now_data.php", {"fe": fe, "disp": 0, "help": 0})
         cols = parse_header_columns(text)
         if not cols:
-            cols = ["REG_UP", "REG_UP_KO", "REG_ID", "REG_KO", "TM_FC", "TM_EF", "WRN", "LVL", "CMD", "ED_TM"]
+            cols = [
+                "REG_UP",
+                "REG_UP_KO",
+                "REG_ID",
+                "REG_KO",
+                "TM_FC",
+                "TM_EF",
+                "WRN",
+                "LVL",
+                "CMD",
+                "ED_TM",
+            ]
 
         out: list[dict[str, Any]] = []
         for line in iter_data_lines(text):
@@ -1667,7 +1815,7 @@ class KmaApiClient:
             if parts and parts[-1] == "=":
                 parts = parts[:-1]
             if len(parts) > len(cols):
-                parts = parts[:len(cols)]
+                parts = parts[: len(cols)]
             if len(parts) != len(cols):
                 continue
             row_dict = {cols[i]: parts[i] for i in range(len(cols))}
@@ -1706,8 +1854,13 @@ class KmaApiClient:
         text = await self._request(
             "sfc_nc_var.php",
             {
-                "tm1": tm1, "tm2": tm2, "lat": lat, "lon": lon,
-                "obs": "ta,td,hm,ta_chi,ws_10m", "itv": 10, "help": 0,
+                "tm1": tm1,
+                "tm2": tm2,
+                "lat": lat,
+                "lon": lon,
+                "obs": "ta,td,hm,ta_chi,ws_10m",
+                "itv": 10,
+                "help": 0,
             },
         )
         lines = list(iter_data_lines(text))
@@ -1718,15 +1871,25 @@ class KmaApiClient:
             return None
         tm, ta, td, hm, ta_chi, ws = parts[:6]
         return SfcObservation(
-            lat=lat, lon=lon, tm=tm,
-            temperature=_to_float(ta), dew_point=_to_float(td), humidity=_to_float(hm),
-            apparent_temperature=_to_float(ta_chi), wind_speed=_to_float(ws),
+            lat=lat,
+            lon=lon,
+            tm=tm,
+            temperature=_to_float(ta),
+            dew_point=_to_float(td),
+            humidity=_to_float(hm),
+            apparent_temperature=_to_float(ta_chi),
+            wind_speed=_to_float(ws),
         )
 
     # -- 영향예보(폭염/한파) ---------------------------------------------------
 
     async def _async_get_impact_risk(
-        self, *, stn: int, ifpar: str, tmef1: str | None = None, tmef2: str | None = None
+        self,
+        *,
+        stn: int,
+        ifpar: str,
+        tmef1: str | None = None,
+        tmef2: str | None = None,
     ) -> ImpactForecast | None:
         """영향예보 위험수준 공통 조회 (ifs_fct_pstt.php). [실측 검증 2026-07-02]
 
@@ -1739,7 +1902,14 @@ class KmaApiClient:
 
         text = await self._request(
             "ifs_fct_pstt.php",
-            {"tmef1": tmef1, "tmef2": tmef2, "ifpar": ifpar, "stn": stn, "ef_sn": 1, "help": 0},
+            {
+                "tmef1": tmef1,
+                "tmef2": tmef2,
+                "ifpar": ifpar,
+                "stn": stn,
+                "ef_sn": 1,
+                "help": 0,
+            },
         )
         best_level: int | None = None
         best_tm_fc: str | None = None
@@ -1814,7 +1984,9 @@ class KmaApiClient:
 
     # -- 태풍정보 -------------------------------------------------------------
 
-    async def async_get_typhoon_now(self, *, tm: str | None = None) -> TyphoonInfo | None:
+    async def async_get_typhoon_now(
+        self, *, tm: str | None = None
+    ) -> TyphoonInfo | None:
         """태풍정보(현재 상태) 조회 (typ_now.php). [실측 검증 2026-07-02]
 
         mode=2(가장 최근의 분석정보와 예측정보)로 조회. 활성 태풍이 없으면
@@ -1833,15 +2005,34 @@ class KmaApiClient:
         if len(parts) < 18:
             return None
         (
-            ft, yy, typ_no, seq, _tmd, typ_tm, _ft_tm, lat, lon,
-            direction, speed, pressure, wind_speed, *_rest,
+            ft,
+            yy,
+            typ_no,
+            seq,
+            _tmd,
+            typ_tm,
+            _ft_tm,
+            lat,
+            lon,
+            direction,
+            speed,
+            pressure,
+            wind_speed,
+            *_rest,
         ) = parts[:13]
         location = parts[18] if len(parts) > 18 else None
         return TyphoonInfo(
-            ft=_to_int(ft) or 0, year=_to_int(yy) or 0, typ_no=_to_int(typ_no) or 0,
-            seq=_to_int(seq) or 0, typ_tm=typ_tm,
-            lat=_to_float(lat), lon=_to_float(lon), direction=direction,
-            speed=_to_float(speed), pressure=_to_float(pressure), wind_speed=_to_float(wind_speed),
+            ft=_to_int(ft) or 0,
+            year=_to_int(yy) or 0,
+            typ_no=_to_int(typ_no) or 0,
+            seq=_to_int(seq) or 0,
+            typ_tm=typ_tm,
+            lat=_to_float(lat),
+            lon=_to_float(lon),
+            direction=direction,
+            speed=_to_float(speed),
+            pressure=_to_float(pressure),
+            wind_speed=_to_float(wind_speed),
             location=location,
         )
 
@@ -1876,19 +2067,26 @@ class KmaApiClient:
         tmfc1 = tmfc1 or (now - datetime.timedelta(hours=24)).strftime("%Y%m%d%H%M")
         text = await self._request(
             "wthr_cmt_rpt.php",
-            {"tmfc1": tmfc1, "tmfc2": tmfc2, "stn": stn, "subcd": 0, "disp": 1, "help": 0},
+            {
+                "tmfc1": tmfc1,
+                "tmfc2": tmfc2,
+                "stn": stn,
+                "subcd": 0,
+                "disp": 1,
+                "help": 0,
+            },
         )
         bulletins = _parse_station_bulletins(text)
         return bulletins[-1] if bulletins else None
 
     # -- 적설관측 -------------------------------------------------------------
 
-    async def async_get_snow_depth(self, *, stn: int, tm: str | None = None) -> SnowObservation | None:
+    async def async_get_snow_depth(
+        self, *, stn: int, tm: str | None = None
+    ) -> SnowObservation | None:
         """실측 적설 관측 조회 (kma_snow1.php, sd=tot). [실측 검증 2026-07-02]"""
         tm = tm or _now_kst().strftime("%Y%m%d%H%M")
-        text = await self._request(
-            "kma_snow1.php", {"sd": "tot", "tm": tm, "help": 0}
-        )
+        text = await self._request("kma_snow1.php", {"sd": "tot", "tm": tm, "help": 0})
         for line in iter_data_lines(text):
             obs = _parse_snow_line(line)
             if obs is not None and obs.stn == str(stn):
@@ -1897,7 +2095,9 @@ class KmaApiClient:
 
     # -- 황사위성영상 ---------------------------------------------------------
 
-    async def async_get_dust_satellite_image(self, *, time: str | None = None) -> ImageBinary | None:
+    async def async_get_dust_satellite_image(
+        self, *, time: str | None = None
+    ) -> ImageBinary | None:
         """황사위성영상(GK2A, 황사지수 IDI) 조회 (YdstInfoService/getYdstSatlitImg).
         [실측 검증 2026-07-02]
 
@@ -1921,12 +2121,16 @@ class KmaApiClient:
         for url in reversed(urls[-12:]):
             raw, _content_type = await self._request_binary(url, {})
             if _is_png(raw):
-                return ImageBinary(data=raw, content_type="image/png", filename=url.rsplit("/", 1)[-1])
+                return ImageBinary(
+                    data=raw, content_type="image/png", filename=url.rsplit("/", 1)[-1]
+                )
         return None
 
     # -- 미세먼지 시간통계 ------------------------------------------------------
 
-    async def async_get_pm10_hourly_stats(self, *, stn: int, tm: str | None = None) -> Pm10HourlyStats | None:
+    async def async_get_pm10_hourly_stats(
+        self, *, stn: int, tm: str | None = None
+    ) -> Pm10HourlyStats | None:
         """미세먼지(PM10) 시간통계(평균/최소/최대) 조회 (dst_pm10_hr.php, org=kma).
         [실측 검증 2026-07-02]
 

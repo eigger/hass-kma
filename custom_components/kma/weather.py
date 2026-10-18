@@ -1,4 +1,5 @@
 """기상청(KMA) 날씨(Weather) 플랫폼 구현."""
+
 from __future__ import annotations
 
 import datetime
@@ -68,8 +69,7 @@ def get_ha_condition(sky: str | None, pty: str | None, is_night: bool) -> str:
 
 
 def aggregate_daily_forecasts(
-    village_forecasts: list[VillageForecast],
-    land_forecasts: list[LandForecast]
+    village_forecasts: list[VillageForecast], land_forecasts: list[LandForecast]
 ) -> list[Forecast]:
     """시간별 단기예보 및 중기 육상예보를 병합하여 일별 예보 리스트를 생성합니다."""
     daily_forecasts: dict[str, dict[str, Any]] = {}
@@ -125,7 +125,9 @@ def aggregate_daily_forecasts(
         t_min = min(d["temps"])
         pop_max = max(d["pops"]) if d["pops"] else 0.0
         precip_sum = sum(d["precips"]) if d["precips"] else 0.0
-        wsd_avg = sum(d["wind_speeds"]) / len(d["wind_speeds"]) if d["wind_speeds"] else 0.0
+        wsd_avg = (
+            sum(d["wind_speeds"]) / len(d["wind_speeds"]) if d["wind_speeds"] else 0.0
+        )
         vec_avg = d["wind_bearings"][0] if d["wind_bearings"] else 0.0
 
         # 낮 시간대(0600~1800) 중 가장 빈번하거나 악천후인 상태 우선 선택
@@ -280,7 +282,7 @@ class KmaWeather(CoordinatorEntity[KmaForecastCoordinator], WeatherEntity):
         sun_state = self.hass.states.get("sun.sun")
         if sun_state is not None:
             return sun_state.state == "below_horizon"
-        
+
         # sun 엔티티가 없는 경우 현재 시간 기준으로 판단 (오후 6시 ~ 오전 6시)
         now_hour = datetime.datetime.now().astimezone().hour
         return now_hour < 6 or now_hour >= 18
@@ -332,7 +334,9 @@ class KmaWeather(CoordinatorEntity[KmaForecastCoordinator], WeatherEntity):
             out.append(
                 Forecast(
                     datetime=dt_localized.isoformat(),
-                    condition=get_ha_condition(p.sky, p.pty, self._is_night_at_hour(p.dt.hour)),
+                    condition=get_ha_condition(
+                        p.sky, p.pty, self._is_night_at_hour(p.dt.hour)
+                    ),
                     native_temperature=p.tmp,
                     humidity=p.reh,
                     native_wind_speed=p.wsd,
