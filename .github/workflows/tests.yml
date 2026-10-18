@@ -15,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   current:
-    uses: eigger/hass-repo-standards/.github/workflows/python-tests.yml@ec6a6c7b39678c187be069b2d398939c81140ae4
+    uses: eigger/hass-repo-standards/.github/workflows/python-tests.yml@1524e4d71b0976812bb854f9e390b94408a96b52
     with:
       domain: kma
       python-versions: '["3.14"]'
@@ -26,7 +26,7 @@ jobs:
       ha-components: 'weather sensor binary_sensor button image'
       dependency-modes: '["current"]'
   minimum-ha:
-    uses: eigger/hass-repo-standards/.github/workflows/python-tests.yml@ec6a6c7b39678c187be069b2d398939c81140ae4
+    uses: eigger/hass-repo-standards/.github/workflows/python-tests.yml@1524e4d71b0976812bb854f9e390b94408a96b52
     with:
       domain: kma
       python-versions: '["3.14"]'

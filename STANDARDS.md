@@ -1,7 +1,7 @@
 # 적용한 공통 규칙
 
 - 표준: https://github.com/eigger/hass-repo-standards/tree/main
-- 참조 커밋 SHA: `ec6a6c7b39678c187be069b2d398939c81140ae4`
+- 참조 커밋 SHA: `1524e4d71b0976812bb854f9e390b94408a96b52`
 - 채택일: 2026-10-18
 - profile: integration / ha (실제 HA fixture·통합 로딩 필수)
 - 적용 점검표: [ADOPTION_CHECKLIST.md](ADOPTION_CHECKLIST.md)
