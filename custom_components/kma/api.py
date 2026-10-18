@@ -52,10 +52,14 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urlsplit
 
 import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
+
+APIHUB_HOST = "apihub.kma.go.kr"
+ALLOWED_PUBLIC_HOST_SUFFIXES: tuple[str, ...] = ("kma.go.kr", "data.go.kr")
 
 BASE_URL = "https://apihub.kma.go.kr/api/typ01/url"
 # AWS(관측소 1분 자료)는 typ01/url이 아니라 cgi-bin/nph 경로라 BASE_URL을 쓰지 않고
@@ -1022,6 +1026,36 @@ def _parse_typ02_items(text: str, name: str) -> list[dict[str, Any]]:
     return item if isinstance(item, list) else [item]
 
 
+def _is_allowed_public_url(url: str) -> bool:
+    """공개 이미지 URL의 스킴(https)과 허용된 호스트 검증."""
+    try:
+        parsed = urlsplit(url)
+    except Exception:
+        return False
+    if parsed.scheme != "https":
+        return False
+    host = (parsed.hostname or "").lower()
+    return any(
+        host == suffix or host.endswith(f".{suffix}")
+        for suffix in ALLOWED_PUBLIC_HOST_SUFFIXES
+    )
+
+
+def _normalize_public_url(url: str) -> str | None:
+    """공개 이미지 URL 정규화 및 허용 여부 확인.
+
+    HTTP 스킴은 HTTPS로 업그레이드하고, 허용된 도메인인지 검증한다.
+    """
+    if not url:
+        return None
+    url = url.strip()
+    if url.startswith("http://"):
+        url = f"https://{url[len('http://'):]}"
+    if not _is_allowed_public_url(url):
+        return None
+    return url
+
+
 # ---------------------------------------------------------------------------
 # 클라이언트
 # ---------------------------------------------------------------------------
@@ -1052,13 +1086,20 @@ class KmaApiClient:
         """공통 HTTP GET 수행. (raw_bytes, status, content_type)을 그대로 반환.
 
         디코딩/오류 변환은 호출자(_request/_request_binary)의 몫이다.
+        authKey가 포함되므로 안전한 https://apihub.kma.go.kr 엔드포인트만 허용한다.
         """
-        if endpoint.startswith("http"):
+        if endpoint.startswith("http://") or endpoint.startswith("https://"):
             url = endpoint
         elif "typ02" in endpoint or "openApi" in endpoint:
             url = f"https://apihub.kma.go.kr/{endpoint.lstrip('/')}"
         else:
             url = f"{self._base_url}/{endpoint}"
+
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or (parsed.hostname or "").lower() != APIHUB_HOST:
+            raise KmaApiError(
+                f"인증키가 필요한 API 요청은 https://{APIHUB_HOST} 도메인으로만 전송할 수 있습니다: {url}"
+            )
 
         query = {**params, "authKey": self._auth_key}
         # 값이 None인 파라미터는 제거
@@ -1074,6 +1115,35 @@ class KmaApiClient:
                     return raw, resp.status, (resp.content_type or "")
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise KmaTransientError(f"{endpoint}: 연결 오류: {err}") from err
+
+    async def _request_public_binary(self, url: str) -> tuple[bytes, str] | None:
+        """인증키(authKey) 없이 공개 바이너리/이미지 자원을 안전하게 GET 요청.
+
+        HTTPS 스킴 및 신뢰할 수 있는 도메인(*.kma.go.kr, *.data.go.kr)만 허용한다.
+        """
+        normalized_url = _normalize_public_url(url)
+        if normalized_url is None:
+            _LOGGER.warning("허용되지 않은 공개 이미지 URL 건너뜀: %s", url)
+            return None
+
+        _LOGGER.debug("KMA GET (public) %s", normalized_url)
+        try:
+            async with self._concurrency:
+                async with self._session.get(
+                    normalized_url, timeout=self._timeout
+                ) as resp:
+                    if resp.status != 200:
+                        _LOGGER.debug(
+                            "공개 이미지 HTTP 상태 코드 오류 (%s): %s",
+                            normalized_url,
+                            resp.status,
+                        )
+                        return None
+                    raw = await resp.read()
+                    return raw, (resp.content_type or "")
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            _LOGGER.debug("공개 이미지 연결 오류 (%s): %s", normalized_url, err)
+            return None
 
     async def _request_binary(
         self, endpoint: str, params: dict[str, Any]
@@ -2105,7 +2175,7 @@ class KmaApiClient:
         URL 목록(JSON)을 반환한다. 목록은 그날 예상 파일명을 전부 미리 나열해
         두므로, 아직 게시되지 않은 뒤쪽 URL은 다운로드하면 HTML 오류 페이지가
         온다(실측 확인) — 뒤에서부터 순회하며 실제 PNG가 나오는 첫 URL을 쓴다.
-        공개 저장소 URL이라 authKey는 불필요함을 실측 확인.
+        공개 저장소 URL이라 authKey 없이 HTTPS로만 요청한다.
         """
         time = time or _now_kst().strftime("%Y%m%d")
         text = await self._request(
@@ -2119,7 +2189,10 @@ class KmaApiClient:
         raw_urls = items[0].get("satImgC-file-Sate", "")
         urls = [u.strip() for u in raw_urls.strip("[]").split(",") if u.strip()]
         for url in reversed(urls[-12:]):
-            raw, _content_type = await self._request_binary(url, {})
+            res = await self._request_public_binary(url)
+            if res is None:
+                continue
+            raw, _content_type = res
             if _is_png(raw):
                 return ImageBinary(
                     data=raw, content_type="image/png", filename=url.rsplit("/", 1)[-1]
