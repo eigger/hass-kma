@@ -52,10 +52,21 @@ import re
 from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urljoin, urlsplit
 
 import aiohttp
 
 _LOGGER = logging.getLogger(__name__)
+
+APIHUB_HOST = "apihub.kma.go.kr"
+# 황사위성영상(satImgC-file-Sate) 등 공개 자원을 제공하는 공식 기상청/공공 도메인.
+# [실측 검증 2026-10-19]: nmsc.kma.go.kr(국가기상위성센터 200 OK), weather.go.kr(302/200 OK) 모두 HTTPS 및 TLS 정상 지원.
+ALLOWED_PUBLIC_HOST_SUFFIXES: tuple[str, ...] = (
+    "kma.go.kr",
+    "weather.go.kr",
+    "data.go.kr",
+)
+MAX_PUBLIC_IMAGE_SIZE = 10 * 1024 * 1024  # 10 MiB
 
 BASE_URL = "https://apihub.kma.go.kr/api/typ01/url"
 # AWS(관측소 1분 자료)는 typ01/url이 아니라 cgi-bin/nph 경로라 BASE_URL을 쓰지 않고
@@ -97,6 +108,10 @@ class KmaActivationRequiredError(KmaApiError):
     def __init__(self, endpoint: str, message: str) -> None:
         self.endpoint = endpoint
         super().__init__(f"활용신청 필요: {endpoint} ({message})")
+
+
+class KmaSecurityPolicyError(KmaApiError):
+    """보안 정책(허용되지 않은 도메인, 비보안 HTTP, userinfo 등) 위반 시 발생."""
 
 
 # ---------------------------------------------------------------------------
@@ -1022,6 +1037,51 @@ def _parse_typ02_items(text: str, name: str) -> list[dict[str, Any]]:
     return item if isinstance(item, list) else [item]
 
 
+def _is_allowed_public_url(url: str) -> bool:
+    """공개 이미지 URL의 스킴(https)과 허용된 호스트 검증."""
+    try:
+        parsed = urlsplit(url)
+    except Exception:
+        return False
+    if (parsed.scheme or "").lower() != "https":
+        return False
+    if parsed.username or parsed.password:
+        return False
+    host = (parsed.hostname or "").lower()
+    return any(
+        host == suffix or host.endswith(f".{suffix}")
+        for suffix in ALLOWED_PUBLIC_HOST_SUFFIXES
+    )
+
+
+def _normalize_public_url(url: str) -> str | None:
+    """공개 이미지 URL 정규화 및 허용 여부 확인.
+
+    HTTP 스킴(대소문자 무관)은 HTTPS로 업그레이드하고, 허용된 도메인인지 검증한다.
+    """
+    if not url:
+        return None
+    url = url.strip()
+    try:
+        parsed = urlsplit(url)
+    except Exception:
+        return None
+
+    if parsed.username or parsed.password:
+        return None
+
+    scheme = (parsed.scheme or "").lower()
+    if scheme == "http":
+        parsed = parsed._replace(scheme="https")
+    elif scheme != "https":
+        return None
+
+    normalized = parsed.geturl()
+    if not _is_allowed_public_url(normalized):
+        return None
+    return normalized
+
+
 # ---------------------------------------------------------------------------
 # 클라이언트
 # ---------------------------------------------------------------------------
@@ -1052,13 +1112,26 @@ class KmaApiClient:
         """공통 HTTP GET 수행. (raw_bytes, status, content_type)을 그대로 반환.
 
         디코딩/오류 변환은 호출자(_request/_request_binary)의 몫이다.
+        authKey가 포함되므로 안전한 https://apihub.kma.go.kr 엔드포인트만 허용한다.
         """
-        if endpoint.startswith("http"):
+        lowered = endpoint.lower()
+        if lowered.startswith("http://") or lowered.startswith("https://"):
             url = endpoint
         elif "typ02" in endpoint or "openApi" in endpoint:
             url = f"https://apihub.kma.go.kr/{endpoint.lstrip('/')}"
         else:
             url = f"{self._base_url}/{endpoint}"
+
+        parsed = urlsplit(url)
+        if (
+            (parsed.scheme or "").lower() != "https"
+            or (parsed.hostname or "").lower() != APIHUB_HOST
+            or parsed.username
+            or parsed.password
+        ):
+            raise KmaApiError(
+                f"인증키가 필요한 API 요청은 https://{APIHUB_HOST} 도메인으로만 전송할 수 있습니다: {url}"
+            )
 
         query = {**params, "authKey": self._auth_key}
         # 값이 None인 파라미터는 제거
@@ -1074,6 +1147,81 @@ class KmaApiClient:
                     return raw, resp.status, (resp.content_type or "")
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise KmaTransientError(f"{endpoint}: 연결 오류: {err}") from err
+
+    async def _request_public_binary(
+        self, url: str, max_redirects: int = 3
+    ) -> tuple[bytes, str] | None:
+        """인증키(authKey) 없이 공개 바이너리/이미지 자원을 안전하게 GET 요청.
+
+        HTTPS 스킴 및 신뢰할 수 있는 도메인(*.kma.go.kr, *.weather.go.kr, *.data.go.kr)만 허용한다.
+        보안 정책(도메인, 스킴, userinfo) 위반 시 KmaSecurityPolicyError를 발생시킨다.
+        리다이렉트는 네트워크 요청 전에 사전 검증하며 최대 max_redirects회 수동 추적한다.
+        네트워크 전송 오류(ClientError, TimeoutError)는 KmaTransientError로 전파하며,
+        아직 게시되지 않아 404/non-200이거나 크기 초과인 경우 등은 None을 반환한다.
+        """
+        current_url = _normalize_public_url(url)
+        if current_url is None:
+            raise KmaSecurityPolicyError(f"허용되지 않은 공개 이미지 URL: {url}")
+
+        try:
+            for _ in range(max_redirects + 1):
+                _LOGGER.debug("KMA GET (public) %s", current_url)
+                async with self._session.get(
+                    current_url,
+                    timeout=self._timeout,
+                    allow_redirects=False,
+                ) as resp:
+                    if resp.status in (301, 302, 303, 307, 308):
+                        location = resp.headers.get("Location")
+                        if not location:
+                            _LOGGER.debug(
+                                "공개 이미지 리다이렉트 Location 헤더 없음 (%s, %s)",
+                                current_url,
+                                resp.status,
+                            )
+                            return None
+                        next_url = urljoin(current_url, location)
+                        if not _is_allowed_public_url(next_url):
+                            raise KmaSecurityPolicyError(
+                                f"허용되지 않은 공개 이미지 리다이렉트 대상 ({current_url} -> {next_url})"
+                            )
+                        current_url = next_url
+                        continue
+
+                    if resp.status != 200:
+                        _LOGGER.debug(
+                            "공개 이미지 HTTP 상태 코드 오류 (%s): %s",
+                            current_url,
+                            resp.status,
+                        )
+                        return None
+
+                    if (
+                        resp.content_length
+                        and resp.content_length > MAX_PUBLIC_IMAGE_SIZE
+                    ):
+                        _LOGGER.debug(
+                            "공개 이미지 크기 초과 (%s): %s bytes",
+                            current_url,
+                            resp.content_length,
+                        )
+                        return None
+
+                    chunks = bytearray()
+                    async for chunk in resp.content.iter_chunked(64 * 1024):
+                        chunks.extend(chunk)
+                        if len(chunks) > MAX_PUBLIC_IMAGE_SIZE:
+                            _LOGGER.debug("공개 이미지 크기 초과 (%s)", current_url)
+                            return None
+
+                    return bytes(chunks), (resp.content_type or "")
+
+            _LOGGER.debug("공개 이미지 최대 리다이렉트 횟수 초과 (%s)", url)
+            return None
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise KmaTransientError(
+                f"{current_url}: 공개 이미지 연결 오류: {err}"
+            ) from err
 
     async def _request_binary(
         self, endpoint: str, params: dict[str, Any]
@@ -2105,7 +2253,7 @@ class KmaApiClient:
         URL 목록(JSON)을 반환한다. 목록은 그날 예상 파일명을 전부 미리 나열해
         두므로, 아직 게시되지 않은 뒤쪽 URL은 다운로드하면 HTML 오류 페이지가
         온다(실측 확인) — 뒤에서부터 순회하며 실제 PNG가 나오는 첫 URL을 쓴다.
-        공개 저장소 URL이라 authKey는 불필요함을 실측 확인.
+        공개 저장소 URL이라 authKey 없이 HTTPS로만 요청한다.
         """
         time = time or _now_kst().strftime("%Y%m%d")
         text = await self._request(
@@ -2118,12 +2266,45 @@ class KmaApiClient:
             return None
         raw_urls = items[0].get("satImgC-file-Sate", "")
         urls = [u.strip() for u in raw_urls.strip("[]").split(",") if u.strip()]
-        for url in reversed(urls[-12:]):
-            raw, _content_type = await self._request_binary(url, {})
+        candidates = urls[-12:]
+        if not candidates:
+            return None
+
+        last_transient_error: KmaTransientError | None = None
+        consecutive_transient_errors = 0
+        policy_errors: list[KmaSecurityPolicyError] = []
+
+        for url in reversed(candidates):
+            try:
+                res = await self._request_public_binary(url)
+            except KmaSecurityPolicyError as err:
+                policy_errors.append(err)
+                continue
+            except KmaTransientError as err:
+                last_transient_error = err
+                consecutive_transient_errors += 1
+                if consecutive_transient_errors >= 2:
+                    raise err
+                continue
+
+            consecutive_transient_errors = 0
+            if res is None:
+                continue
+            raw, _content_type = res
             if _is_png(raw):
                 return ImageBinary(
                     data=raw, content_type="image/png", filename=url.rsplit("/", 1)[-1]
                 )
+
+        if policy_errors:
+            _LOGGER.debug(
+                "황사위성영상 후보 중 보안 정책 거부 발생: %s", policy_errors[0]
+            )
+            raise policy_errors[0]
+
+        if last_transient_error is not None:
+            raise last_transient_error
+
         return None
 
     # -- 미세먼지 시간통계 ------------------------------------------------------
