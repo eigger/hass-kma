@@ -1,5 +1,7 @@
 {
   "name": "KMA Weather (기상청 APIhub)",
   "country": "KR",
-  "homeassistant": "2026.9.0"
+  "homeassistant": "2026.9.0",
+  "zip_release": true,
+  "filename": "kma.zip"
 }

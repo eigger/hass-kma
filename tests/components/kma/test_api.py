@@ -1,20 +1,26 @@
-"""api.py 순수 함수 단위 테스트 — 네트워크 호출 없음."""
+"""api.py 순수 함수 및 클라이언트 단위 테스트 — 네트워크 호출 없음."""
 
+import asyncio
 import json
 
+import aiohttp
 import pytest
 
 from custom_components.kma.api import (
     KmaActivationRequiredError,
+    KmaApiClient,
     KmaApiError,
     KmaAuthError,
+    KmaSecurityPolicyError,
     KmaTransientError,
     Pm10HourlyStats,
     Pm10Observation,
     SnowObservation,
     StationBulletin,
     _hourly_current,
+    _is_allowed_public_url,
     _is_png,
+    _normalize_public_url,
     _parse_pm10_hourly_line,
     _parse_pm10_line,
     _parse_snow_line,
@@ -516,3 +522,669 @@ class TestBulletinSection:
 
     def test_slot_below_one_returns_none(self):
         assert bulletin_section(self._body(3), slot=0, total_slots=3) is None
+
+
+# ---------------------------------------------------------------------------
+# 공개 이미지 URL 검증 및 보안 (_is_allowed_public_url, _normalize_public_url)
+# ---------------------------------------------------------------------------
+class TestPublicUrlValidation:
+    def test_allowed_kma_domains(self):
+        assert _is_allowed_public_url("https://apihub.kma.go.kr/img.png") is True
+        assert _is_allowed_public_url("https://nmsc.kma.go.kr/sat.png") is True
+        assert _is_allowed_public_url("https://www.kma.go.kr/weather/image.png") is True
+        assert _is_allowed_public_url("https://kma.go.kr/test.png") is True
+
+    def test_allowed_weather_domains(self):
+        assert _is_allowed_public_url("https://www.weather.go.kr/w/image.png") is True
+        assert _is_allowed_public_url("https://weather.go.kr/sat.png") is True
+
+    def test_allowed_data_go_kr_domains(self):
+        assert _is_allowed_public_url("https://apis.data.go.kr/image.png") is True
+        assert _is_allowed_public_url("https://data.go.kr/image.png") is True
+
+    def test_normalizes_http_to_https_case_insensitive(self):
+        assert (
+            _normalize_public_url("http://nmsc.kma.go.kr/sat.png")
+            == "https://nmsc.kma.go.kr/sat.png"
+        )
+        assert (
+            _normalize_public_url("HTTP://nmsc.kma.go.kr/sat.png")
+            == "https://nmsc.kma.go.kr/sat.png"
+        )
+        assert (
+            _normalize_public_url("Http://nmsc.kma.go.kr/sat.png")
+            == "https://nmsc.kma.go.kr/sat.png"
+        )
+        assert (
+            _normalize_public_url("HTTPS://nmsc.kma.go.kr/sat.png")
+            == "https://nmsc.kma.go.kr/sat.png"
+        )
+
+    def test_disallowed_domains_rejected(self):
+        assert _is_allowed_public_url("https://evil-kma.go.kr/img.png") is False
+        assert _is_allowed_public_url("https://attacker.com/img.png") is False
+        assert _is_allowed_public_url("https://example.com/kma.go.kr") is False
+        assert _is_allowed_public_url("https://192.168.1.1/img.png") is False
+        assert _normalize_public_url("https://attacker.com/img.png") is None
+
+    def test_userinfo_rejected(self):
+        # https://nmsc.kma.go.kr@evil.com 등 사용자 정보 포함 URL 차단
+        assert (
+            _is_allowed_public_url("https://nmsc.kma.go.kr@evil.com/img.png") is False
+        )
+        assert (
+            _is_allowed_public_url("https://user:pass@nmsc.kma.go.kr/img.png") is False
+        )
+        assert _normalize_public_url("https://nmsc.kma.go.kr@evil.com/img.png") is None
+        assert _normalize_public_url("https://user:pass@nmsc.kma.go.kr/img.png") is None
+
+    def test_invalid_schemes_rejected(self):
+        assert _is_allowed_public_url("ftp://nmsc.kma.go.kr/img.png") is False
+        assert _is_allowed_public_url("file:///etc/passwd") is False
+        assert _is_allowed_public_url("javascript:alert(1)") is False
+        assert _is_allowed_public_url("") is False
+        assert _normalize_public_url("") is None
+
+
+# ---------------------------------------------------------------------------
+# API 요청 보안 단위 테스트 (_do_request, _request_public_binary, async_get_dust_satellite_image)
+# ---------------------------------------------------------------------------
+class _MockStreamReader:
+    def __init__(self, data: bytes, chunk_size: int = 1024):
+        self._data = data
+        self._chunk_size = chunk_size
+
+    async def iter_chunked(self, n: int):
+        for i in range(0, len(self._data), n):
+            yield self._data[i : i + n]
+
+    async def read(self, n: int = -1) -> bytes:
+        if n == -1 or n >= len(self._data):
+            res = self._data
+            self._data = b""
+            return res
+        chunk_len = min(n, self._chunk_size, len(self._data))
+        res = self._data[:chunk_len]
+        self._data = self._data[chunk_len:]
+        return res
+
+
+class _MockResponse:
+    def __init__(
+        self,
+        raw: bytes,
+        status: int = 200,
+        content_type: str = "image/png",
+        url: str = "https://nmsc.kma.go.kr/img.png",
+        history: list | None = None,
+        content_length: int | None = None,
+        headers: dict[str, str] | None = None,
+        stream_chunk_size: int = 1024,
+    ):
+        self._raw = raw
+        self.status = status
+        self.content_type = content_type
+        self.url = url
+        self.history = history or []
+        self.content_length = content_length if content_length is not None else len(raw)
+        self.headers = headers or {}
+        self.content = _MockStreamReader(raw, chunk_size=stream_chunk_size)
+
+    async def read(self) -> bytes:
+        return self._raw
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+
+class _MockSession:
+    def __init__(self, handler=None):
+        self.handler = handler
+        self.calls: list[tuple[str, dict]] = []
+
+    def get(self, url: str, **kwargs):
+        self.calls.append((url, kwargs))
+        if self.handler:
+            return self.handler(url, **kwargs)
+        return _MockResponse(b"OK", 200, "text/plain", url=url)
+
+
+class TestDoRequestSecurity:
+    async def test_allows_relative_apihub_endpoint(self):
+        session = _MockSession()
+        client = KmaApiClient(session, "secret-key")
+        raw, status, ct = await client._do_request("kma_sfctm3.php", {"stn": 108})
+        assert len(session.calls) == 1
+        url, kwargs = session.calls[0]
+        assert url == "https://apihub.kma.go.kr/api/typ01/url/kma_sfctm3.php"
+        assert kwargs["params"] == {"stn": 108, "authKey": "secret-key"}
+
+    async def test_allows_full_apihub_https_endpoint(self):
+        session = _MockSession()
+        client = KmaApiClient(session, "secret-key")
+        endpoint = "https://apihub.kma.go.kr/api/typ01/cgi-bin/url/nph-aws2_min"
+        await client._do_request(endpoint, {"stn": 108})
+        assert len(session.calls) == 1
+        url, kwargs = session.calls[0]
+        assert url == endpoint
+        assert kwargs["params"] == {"stn": 108, "authKey": "secret-key"}
+
+    async def test_rejects_plain_http_endpoint_without_sending_key(self):
+        session = _MockSession()
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(KmaApiError, match="apihub.kma.go.kr"):
+            await client._do_request("http://apihub.kma.go.kr/api/test", {})
+        # 안전하지 않은 요청은 아예 네트워크 전송을 하지 않음
+        assert len(session.calls) == 0
+
+    async def test_rejects_uppercase_http_endpoint(self):
+        session = _MockSession()
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(KmaApiError, match="apihub.kma.go.kr"):
+            await client._do_request("HTTP://apihub.kma.go.kr/api/test", {})
+        assert len(session.calls) == 0
+
+    async def test_rejects_external_host_endpoint_without_sending_key(self):
+        session = _MockSession()
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(KmaApiError, match="apihub.kma.go.kr"):
+            await client._do_request("https://evil.com/api/test", {})
+        assert len(session.calls) == 0
+
+    async def test_rejects_userinfo_endpoint(self):
+        session = _MockSession()
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(KmaApiError, match="apihub.kma.go.kr"):
+            await client._do_request("https://user:pass@apihub.kma.go.kr/api/test", {})
+        assert len(session.calls) == 0
+
+
+class TestRequestPublicBinary:
+    async def test_fetches_without_authkey(self):
+        session = _MockSession(
+            lambda url, **kw: _MockResponse(
+                b"\x89PNG\r\n\x1a\nfake", 200, "image/png", url=url
+            )
+        )
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
+        assert result is not None
+        raw, ct = result
+        assert raw == b"\x89PNG\r\n\x1a\nfake"
+        assert len(session.calls) == 1
+        url, kwargs = session.calls[0]
+        assert url == "https://nmsc.kma.go.kr/img.png"
+        # params 가 전달되지 않고 authKey 가 노출되지 않음
+        assert "params" not in kwargs
+
+    async def test_upgrades_http_and_fetches(self):
+        session = _MockSession(
+            lambda url, **kw: _MockResponse(
+                b"\x89PNG\r\n\x1a\nfake", 200, "image/png", url=url
+            )
+        )
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary("http://nmsc.kma.go.kr/img.png")
+        assert result is not None
+        assert session.calls[0][0] == "https://nmsc.kma.go.kr/img.png"
+
+    async def test_skips_disallowed_host_without_request(self):
+        session = _MockSession()
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(
+            KmaSecurityPolicyError, match="허용되지 않은 공개 이미지 URL"
+        ):
+            await client._request_public_binary("https://attacker.com/img.png")
+        assert len(session.calls) == 0
+
+    async def test_handles_http_errors_gracefully(self):
+        session = _MockSession(
+            lambda url, **kw: _MockResponse(b"404 Not Found", 404, "text/html", url=url)
+        )
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary(
+            "https://nmsc.kma.go.kr/missing.png"
+        )
+        assert result is None
+
+    async def test_reads_large_multi_chunk_image_completely(self):
+        # 128 KiB 크기 데이터가 1024바이트 청크로 쪼개져 전달되더라도
+        # iter_chunked를 통해 잘리지 않고 끝까지 온전히 읽힘을 검증
+        large_png = b"\x89PNG\r\n\x1a\n" + b"X" * (128 * 1024)
+        resp = _MockResponse(large_png, 200, "image/png", stream_chunk_size=1024)
+        session = _MockSession(lambda url, **kw: resp)
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
+        assert result is not None
+        assert result[0] == large_png
+
+    async def test_rejects_redirect_to_untrusted_host(self):
+        # 비인가 호스트로 리다이렉트 시 2번째 요청을 보내기 전에 사전 차단됨 검증
+        resp = _MockResponse(
+            b"",
+            302,
+            "text/html",
+            headers={"Location": "https://attacker.com/evil.png"},
+        )
+        session = _MockSession(lambda url, **kw: resp)
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(
+            KmaSecurityPolicyError, match="허용되지 않은 공개 이미지 리다이렉트 대상"
+        ):
+            await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
+        assert len(session.calls) == 1
+
+    async def test_rejects_redirect_to_plain_http(self):
+        # 비보안 HTTP로 리다이렉트 시 2번째 요청을 보내기 전에 사전 차단됨 검증
+        resp = _MockResponse(
+            b"",
+            302,
+            "text/html",
+            headers={"Location": "http://nmsc.kma.go.kr/insecure.png"},
+        )
+        session = _MockSession(lambda url, **kw: resp)
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(
+            KmaSecurityPolicyError, match="허용되지 않은 공개 이미지 리다이렉트 대상"
+        ):
+            await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
+        assert len(session.calls) == 1
+
+    async def test_allows_relative_path_redirect(self):
+        def handler(url: str, **kwargs):
+            if "/old_path.png" in url:
+                return _MockResponse(
+                    b"",
+                    302,
+                    "text/html",
+                    headers={"Location": "/new_path.png"},
+                    url=url,
+                )
+            return _MockResponse(
+                b"\x89PNG\r\n\x1a\nvalid",
+                200,
+                "image/png",
+                url=url,
+            )
+
+        session = _MockSession(handler)
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary(
+            "https://nmsc.kma.go.kr/old_path.png"
+        )
+        assert result is not None
+        assert result[0] == b"\x89PNG\r\n\x1a\nvalid"
+        assert len(session.calls) == 2
+        assert session.calls[1][0] == "https://nmsc.kma.go.kr/new_path.png"
+
+    async def test_handles_redirect_missing_location_gracefully(self):
+        resp = _MockResponse(b"", 302, "text/html", headers={})
+        session = _MockSession(lambda url, **kw: resp)
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
+        assert result is None
+        assert len(session.calls) == 1
+
+    async def test_allows_redirect_within_trusted_hosts(self):
+        def handler(url: str, **kwargs):
+            if "weather.go.kr" in url:
+                return _MockResponse(
+                    b"",
+                    302,
+                    "text/html",
+                    headers={"Location": "https://nmsc.kma.go.kr/img.png"},
+                    url=url,
+                )
+            return _MockResponse(
+                b"\x89PNG\r\n\x1a\nvalid",
+                200,
+                "image/png",
+                url=url,
+            )
+
+        session = _MockSession(handler)
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary("https://weather.go.kr/img.png")
+        assert result is not None
+        assert result[0] == b"\x89PNG\r\n\x1a\nvalid"
+        assert len(session.calls) == 2
+        assert session.calls[0][1]["allow_redirects"] is False
+        assert session.calls[1][1]["allow_redirects"] is False
+
+    async def test_rejects_redirect_exceeding_max_hops(self):
+        loop_resp = _MockResponse(
+            b"",
+            302,
+            "text/html",
+            headers={"Location": "https://nmsc.kma.go.kr/loop.png"},
+        )
+        session = _MockSession(lambda url, **kw: loop_resp)
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary(
+            "https://nmsc.kma.go.kr/start.png", max_redirects=3
+        )
+        assert result is None
+        assert len(session.calls) == 4
+
+    async def test_rejects_oversized_content_length(self):
+        resp = _MockResponse(b"huge", 200, "image/png", content_length=15 * 1024 * 1024)
+        session = _MockSession(lambda url, **kw: resp)
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary("https://nmsc.kma.go.kr/huge.png")
+        assert result is None
+
+    async def test_rejects_oversized_stream_data(self):
+        large_data = b"x" * (11 * 1024 * 1024)
+        resp = _MockResponse(large_data, 200, "image/png")
+        session = _MockSession(lambda url, **kw: resp)
+        client = KmaApiClient(session, "secret-key")
+        result = await client._request_public_binary("https://nmsc.kma.go.kr/huge.png")
+        assert result is None
+
+    async def test_raises_transient_error_on_connection_failure(self):
+        def raise_client_error(url, **kw):
+            raise aiohttp.ClientConnectionError("Connection refused")
+
+        session = _MockSession(raise_client_error)
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(KmaTransientError, match="공개 이미지 연결 오류"):
+            await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
+
+    async def test_raises_transient_error_on_timeout(self):
+        def raise_timeout(url, **kw):
+            raise asyncio.TimeoutError()
+
+        session = _MockSession(raise_timeout)
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(KmaTransientError, match="공개 이미지 연결 오류"):
+            await client._request_public_binary("https://nmsc.kma.go.kr/img.png")
+
+
+class TestAsyncGetDustSatelliteImage:
+    async def test_fetches_public_image_without_authkey(self):
+        json_resp = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+                    "body": {
+                        "items": {
+                            "item": [
+                                {
+                                    "satImgC-file-Sate": "[http://nmsc.kma.go.kr/dust1.png, https://nmsc.kma.go.kr/dust2.png]"
+                                }
+                            ]
+                        }
+                    },
+                }
+            }
+        )
+
+        def handler(url: str, **kwargs):
+            if "YdstInfoService" in url:
+                return _MockResponse(
+                    json_resp.encode("utf-8"), 200, "application/json", url=url
+                )
+            if "dust2.png" in url:
+                return _MockResponse(
+                    b"\x89PNG\r\n\x1a\nvalid_png_2", 200, "image/png", url=url
+                )
+            return _MockResponse(b"error", 404, "text/html", url=url)
+
+        session = _MockSession(handler)
+        client = KmaApiClient(session, "secret-key")
+        img = await client.async_get_dust_satellite_image()
+
+        assert img is not None
+        assert img.filename == "dust2.png"
+        assert img.data == b"\x89PNG\r\n\x1a\nvalid_png_2"
+        # 1. 이미지 요청 시 authKey가 전달되지 않음
+        image_calls = [c for c in session.calls if "dust2.png" in c[0]]
+        assert len(image_calls) == 1
+        assert "params" not in image_calls[0][1]
+
+        # 2. 역방향 검증: typ02 메타데이터 목록 요청 시에는 authKey가 정상 포함됨
+        meta_calls = [c for c in session.calls if "YdstInfoService" in c[0]]
+        assert len(meta_calls) == 1
+        assert meta_calls[0][1]["params"]["authKey"] == "secret-key"
+
+    async def test_falls_back_to_previous_published_image(self):
+        json_resp = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+                    "body": {
+                        "items": {
+                            "item": [
+                                {
+                                    "satImgC-file-Sate": "[https://nmsc.kma.go.kr/dust1.png, https://nmsc.kma.go.kr/dust2.png]"
+                                }
+                            ]
+                        }
+                    },
+                }
+            }
+        )
+
+        def handler(url: str, **kwargs):
+            if "YdstInfoService" in url:
+                return _MockResponse(
+                    json_resp.encode("utf-8"), 200, "application/json", url=url
+                )
+            if "dust2.png" in url:
+                # 아직 게시되지 않아 200이지만 HTML 에러가 오는 경우
+                return _MockResponse(
+                    b"<html>not ready</html>", 200, "text/html", url=url
+                )
+            if "dust1.png" in url:
+                return _MockResponse(
+                    b"\x89PNG\r\n\x1a\nvalid_png_1", 200, "image/png", url=url
+                )
+            return _MockResponse(b"404", 404, "text/html", url=url)
+
+        session = _MockSession(handler)
+        client = KmaApiClient(session, "secret-key")
+        img = await client.async_get_dust_satellite_image()
+
+        assert img is not None
+        assert img.filename == "dust1.png"
+        assert img.data == b"\x89PNG\r\n\x1a\nvalid_png_1"
+
+    async def test_raises_transient_error_after_two_consecutive_failures(self):
+        json_resp = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+                    "body": {
+                        "items": {
+                            "item": [
+                                {
+                                    "satImgC-file-Sate": "[https://nmsc.kma.go.kr/dust1.png, https://nmsc.kma.go.kr/dust2.png, https://nmsc.kma.go.kr/dust3.png]"
+                                }
+                            ]
+                        }
+                    },
+                }
+            }
+        )
+
+        call_count = 0
+
+        def handler(url: str, **kwargs):
+            nonlocal call_count
+            if "YdstInfoService" in url:
+                return _MockResponse(
+                    json_resp.encode("utf-8"), 200, "application/json", url=url
+                )
+            call_count += 1
+            raise aiohttp.ClientConnectionError("Server unreachable")
+
+        session = _MockSession(handler)
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(KmaTransientError, match="공개 이미지 연결 오류"):
+            await client.async_get_dust_satellite_image()
+
+        # 2회 연속 실패 시 12개를 전부 대기하지 않고 즉시 전파됨 확인
+        assert call_count == 2
+
+    async def test_recovers_from_single_transient_error_to_previous_candidate(self):
+        json_resp = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+                    "body": {
+                        "items": {
+                            "item": [
+                                {
+                                    "satImgC-file-Sate": "[https://nmsc.kma.go.kr/dust1.png, https://nmsc.kma.go.kr/dust2.png]"
+                                }
+                            ]
+                        }
+                    },
+                }
+            }
+        )
+
+        def handler(url: str, **kwargs):
+            if "YdstInfoService" in url:
+                return _MockResponse(
+                    json_resp.encode("utf-8"), 200, "application/json", url=url
+                )
+            if "dust2.png" in url:
+                # 최신 이미지가 일시적 전송 오류를 낸 경우
+                raise aiohttp.ClientConnectionError("Socket reset")
+            if "dust1.png" in url:
+                # 이전 이미지는 정상 제공되는 경우
+                return _MockResponse(
+                    b"\x89PNG\r\n\x1a\nvalid_png_1", 200, "image/png", url=url
+                )
+            return _MockResponse(b"404", 404, "text/html", url=url)
+
+        session = _MockSession(handler)
+        client = KmaApiClient(session, "secret-key")
+        img = await client.async_get_dust_satellite_image()
+        assert img is not None
+        assert img.filename == "dust1.png"
+        assert img.data == b"\x89PNG\r\n\x1a\nvalid_png_1"
+
+    async def test_returns_none_if_no_items(self):
+        json_resp = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "03", "resultMsg": "NO DATA"},
+                    "body": {},
+                }
+            }
+        )
+        session = _MockSession(
+            lambda url, **kw: _MockResponse(
+                json_resp.encode("utf-8"), 200, "application/json", url=url
+            )
+        )
+        client = KmaApiClient(session, "secret-key")
+        img = await client.async_get_dust_satellite_image()
+        assert img is None
+
+    async def test_raises_kma_security_policy_error_when_all_candidates_rejected(self):
+        json_resp = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+                    "body": {
+                        "items": {
+                            "item": [
+                                {
+                                    "satImgC-file-Sate": "[https://attacker.com/1.png, https://evil.com/2.png]"
+                                }
+                            ]
+                        }
+                    },
+                }
+            }
+        )
+        session = _MockSession(
+            lambda url, **kw: _MockResponse(
+                json_resp.encode("utf-8"), 200, "application/json", url=url
+            )
+        )
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(
+            KmaSecurityPolicyError, match="허용되지 않은 공개 이미지 URL"
+        ):
+            await client.async_get_dust_satellite_image()
+
+    async def test_raises_kma_security_policy_error_when_redirect_target_rejected(self):
+        json_resp = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+                    "body": {
+                        "items": {
+                            "item": [
+                                {
+                                    "satImgC-file-Sate": "[https://nmsc.kma.go.kr/redirect.png]"
+                                }
+                            ]
+                        }
+                    },
+                }
+            }
+        )
+
+        def handler(url: str, **kwargs):
+            if "YdstInfoService" in url:
+                return _MockResponse(
+                    json_resp.encode("utf-8"), 200, "application/json", url=url
+                )
+            return _MockResponse(
+                b"",
+                302,
+                "text/html",
+                headers={"Location": "https://untrusted-cdn.com/dust.png"},
+                url=url,
+            )
+
+        session = _MockSession(handler)
+        client = KmaApiClient(session, "secret-key")
+        with pytest.raises(
+            KmaSecurityPolicyError, match="허용되지 않은 공개 이미지 리다이렉트 대상"
+        ):
+            await client.async_get_dust_satellite_image()
+
+    async def test_succeeds_when_mixed_with_disallowed_and_valid_candidates(self):
+        json_resp = json.dumps(
+            {
+                "response": {
+                    "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+                    "body": {
+                        "items": {
+                            "item": [
+                                {
+                                    "satImgC-file-Sate": "[https://nmsc.kma.go.kr/valid.png, https://attacker.com/evil.png]"
+                                }
+                            ]
+                        }
+                    },
+                }
+            }
+        )
+
+        def handler(url: str, **kwargs):
+            if "YdstInfoService" in url:
+                return _MockResponse(
+                    json_resp.encode("utf-8"), 200, "application/json", url=url
+                )
+            if "valid.png" in url:
+                return _MockResponse(
+                    b"\x89PNG\r\n\x1a\nvalid_mixed", 200, "image/png", url=url
+                )
+            return _MockResponse(b"error", 404, "text/html", url=url)
+
+        session = _MockSession(handler)
+        client = KmaApiClient(session, "secret-key")
+        img = await client.async_get_dust_satellite_image()
+        assert img is not None
+        assert img.filename == "valid.png"
+        assert img.data == b"\x89PNG\r\n\x1a\nvalid_mixed"
