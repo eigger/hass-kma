@@ -2,7 +2,7 @@
   "repository": "eigger/hass-kma",
   "default_branch": "main",
   "domain": "kma",
-  "hacs": "custom",
+  "hacs": "default",
   "release": true,
   "readmes": [
     "README.md",
@@ -13,5 +13,6 @@
   "installation_links": {
     "README.md": "#installation",
     "README.ko.md": "#설치"
-  }
+  },
+  "hacs_default_evidence": "https://github.com/hacs/default/pull/10313 (등재 PR 제출, 미병합; 병합·목록 확인 후 갱신 필요, 확인 2026-10-24)"
 }

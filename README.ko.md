@@ -2,12 +2,12 @@
 
 <!-- hass-standards:badges:start -->
 [![Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat)](https://github.com/eigger/hass-kma/releases)
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5?style=flat)](#설치)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#설치)
 [![Home Assistant minimum](https://img.shields.io/badge/HA-%E2%89%A5%202026.9.0-41BDF5?style=flat)](hacs.json)
 [![Tests](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/tests.yml?branch=main&style=flat&label=Tests)](https://github.com/eigger/hass-kma/actions/workflows/tests.yml)
 [![Validate](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/validate.yml?branch=main&style=flat&label=Validate)](https://github.com/eigger/hass-kma/actions/workflows/validate.yml)
 [![License](https://img.shields.io/github/license/eigger/hass-kma?style=flat)](LICENSE)
-[![Analytics reporting installs](https://img.shields.io/badge/dynamic/json?style=flat&color=41BDF5&label=Usage&query=%24.kma.total&url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json)](https://analytics.home-assistant.io/)
+[![HACS Downloads](https://img.shields.io/badge/dynamic/json?style=flat&color=41BDF5&label=HACS+Downloads&query=%24%5B%3F%28%40.full_name%3D%3D%22eigger%2Fhass-kma%22%29%5D.downloads&url=https%3A%2F%2Fdata-v2.hacs.xyz%2Fintegration%2Fdata.json)](https://www.hacs.xyz/)
 <!-- hass-standards:badges:end -->
 
 [English](README.md) | **한국어**
@@ -273,12 +273,14 @@ SG는 기상청 공개 목록의 ‘경기도청’ 관측소 분류 코드입�
 <a id="설치"></a>
 ## ⚙️ 설치 방법
 
+<!-- hass-standards:installation:start -->
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=eigger&repository=hass-kma)
+<!-- hass-standards:installation:end -->
+
 ### 방법 1: HACS를 통한 설치 (추천)
 1. 홈어시스턴트에서 **HACS** 메뉴로 이동합니다.
-2. 우측 상단의 점 3개 메뉴를 누르고 **사용자 지정 저장소 (Custom Repositories)**를 선택합니다.
-3. 저장소 URL `https://github.com/eigger/hass-kma`를 입력하고 카테고리를 **통합 구성요소 (Integration)**로 설정한 뒤 추가합니다.
-4. 목록에 추가된 **기상청 APIhub** 통합 구성요소를 찾아 다운로드합니다.
-5. 홈어시스턴트를 재부팅합니다.
+2. **기상청 APIhub**를 검색해 다운로드합니다.
+3. 홈어시스턴트를 재부팅합니다.
 
 ### 방법 2: 수동 설치
 1. 본 저장소의 `custom_components/kma` 폴더 전체를 다운로드합니다.

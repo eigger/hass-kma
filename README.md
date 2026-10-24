@@ -2,12 +2,12 @@
 
 <!-- hass-standards:badges:start -->
 [![Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat)](https://github.com/eigger/hass-kma/releases)
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5?style=flat)](#installation)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#installation)
 [![Home Assistant minimum](https://img.shields.io/badge/HA-%E2%89%A5%202026.9.0-41BDF5?style=flat)](hacs.json)
 [![Tests](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/tests.yml?branch=main&style=flat&label=Tests)](https://github.com/eigger/hass-kma/actions/workflows/tests.yml)
 [![Validate](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/validate.yml?branch=main&style=flat&label=Validate)](https://github.com/eigger/hass-kma/actions/workflows/validate.yml)
 [![License](https://img.shields.io/github/license/eigger/hass-kma?style=flat)](LICENSE)
-[![Analytics reporting installs](https://img.shields.io/badge/dynamic/json?style=flat&color=41BDF5&label=Usage&query=%24.kma.total&url=https%3A%2F%2Fanalytics.home-assistant.io%2Fcustom_integrations.json)](https://analytics.home-assistant.io/)
+[![HACS Downloads](https://img.shields.io/badge/dynamic/json?style=flat&color=41BDF5&label=HACS+Downloads&query=%24%5B%3F%28%40.full_name%3D%3D%22eigger%2Fhass-kma%22%29%5D.downloads&url=https%3A%2F%2Fdata-v2.hacs.xyz%2Fintegration%2Fdata.json)](https://www.hacs.xyz/)
 <!-- hass-standards:badges:end -->
 
 **English** | [한국어 (Korean)](README.ko.md)
@@ -240,12 +240,14 @@ The integration automatically creates diagnostic entities under the KMA APIhub d
 <a id="installation"></a>
 ## ⚙️ Installation
 
+<!-- hass-standards:installation:start -->
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=eigger&repository=hass-kma)
+<!-- hass-standards:installation:end -->
+
 ### Method 1: HACS (Recommended)
 1. In Home Assistant, open **HACS**.
-2. Click the 3-dots menu in the top right corner and choose **Custom repositories**.
-3. Enter `https://github.com/eigger/hass-kma`, set category to **Integration**, and click **Add**.
-4. Find **KMA Weather (기상청 APIhub)** in the list and click **Download**.
-5. Restart Home Assistant.
+2. Search for **KMA Weather (기상청 APIhub)** and click **Download**.
+3. Restart Home Assistant.
 
 ### Method 2: Manual Installation
 1. Download the latest release from the [Releases](https://github.com/eigger/hass-kma/releases) page.
