@@ -28,3 +28,7 @@
 Base commit: `95cc95403cd1e5a08a17ddd5c5d42ac01a7a4e08`. HACS remains Custom. `hacs.json` now selects `kma.zip`; publishing the next release builds and attaches that integration ZIP through the pinned central action. Analytics Usage is replaced by Downloads. The archive contains tracked integration files at its root. No existing release/tag/assets are modified.
 
 Implementation and review: root; generated release caller reuses the independently reviewed central ZIP contract. Support minimum, manifest, code, dependencies, README body and prior adoption exceptions are preserved. Verification evidence is recorded in ADOPTION_CHECKLIST.md; this scoped update does not establish full standards compliance.
+
+## 2026-10-24 HACS Default badges
+
+HACS Default listing confirmed in hacs/default `integration` (see `hacs_default_evidence` in `.hass-standards.json`). The HACS badge becomes Default, the Downloads badge uses the official HACS data (`HACS Downloads`) in place of the GitHub release-asset Downloads badge, and both READMEs gain the My HACS install badge. The HACS value is no longer Custom; the 2026-10-23 entry above is historical. `hacs.json`, ZIP release, manifest, code and support minimum are unchanged.
