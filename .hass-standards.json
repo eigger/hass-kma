@@ -14,5 +14,5 @@
     "README.md": "#installation",
     "README.ko.md": "#설치"
   },
-  "hacs_default_evidence": "https://github.com/hacs/default/pull/10313 (등재 PR 제출, 미병합; 병합·목록 확인 후 갱신 필요, 확인 2026-10-24)"
+  "hacs_default_evidence": "https://github.com/hacs/default/blob/19dc522dc3d1c7334027cc0dfd23f6b9a9dbb04e/integration#L1091 (verified 2026-10-24)"
 }
