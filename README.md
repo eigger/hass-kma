@@ -1,5 +1,7 @@
 # KMA Weather (기상청 APIhub)
 
+**English** | [한국어 (Korean)](README.ko.md)
+
 <!-- hass-standards:badges:start -->
 [![Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat)](https://github.com/eigger/hass-kma/releases)
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#installation)
@@ -9,8 +11,6 @@
 [![License](https://img.shields.io/github/license/eigger/hass-kma?style=flat)](LICENSE)
 [![HACS Downloads](https://img.shields.io/badge/dynamic/json?style=flat&color=41BDF5&label=HACS+Downloads&query=%24%5B%3F%28%40.full_name%3D%3D%22eigger%2Fhass-kma%22%29%5D.downloads&url=https%3A%2F%2Fdata-v2.hacs.xyz%2Fintegration%2Fdata.json)](https://www.hacs.xyz/)
 <!-- hass-standards:badges:end -->
-
-**English** | [한국어 (Korean)](README.ko.md)
 
 Home Assistant custom integration for Korea Meteorological Administration (KMA) APIhub services (`apihub.kma.go.kr`). Delivers real-time weather observations, detailed station measurements, short- and mid-term forecasts, life weather indices (PM10, UV, atmospheric stagnation, pollen risk), severe weather advisories, and radar/satellite imagery.
 

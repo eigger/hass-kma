@@ -1,5 +1,7 @@
 # 기상청 APIhub 연동 홈어시스턴트 통합 구성요소 (hass-kma)
 
+[English](README.md) | **한국어**
+
 <!-- hass-standards:badges:start -->
 [![Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat)](https://github.com/eigger/hass-kma/releases)
 [![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#설치)
@@ -10,9 +12,7 @@
 [![HACS Downloads](https://img.shields.io/badge/dynamic/json?style=flat&color=41BDF5&label=HACS+Downloads&query=%24%5B%3F%28%40.full_name%3D%3D%22eigger%2Fhass-kma%22%29%5D.downloads&url=https%3A%2F%2Fdata-v2.hacs.xyz%2Fintegration%2Fdata.json)](https://www.hacs.xyz/)
 <!-- hass-standards:badges:end -->
 
-[English](README.md) | **한국어**
-
-기상청 APIhub(apihub.kma.go.kr) 공식 텍스트 및 개방형 API를 연동하여 홈어시스턴트(Home Assistant)에 실시간 기상 상태, 상세 관측값, 중단기 예보, 생활기상지수·미세먼지·자외선지수·대기정체지수·꽃가루위험지수 및 재난 기상특보 경보를 제공하는 통합 구성요소입니다.
+기상청 APIhub(apihub.kma.go.kr) 공식 텍스트 및 개방형 API를 연동하여 홈어시스턴트(Home Assistant)에 실시간 기상 상태, 상세 관측값, 중단기 예보, 생활기상지수·미세먼지·자외선지수·대기정체지수·꽃가루위험지수 및 재난 기상특보 경보를 제공하는 HACS 커스텀 통합 구성요소입니다.
 
 ---
 
