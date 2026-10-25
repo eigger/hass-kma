@@ -1,6 +1,11 @@
 {
   "domain": "kma",
   "name": "기상청 APIhub",
+  "categories": [
+    "weather_alerts.forecasts",
+    "weather_alerts.air_quality_pollen",
+    "weather_alerts.public_warnings"
+  ],
   "codeowners": [
     "@eigger"
   ],
