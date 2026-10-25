@@ -1,16 +1,20 @@
-# 기상청 APIhub 연동 홈어시스턴트 통합 구성요소 (hass-kma)
+<!-- hass-standards:header:start -->
+# KMA Weather (기상청 APIhub)
+
+기상청 APIhub의 기상 관측·예보·생활기상지수·기상특보를 제공하는 Home Assistant HACS 커스텀 통합 구성요소입니다.
 
 [English](README.md) | **한국어**
 
 <!-- hass-standards:badges:start -->
 [![Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat)](https://github.com/eigger/hass-kma/releases)
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#설치)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#-설치-방법)
 [![Home Assistant minimum](https://img.shields.io/badge/HA-%E2%89%A5%202026.9.0-41BDF5?style=flat)](hacs.json)
 [![Tests](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/tests.yml?branch=main&style=flat&label=Tests)](https://github.com/eigger/hass-kma/actions/workflows/tests.yml)
 [![Validate](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/validate.yml?branch=main&style=flat&label=Validate)](https://github.com/eigger/hass-kma/actions/workflows/validate.yml)
 [![License](https://img.shields.io/github/license/eigger/hass-kma?style=flat)](LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/eigger/hass-kma/total?style=flat&color=41BDF5&label=Downloads)](https://github.com/eigger/hass-kma/releases)
 <!-- hass-standards:badges:end -->
+<!-- hass-standards:header:end -->
 
 Downloads 배지는 모든 릴리스의 첨부 asset 다운로드 합계이며, 활성 설치 수를 의미하지 않습니다.
 
@@ -350,5 +354,18 @@ mode: single
 
 ---
 
-## 📄 라이선스
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+<!-- hass-standards:support:start -->
+## 지원
+
+- [Issues](https://github.com/eigger/hass-kma/issues): 버그를 신고하거나 기능을 요청하세요.
+- [Discussions](https://github.com/eigger/hass-kma/discussions): 질문하고 사용 경험을 공유하세요.
+<!-- hass-standards:support:end -->
+
+<!-- hass-standards:related-projects:start -->
+<!-- hass-standards:related-projects:end -->
+
+<!-- hass-standards:license:start -->
+## 라이선스
+
+[MIT License](LICENSE) 라이선스로 배포됩니다.
+<!-- hass-standards:license:end -->

@@ -11,8 +11,32 @@
   "tests_workflow": "tests.yml",
   "validate_workflow": "validate.yml",
   "installation_links": {
-    "README.md": "#installation",
-    "README.ko.md": "#설치"
+    "README.md": "#-installation",
+    "README.ko.md": "#-설치-방법"
   },
-  "hacs_default_evidence": "https://github.com/hacs/default/blob/19dc522dc3d1c7334027cc0dfd23f6b9a9dbb04e/integration#L1091 (verified 2026-10-24)"
+  "hacs_default_evidence": "https://github.com/hacs/default/blob/19dc522dc3d1c7334027cc0dfd23f6b9a9dbb04e/integration#L1091 (verified 2026-10-24)",
+  "readme": {
+    "title": "KMA Weather (기상청 APIhub)",
+    "descriptions": {
+      "en": "Home Assistant custom integration for Korea Meteorological Administration (KMA) APIhub weather observations, forecasts, environmental indices and public warnings.",
+      "ko": "기상청 APIhub의 기상 관측·예보·생활기상지수·기상특보를 제공하는 Home Assistant HACS 커스텀 통합 구성요소입니다."
+    },
+    "issues": true,
+    "discussions": true,
+    "license_name": "MIT License",
+    "license_notices": {
+      "en": [],
+      "ko": []
+    },
+    "related_projects": []
+  },
+  "categories_review": {
+    "value": [
+      "weather_alerts.forecasts",
+      "weather_alerts.air_quality_pollen",
+      "weather_alerts.public_warnings"
+    ],
+    "integration_type": "service",
+    "source": "README Key Features lists village/land forecasts, air quality and pollen indices, and public severe weather warnings from KMA APIhub. Category names verified against official Core taxonomy ec18d8b25d1ee39aa8b85a72a170e42bee33228c."
+  }
 }

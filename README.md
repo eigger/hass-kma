@@ -1,16 +1,20 @@
+<!-- hass-standards:header:start -->
 # KMA Weather (기상청 APIhub)
 
-**English** | [한국어 (Korean)](README.ko.md)
+Home Assistant custom integration for Korea Meteorological Administration (KMA) APIhub weather observations, forecasts, environmental indices and public warnings.
+
+**English** | [한국어](README.ko.md)
 
 <!-- hass-standards:badges:start -->
 [![Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat)](https://github.com/eigger/hass-kma/releases)
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#installation)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#-installation)
 [![Home Assistant minimum](https://img.shields.io/badge/HA-%E2%89%A5%202026.9.0-41BDF5?style=flat)](hacs.json)
 [![Tests](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/tests.yml?branch=main&style=flat&label=Tests)](https://github.com/eigger/hass-kma/actions/workflows/tests.yml)
 [![Validate](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/validate.yml?branch=main&style=flat&label=Validate)](https://github.com/eigger/hass-kma/actions/workflows/validate.yml)
 [![License](https://img.shields.io/github/license/eigger/hass-kma?style=flat)](LICENSE)
 [![Downloads](https://img.shields.io/github/downloads/eigger/hass-kma/total?style=flat&color=41BDF5&label=Downloads)](https://github.com/eigger/hass-kma/releases)
 <!-- hass-standards:badges:end -->
+<!-- hass-standards:header:end -->
 
 The Downloads badge counts GitHub release asset downloads across all releases, not active installations.
 
@@ -314,5 +318,18 @@ mode: single
 
 ---
 
-## 📄 License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+<!-- hass-standards:support:start -->
+## Support
+
+- [Issues](https://github.com/eigger/hass-kma/issues): Report bugs or request features.
+- [Discussions](https://github.com/eigger/hass-kma/discussions): Ask questions and share your experience.
+<!-- hass-standards:support:end -->
+
+<!-- hass-standards:related-projects:start -->
+<!-- hass-standards:related-projects:end -->
+
+<!-- hass-standards:license:start -->
+## License
+
+Released under the [MIT License](LICENSE).
+<!-- hass-standards:license:end -->
