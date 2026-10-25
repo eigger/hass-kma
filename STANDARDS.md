@@ -1,7 +1,8 @@
 # 적용한 공통 규칙
-
-- 표준: https://github.com/eigger/hass-repo-standards/tree/ca740d88b32fa5dcbc94c41fce2908450c76ed50
-- 참조 커밋 SHA: `ca740d88b32fa5dcbc94c41fce2908450c76ed50`
+- 표준: https://github.com/eigger/hass-repo-standards/tree/v1.0.0
+- 참조 커밋 SHA: 44349ee5621eea5d80e5c427f7a2435d2c2491bb
+- Standards release: v1.0.0
+- Resolved standards SHA: 44349ee5621eea5d80e5c427f7a2435d2c2491bb
 - 채택일: 2026-10-18
 - profile: integration / ha (실제 HA fixture·통합 로딩 필수)
 - 적용 점검표: [ADOPTION_CHECKLIST.md](ADOPTION_CHECKLIST.md)
@@ -20,7 +21,7 @@
 
 현재 등록된 예외 없음.
 
-- Reviewed release standards SHA: `ca740d88b32fa5dcbc94c41fce2908450c76ed50`
+- ZIP migration note (2026-10-25): the former `Reviewed release standards SHA` `ca740d88b32fa5dcbc94c41fce2908450c76ed50` is retired because the release-zip action now uses exact `v1.0.0`; its prior evidence remains below and in ADOPTION_CHECKLIST.md.
 ## 2026-10-23 ZIP release and Downloads update
 
 Base commit: `95cc95403cd1e5a08a17ddd5c5d42ac01a7a4e08`. HACS remains Custom. `hacs.json` now selects `kma.zip`; publishing the next release builds and attaches that integration ZIP through the pinned central action. Analytics Usage is replaced by Downloads. The archive contains tracked integration files at its root. No existing release/tag/assets are modified.
