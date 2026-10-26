@@ -12,7 +12,7 @@
   "validate_workflow": "validate.yml",
   "standards": {
     "kind": "release",
-    "tag": "v1.0.0",
+    "tag": "v1.0.1",
     "resolved_sha": "c9b4553184f9c27bdbe7bf8564eaf10153e9575b"
   },
   "installation_links": {
