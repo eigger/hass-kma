@@ -12,8 +12,8 @@
   "validate_workflow": "validate.yml",
   "standards": {
     "kind": "release",
-    "tag": "v1.0.1",
-    "resolved_sha": "c9b4553184f9c27bdbe7bf8564eaf10153e9575b"
+    "tag": "v1.1.1",
+    "resolved_sha": "9876b521d401071345a13bd508f43d220852c77b"
   },
   "installation_links": {
     "README.md": "#-installation",
@@ -43,5 +43,9 @@
     ],
     "integration_type": "service",
     "source": "README Key Features lists village/land forecasts, air quality and pollen indices, and public severe weather warnings from KMA APIhub. Category names verified against official Core taxonomy ec18d8b25d1ee39aa8b85a72a170e42bee33228c."
+  },
+  "standards_update": {
+    "provider": "dependabot",
+    "workflow": "update_standards.yml"
   }
 }
