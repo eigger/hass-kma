@@ -12,11 +12,11 @@ Home Assistant custom integration for Korea Meteorological Administration (KMA) 
 [![Tests](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/tests.yml?branch=main&style=flat&label=Tests)](https://github.com/eigger/hass-kma/actions/workflows/tests.yml)
 [![Validate](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/validate.yml?branch=main&style=flat&label=Validate)](https://github.com/eigger/hass-kma/actions/workflows/validate.yml)
 [![License](https://img.shields.io/github/license/eigger/hass-kma?style=flat)](LICENSE)
-[![Downloads](https://img.shields.io/github/downloads/eigger/hass-kma/total?style=flat&color=41BDF5&label=Downloads)](https://github.com/eigger/hass-kma/releases)
+[![Downloads](https://img.shields.io/github/downloads/eigger/hass-kma/latest/total?style=flat&color=41BDF5&label=Downloads)](https://github.com/eigger/hass-kma/releases)
 <!-- hass-standards:badges:end -->
 <!-- hass-standards:header:end -->
 
-The Downloads badge counts GitHub release asset downloads across all releases, not active installations.
+The Downloads badge counts GitHub release asset downloads of the current release, not active installations.
 
 Home Assistant custom integration for Korea Meteorological Administration (KMA) APIhub services (`apihub.kma.go.kr`). Delivers real-time weather observations, detailed station measurements, short- and mid-term forecasts, life weather indices (PM10, UV, atmospheric stagnation, pollen risk), severe weather advisories, and radar/satellite imagery.
 
