@@ -20,7 +20,7 @@ Home Assistant custom integration for Korea Meteorological Administration (KMA) 
 
 ---
 
-<a name="key-features"></a>
+<a name="-key-features"></a>
 
 ## Features
 
@@ -64,7 +64,7 @@ Home Assistant custom integration for Korea Meteorological Administration (KMA) 
 
 ---
 
-<a name="provided-entities--sensors"></a>
+<a name="-provided-entities--sensors"></a>
 
 ## Entities and sensors
 
@@ -138,7 +138,7 @@ Home Assistant custom integration for Korea Meteorological Administration (KMA) 
 
 ---
 
-<a name="detailed-sensor-information"></a>
+<a name="-detailed-sensor-information"></a>
 
 ## Sensor details
 
@@ -264,7 +264,7 @@ The integration automatically creates diagnostic entities under the KMA APIhub d
 2. If you need to add it yourself, go to **Settings → Marketplace → Add from link** and enter <https://github.com/eigger/hass-kma>. Connect GitHub if prompted.
 3. Select **Install**. Restart Home Assistant if prompted, then continue to [Configuration](#configuration).
 
-<a name="configuration--usage"></a>
+<a name="-configuration--usage"></a>
 
 ## Configuration
 
@@ -276,6 +276,8 @@ The integration automatically creates diagnostic entities under the KMA APIhub d
 6. **Configure Options**: Click **Configure** on the integration card to adjust scan intervals (5 to 180 minutes; default: 10 minutes).
 
 ---
+
+<a name="-automation-example"></a>
 
 ## Automation example
 
@@ -306,7 +308,7 @@ mode: single
 
 ---
 
-<a name="future-roadmap"></a>
+<a name="-future-roadmap"></a>
 
 ## Roadmap
 
@@ -315,6 +317,8 @@ mode: single
 3. **Impact Forecast Heat/Cold Maps**: Map graphics via `ifs_ilvl_dmap.php`.
 
 ---
+
+<a name="-documentation"></a>
 
 ## Documentation
 
