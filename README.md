@@ -64,6 +64,106 @@ Home Assistant custom integration for Korea Meteorological Administration (KMA) 
 
 ---
 
+## Requirements
+
+- **Home Assistant:** 2026.9.0 or later.
+- **API key:** A KMA APIhub account and an [authKey with the required APIs approved](#apihub-access).
+
+<a name="-installation"></a>
+
+## Installation
+
+<!-- hass-standards:installation:start -->
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=eigger&repository=hass-kma)
+<!-- hass-standards:installation:end -->
+
+1. Click the badge above to open the repository in Marketplace.
+2. If you need to add it yourself, go to **Settings → Marketplace → Add from link** and enter <https://github.com/eigger/hass-kma>. Connect GitHub if prompted.
+3. Select **Install**. Restart Home Assistant if prompted, then continue to [Configuration](#configuration).
+
+<a name="-configuration--usage"></a>
+
+## Configuration
+
+1. In Home Assistant, go to **Settings → Devices & Services → Add Integration**.
+2. Search for **KMA** or **기상청** and select it.
+3. Enter your **authKey**.
+4. In the integration card, click **Add Zone** to register your location. The integration automatically converts zone coordinates into KMA grid values and binds forecast areas.
+5. **Add AWS Station (Optional)**: Click **Add Station** to search the built-in catalog of 720 observation stations by name, region, or station ID.
+6. **Configure Options**: Click **Configure** on the integration card to adjust scan intervals (5 to 180 minutes; default: 10 minutes).
+
+---
+
+<a name="-prerequisites-kma-apihub-registration"></a>
+
+## APIhub access
+
+1. Register and sign in at the [KMA APIhub Portal](https://apihub.kma.go.kr/).
+2. Navigate to API Search or My Page, search for the following APIs, and click **Apply for Use (활용신청)**:
+    * Village Forecast (`getVilageFcst`)
+    * Short-Term Land Forecast (`fct_afs_dl.php`)
+    * Short-Term Marine Forecast (`fct_afs_do.php`)
+    * Weather Warnings Status (`wrn_now_data.php`)
+    * Forecast Region Info (`fct_shrt_reg.php`) — used for key validation
+    * PM10 Observations (`kma_pm10.php`, Surface > Asian Dust PM10)
+    * PM10 Hourly Statistics (`dst_pm10_hr.php`)
+    * Living Weather Index Service (`LivingWthrIdxServiceV3` — `getUVIdxV3`, `getAirDiffusionIdxV3`)
+    * Health Weather Index Service (`HealthWthrIdxServiceV2` — `getOakPollenRiskIdxV2`, `getPinePollenRiskIdxV2`, `getWeedsPollenRiskndxV2`)
+    * Weather Radar Info Service (`WthrRadarInfoService/getCompCappiQcdArea`)
+    * Radar Composite Download (`typ04/rdr_cmp_file.php`)
+    * GK2A Satellite Imagery (`typ03/nph-gk2a_img`) — IR, visible, SWIR, water vapor
+    * Ultra-Short-Term Precipitation Graphic (`typ03/nph-qpf_ana_img`)
+    * High-Resolution Surface Observation (`sfc_nc_var.php`)
+    * Impact Forecast Status (`ifs_fct_pstt.php`)
+    * Snow Observation Data (`kma_snow1.php`)
+    * Earthquake Notification (`typ09/eqk/urlNewNotiEqk.do`)
+    * Typhoon Information (`typ_now.php`)
+    * Asian Dust Satellite Imagery (`YdstInfoService/getYdstSatlitImg`)
+    * **[Optional]** AWS 1-Minute Observations (`typ01/cgi-bin/url/nph-aws2_min`) — only needed if adding AWS stations.
+    * Weather hazard reports (`wrn_inf_rpt.php`) and commentary (`wthr_cmt_rpt.php`) work immediately without separate application.
+3. Once approved, copy your **authKey**.
+
+### Diagnostic sensors
+
+The integration automatically creates diagnostic entities under the KMA APIhub device:
+* `binary_sensor.kma_activation_<api>` is `on` when the API responds normally and `off` when access is missing (403) or the request fails. The `status` attribute gives the result, such as `ok`, `not_applied` or `error: ...`.
+* `sensor.kma_error_count_<api>` reports the error count, `last_error_time` and `current_status`.
+
+API lists in `const.py` define which diagnostics are created. AWS station counts include 403 failures. Hub counts exclude `not_applied`. Both counters reset when the parent entry reloads.
+
+---
+
+<a name="-automation-example"></a>
+
+## Automation example
+
+Send a smartphone alert whenever a severe weather warning is issued for your area:
+
+```yaml
+alias: "[Weather] KMA Severe Weather Warning Alert"
+description: "Send push notification when a weather warning is issued"
+trigger:
+  - platform: state
+    entity_id: binary_sensor.home_weather_warning  # Adjust to match your entity ID
+    from: "off"
+    to: "on"
+condition: []
+action:
+  - service: notify.notify
+    data:
+      title: "⚠️ KMA Weather Warning Issued"
+      message: >-
+        {{ state_attr('binary_sensor.home_weather_warning', 'warnings_count') }} warning(s) currently active.
+
+        Details:
+        {% for w in state_attr('binary_sensor.home_weather_warning', 'active_warnings') %}
+        - {{ w.region }} {{ w.warning_name }}{{ w.level_name }} (Effective: {{ w.effective_time }})
+        {% endfor %}
+mode: single
+```
+
+---
+
 <a name="-provided-entities--sensors"></a>
 
 ## Entities and sensors
@@ -226,103 +326,6 @@ Supports real-time 1-minute telemetry from 720 built-in ASOS/AWS/SG stations acr
 * **Isolated Subentry**: Add or remove weather stations independently from your location zones.
 * **Fixed 5-minute Polling**: Throttled to ~301 seconds to protect rate limits and prevent duplicate calls.
 * **Resilience**: Cached observations persist across network disruptions and Home Assistant reboots until fresh data arrives (`observation_fresh` flag indicates data timeliness).
-
----
-
-## Requirements
-
-- **Home Assistant:** 2026.9.0 or later.
-- **API key:** A KMA APIhub account and an authKey with the required APIs approved.
-
-<a name="-prerequisites-kma-apihub-registration"></a>
-
-### APIhub access
-
-1. Register and sign in at the [KMA APIhub Portal](https://apihub.kma.go.kr/).
-2. Navigate to API Search or My Page, search for the following APIs, and click **Apply for Use (활용신청)**:
-    * Village Forecast (`getVilageFcst`)
-    * Short-Term Land Forecast (`fct_afs_dl.php`)
-    * Short-Term Marine Forecast (`fct_afs_do.php`)
-    * Weather Warnings Status (`wrn_now_data.php`)
-    * Forecast Region Info (`fct_shrt_reg.php`) — used for key validation
-    * PM10 Observations (`kma_pm10.php`, Surface > Asian Dust PM10)
-    * PM10 Hourly Statistics (`dst_pm10_hr.php`)
-    * Living Weather Index Service (`LivingWthrIdxServiceV3` — `getUVIdxV3`, `getAirDiffusionIdxV3`)
-    * Health Weather Index Service (`HealthWthrIdxServiceV2` — `getOakPollenRiskIdxV2`, `getPinePollenRiskIdxV2`, `getWeedsPollenRiskndxV2`)
-    * Weather Radar Info Service (`WthrRadarInfoService/getCompCappiQcdArea`)
-    * Radar Composite Download (`typ04/rdr_cmp_file.php`)
-    * GK2A Satellite Imagery (`typ03/nph-gk2a_img`) — IR, visible, SWIR, water vapor
-    * Ultra-Short-Term Precipitation Graphic (`typ03/nph-qpf_ana_img`)
-    * High-Resolution Surface Observation (`sfc_nc_var.php`)
-    * Impact Forecast Status (`ifs_fct_pstt.php`)
-    * Snow Observation Data (`kma_snow1.php`)
-    * Earthquake Notification (`typ09/eqk/urlNewNotiEqk.do`)
-    * Typhoon Information (`typ_now.php`)
-    * Asian Dust Satellite Imagery (`YdstInfoService/getYdstSatlitImg`)
-    * **[Optional]** AWS 1-Minute Observations (`typ01/cgi-bin/url/nph-aws2_min`) — only needed if adding AWS stations.
-    * Weather hazard reports (`wrn_inf_rpt.php`) and commentary (`wthr_cmt_rpt.php`) work immediately without separate application.
-3. Once approved, copy your **authKey**.
-
-### Diagnostic Sensors
-The integration automatically creates diagnostic entities under the KMA APIhub device:
-* `binary_sensor.kma_activation_<api>`: `on` when application is approved and responding normally; `off` if not applied (403) or errored.
-* `sensor.kma_error_count_<api>`: Cumulative error count with `last_error_time` attribute.
-
----
-
-<a name="-installation"></a>
-
-## Installation
-
-<!-- hass-standards:installation:start -->
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=eigger&repository=hass-kma)
-<!-- hass-standards:installation:end -->
-
-1. Click the badge above to open the repository in Marketplace.
-2. If you need to add it yourself, go to **Settings → Marketplace → Add from link** and enter <https://github.com/eigger/hass-kma>. Connect GitHub if prompted.
-3. Select **Install**. Restart Home Assistant if prompted, then continue to [Configuration](#configuration).
-
-<a name="-configuration--usage"></a>
-
-## Configuration
-
-1. In Home Assistant, go to **Settings → Devices & Services → Add Integration**.
-2. Search for **KMA** or **기상청** and select it.
-3. Enter your **authKey**.
-4. In the integration card, click **Add Zone** to register your location. The integration automatically converts zone coordinates into KMA grid values and binds forecast areas.
-5. **Add AWS Station (Optional)**: Click **Add Station** to search the built-in catalog of 720 observation stations by name, region, or station ID.
-6. **Configure Options**: Click **Configure** on the integration card to adjust scan intervals (5 to 180 minutes; default: 10 minutes).
-
----
-
-<a name="-automation-example"></a>
-
-## Automation example
-
-Send a smartphone alert whenever a severe weather warning is issued for your area:
-
-```yaml
-alias: "[Weather] KMA Severe Weather Warning Alert"
-description: "Send push notification when a weather warning is issued"
-trigger:
-  - platform: state
-    entity_id: binary_sensor.home_weather_warning  # Adjust to match your entity ID
-    from: "off"
-    to: "on"
-condition: []
-action:
-  - service: notify.notify
-    data:
-      title: "⚠️ KMA Weather Warning Issued"
-      message: >-
-        {{ state_attr('binary_sensor.home_weather_warning', 'warnings_count') }} warning(s) currently active.
-
-        Details:
-        {% for w in state_attr('binary_sensor.home_weather_warning', 'active_warnings') %}
-        - {{ w.region }} {{ w.warning_name }}{{ w.level_name }} (Effective: {{ w.effective_time }})
-        {% endfor %}
-mode: single
-```
 
 ---
 

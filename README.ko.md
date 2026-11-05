@@ -16,8 +16,6 @@
 <!-- hass-standards:badges:end -->
 <!-- hass-standards:header:end -->
 
-기상청 APIhub(apihub.kma.go.kr) 공식 텍스트 및 개방형 API를 연동하여 홈어시스턴트(Home Assistant)에 실시간 기상 상태, 상세 관측값, 중단기 예보, 생활기상지수·미세먼지·자외선지수·대기정체지수·꽃가루위험지수 및 재난 기상특보 경보를 제공하는 HACS 커스텀 통합 구성요소입니다.
-
 ---
 
 <a name="-주요-기능"></a>
@@ -61,6 +59,109 @@
 * **간편한 설정 흐름**
   * 홈어시스턴트 Zone 엔티티(`zone.*`)를 선택하면 위경도로부터 기상청 격자좌표(nx, ny) 및 최적의 육상/해상 예보구역을 자동 매핑합니다.
   * 데이터 갱신 주기(기본 10분, 5~180분)를 옵션 화면에서 변경할 수 있습니다.
+
+---
+
+## 요구사항
+
+- **Home Assistant:** 2026.9.0 이상.
+- **API 키:** 기상청 APIhub 계정과 [필요한 API의 활용 승인을 받은 인증키](#apihub-활용-신청).
+
+<a name="설치-방법"></a>
+
+<a name="-설치-방법"></a>
+
+## 설치
+
+<!-- hass-standards:installation:start -->
+[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=eigger&repository=hass-kma)
+<!-- hass-standards:installation:end -->
+
+1. 위 배지를 클릭해 마켓플레이스에서 저장소를 엽니다.
+2. 저장소를 직접 추가하려면 **설정 → 마켓플레이스 → 링크에서 추가**에서 <https://github.com/eigger/hass-kma>을 입력합니다. 안내가 표시되면 GitHub 계정을 연결합니다.
+3. **설치**를 선택합니다. 재시작 안내가 표시되면 Home Assistant를 재시작합니다. 설치가 끝나면 [설정](#설정)으로 이동합니다.
+
+<a name="-설정-및-사용-방법"></a>
+
+## 설정
+
+1. 홈어시스턴트의 **설정 → 기기 및 서비스 → 통합 구성요소 추가**로 이동합니다.
+2. 검색창에 `기상청` 또는 `KMA`를 입력해 선택합니다.
+3. **인증키(authKey)**를 입력합니다.
+4. 설정 완료 후 통합 구성요소 카드에서 **지역(Zone) 추가**를 눌러 날씨를 받을 위치를 하나 이상 등록합니다. 등록된 Zone의 위경도로부터 기상청 격자좌표 및 예보구역이 자동 매핑됩니다.
+5. **AWS 관측소 1분 자료(선택)**: 통합 카드에서 **AWS 관측소 추가**를 누르고 **관측소를 검색해 선택**하면(이름·지역·지점번호 표시) 해당 지점의 1분 실측 센서 16종이 추가됩니다. 목록은 기상청 공개 ASOS/AWS/경기도청(SG) 관측소 목록(720지점)을 내장해 별도 메타데이터 API나 추가 요청 없이 검색됩니다. 관측소는 Zone과 독립 서브엔트리라 Zone 관리와 무관하게 추가/삭제할 수 있습니다. 지점번호는 생성 후 변경할 수 없으며, 같은 API 키에 같은 지점을 중복 등록할 수 없습니다. 관측소 서브엔트리를 삭제하면 **AWS 폴링이 중단되고, 그 관측소의 엔티티·디바이스가 레지스트리에서 함께 제거됩니다**(HA가 서브엔트리 소속 레지스트리를 정리합니다). 같은 지점번호를 다시 추가하면 부모 엔트리 ID + 지점번호 기반의 **동일한 고유 ID/식별자**가 재사용됩니다.
+6. **옵션 변경**: 통합 구성요소 카드에서 `설정(Configure)`을 누르면 데이터 갱신 주기를 자유롭게 변경할 수 있습니다(예보 전용 — AWS 갱신 주기는 항상 약 5분(301초)).
+
+---
+
+<a name="-필수-사전-작업-기상청-api-신청"></a>
+
+## APIhub 활용 신청
+
+1. [기상청 APIhub 공식 웹사이트](https://apihub.kma.go.kr/)에 회원가입 및 로그인합니다.
+2. 마이페이지 또는 API 목록에서 아래 API들을 검색하여 **활용신청**을 진행하고 승인을 받습니다:
+    * 동네예보(단기예보) 지점자료 조회 (`getVilageFcst`)
+    * 단기육상예보조회 (`fct_afs_dl.php`)
+    * 단기해상예보조회 (`fct_afs_do.php`)
+    * 기상특보현황 (`wrn_now_data.php`)
+    * 예보구역 정보 (`fct_shrt_reg.php`) — API 키 정상 여부 검증용
+    * PM10(미세먼지) 관측자료 조회 (`kma_pm10.php`, 지상관측 > 황사관측(PM10))
+    * 황사(PM10) 시간통계자료 조회 (`dst_pm10_hr.php`)
+    * 생활기상지수 조회서비스 (`LivingWthrIdxServiceV3` — `getUVIdxV3`, `getAirDiffusionIdxV3`)
+    * 보건기상지수 조회서비스 (`HealthWthrIdxServiceV2` — `getOakPollenRiskIdxV2`, `getPinePollenRiskIdxV2`, `getWeedsPollenRiskndxV2`)
+    * 레이더영상 조회서비스 (`WthrRadarInfoService/getCompCappiQcdArea`)
+    * 레이더 합성자료 다운로드 (`typ04/rdr_cmp_file.php`)
+    * 천리안 2A호 위성 분포도 조회 (`typ03/nph-gk2a_img`) — 위성 적외/가시광선/단파적외/수증기 4종 공통
+    * 초단기 강수예측 그래픽 조회 (`typ03/nph-qpf_ana_img`)
+    * 고해상도 지상관측 (`sfc_nc_var.php`, 특정지점 다중요소)
+    * 영향예보(발표현황) 조회 (`ifs_fct_pstt.php`)
+    * 적설관측자료 조회 (`kma_snow1.php`)
+    * 지진정보(최근 발표 정보·속보) 조회 (`typ09/eqk/urlNewNotiEqk.do`)
+    * 태풍정보(기상청 발표) 조회 (`typ_now.php`)
+    * 황사정보(위성영상) 조회서비스 (`YdstInfoService/getYdstSatlitImg`)
+    * **[선택]** 관측소 1분 자료 조회 (`typ01/cgi-bin/url/nph-aws2_min`) — `aws_station_id`로 AWS 센서를 쓸 때만 필요합니다. 신청하지 않아도 예보 기능은 정상 동작합니다.
+    * 기상정보(`wrn_inf_rpt.php`)/날씨해설(`wthr_cmt_rpt.php`)은 별도 활용신청 없이 바로 동작합니다.
+3. 신청 완료 후 발급받은 **인증키(authKey)**를 준비합니다.
+
+### API 활용신청 상태를 확인하려면?
+
+각 API마다 활용신청을 깜빡했거나 승인 대기 중인지 확인할 수 있도록, **기상청 APIhub** 허브 디바이스에 이 통합이 사용하는 API 전체에 대해 진단 센서를 자동으로 생성합니다.
+
+* **`binary_sensor.kma_activation_<api>`**: 활용신청 완료 + 정상 응답이면 `on`, 미신청(403)이거나 오류면 `off`. `status` 속성에 `ok`/`not_applied`/`error: ...` 상세 상태가 표시됩니다.
+* **`sensor.kma_error_count_<api>`**: 해당 API의 누적 에러 횟수(진단 카테고리). `last_error_time`, `current_status` 속성도 함께 제공합니다.
+
+새로운 API가 추가되어도 코드 수정 없이 진단 센서가 자동으로 생성되도록 `const.py`의 `API_STATUS_ZONE_KEYS`/`API_STATUS_IMAGE_KEYS`/`API_STATUS_HUB_KEYS`/`API_STATUS_AWS_KEYS` 목록에서 단일 관리됩니다. AWS 관측소 자체의 `error_count`는 활용신청(403 포함) 실패까지 셉니다. 허브 집계 카운터는 기존 API 진단과 동일하게 `not_applied`를 제외합니다. 두 카운터 모두 메모리 내 값이며 부모 엔트리 리로드 시 초기화됩니다.
+
+---
+
+<a name="-자동화automation-작성-예제"></a>
+
+## 자동화 예제
+
+거주 지역에 **기상특보가 발효되었을 때 스마트폰으로 경고 푸시 알림**을 보내는 자동화 예제입니다.
+
+```yaml
+alias: "[기상] 우리 동네 특보 발효 시 스마트폰 경고"
+description: "기상청 특보 바이너리 센서가 켜지면 발효된 특보 상세 내역을 스마트폰으로 알립니다."
+trigger:
+  - platform: state
+    entity_id: binary_sensor.home_weather_warning  # 본인의 엔티티 ID에 맞게 수정하세요.
+    from: "off"
+    to: "on"
+condition: []
+action:
+  - service: notify.notify
+    data:
+      title: "⚠️ 기상청 특보 발효 경보"
+      message: >-
+        현재 지역에 {{ state_attr('binary_sensor.home_weather_warning', 'warnings_count') }}건의 기상 특보가 발효되었습니다.
+
+        세부 내역:
+        {% for w in state_attr('binary_sensor.home_weather_warning', 'active_warnings') %}
+        - {{ w.region }} {{ w.warning_name }}{{ w.level_name }} (발효시각: {{ w.effective_time }})
+        {% endfor %}
+mode: single
+```
 
 ---
 
@@ -255,109 +356,6 @@ SG는 기상청 공개 목록의 ‘경기도청’ 관측소 분류 코드입�
 * **속성**: 모든 AWS 센서는 `station_id`(지점번호), `observation_time`(관측시각), `observation_fresh`, `status`, `error_count` 속성을 공개합니다.
 
 > AWS는 **별도 활용신청**이 필요한 API입니다. 신청하지 않은 채로만 설정하면 예보 기능은 정상 동작하고 AWS 센서만 `unavailable`로 남습니다(활용신청이 필요하다는 메시지가 로그/진단에 남습니다).
-
----
-
-## 요구사항
-
-- **Home Assistant:** 2026.9.0 이상.
-- **API 키:** 기상청 APIhub 계정과 필요한 API의 활용 승인을 받은 인증키.
-
-<a name="-필수-사전-작업-기상청-api-신청"></a>
-
-### APIhub 활용 신청
-
-1. [기상청 APIhub 공식 웹사이트](https://apihub.kma.go.kr/)에 회원가입 및 로그인합니다.
-2. 마이페이지 또는 API 목록에서 아래 API들을 검색하여 **활용신청**을 진행하고 승인을 받습니다:
-    * 동네예보(단기예보) 지점자료 조회 (`getVilageFcst`)
-    * 단기육상예보조회 (`fct_afs_dl.php`)
-    * 단기해상예보조회 (`fct_afs_do.php`)
-    * 기상특보현황 (`wrn_now_data.php`)
-    * 예보구역 정보 (`fct_shrt_reg.php`) — API 키 정상 여부 검증용
-    * PM10(미세먼지) 관측자료 조회 (`kma_pm10.php`, 지상관측 > 황사관측(PM10))
-    * 황사(PM10) 시간통계자료 조회 (`dst_pm10_hr.php`)
-    * 생활기상지수 조회서비스 (`LivingWthrIdxServiceV3` — `getUVIdxV3`, `getAirDiffusionIdxV3`)
-    * 보건기상지수 조회서비스 (`HealthWthrIdxServiceV2` — `getOakPollenRiskIdxV2`, `getPinePollenRiskIdxV2`, `getWeedsPollenRiskndxV2`)
-    * 레이더영상 조회서비스 (`WthrRadarInfoService/getCompCappiQcdArea`)
-    * 레이더 합성자료 다운로드 (`typ04/rdr_cmp_file.php`)
-    * 천리안 2A호 위성 분포도 조회 (`typ03/nph-gk2a_img`) — 위성 적외/가시광선/단파적외/수증기 4종 공통
-    * 초단기 강수예측 그래픽 조회 (`typ03/nph-qpf_ana_img`)
-    * 고해상도 지상관측 (`sfc_nc_var.php`, 특정지점 다중요소)
-    * 영향예보(발표현황) 조회 (`ifs_fct_pstt.php`)
-    * 적설관측자료 조회 (`kma_snow1.php`)
-    * 지진정보(최근 발표 정보·속보) 조회 (`typ09/eqk/urlNewNotiEqk.do`)
-    * 태풍정보(기상청 발표) 조회 (`typ_now.php`)
-    * 황사정보(위성영상) 조회서비스 (`YdstInfoService/getYdstSatlitImg`)
-    * **[선택]** 관측소 1분 자료 조회 (`typ01/cgi-bin/url/nph-aws2_min`) — `aws_station_id`로 AWS 센서를 쓸 때만 필요합니다. 신청하지 않아도 예보 기능은 정상 동작합니다.
-    * 기상정보(`wrn_inf_rpt.php`)/날씨해설(`wthr_cmt_rpt.php`)은 별도 활용신청 없이 바로 동작합니다.
-3. 신청 완료 후 발급받은 **인증키(authKey)**를 준비합니다.
-
-### API 활용신청 상태를 확인하려면?
-
-각 API마다 활용신청을 깜빡했거나 승인 대기 중인지 확인할 수 있도록, **기상청 APIhub** 허브 디바이스에 이 통합이 사용하는 API 전체에 대해 진단 센서를 자동으로 생성합니다.
-
-* **`binary_sensor.kma_activation_<api>`**: 활용신청 완료 + 정상 응답이면 `on`, 미신청(403)이거나 오류면 `off`. `status` 속성에 `ok`/`not_applied`/`error: ...` 상세 상태가 표시됩니다.
-* **`sensor.kma_error_count_<api>`**: 해당 API의 누적 에러 횟수(진단 카테고리). `last_error_time`, `current_status` 속성도 함께 제공합니다.
-
-새로운 API가 추가되어도 코드 수정 없이 진단 센서가 자동으로 생성되도록 `const.py`의 `API_STATUS_ZONE_KEYS`/`API_STATUS_IMAGE_KEYS`/`API_STATUS_HUB_KEYS`/`API_STATUS_AWS_KEYS` 목록에서 단일 관리됩니다. AWS 관측소 자체의 `error_count`는 활용신청(403 포함) 실패까지 셉니다. 허브 집계 카운터는 기존 API 진단과 동일하게 `not_applied`를 제외합니다. 두 카운터 모두 메모리 내 값이며 부모 엔트리 리로드 시 초기화됩니다.
-
----
-
-<a name="설치-방법"></a>
-
-<a name="-설치-방법"></a>
-
-## 설치
-
-<!-- hass-standards:installation:start -->
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=eigger&repository=hass-kma)
-<!-- hass-standards:installation:end -->
-
-1. 위 배지를 클릭해 마켓플레이스에서 저장소를 엽니다.
-2. 저장소를 직접 추가하려면 **설정 → 마켓플레이스 → 링크에서 추가**에서 <https://github.com/eigger/hass-kma>을 입력합니다. 안내가 표시되면 GitHub 계정을 연결합니다.
-3. **설치**를 선택합니다. 재시작 안내가 표시되면 Home Assistant를 재시작합니다. 설치가 끝나면 [설정](#설정)으로 이동합니다.
-
-<a name="-설정-및-사용-방법"></a>
-
-## 설정
-
-1. 홈어시스턴트의 **설정 → 기기 및 서비스 → 통합 구성요소 추가**로 이동합니다.
-2. 검색창에 `기상청` 또는 `KMA`를 입력해 선택합니다.
-3. **인증키(authKey)**를 입력합니다.
-4. 설정 완료 후 통합 구성요소 카드에서 **지역(Zone) 추가**를 눌러 날씨를 받을 위치를 하나 이상 등록합니다. 등록된 Zone의 위경도로부터 기상청 격자좌표 및 예보구역이 자동 매핑됩니다.
-5. **AWS 관측소 1분 자료(선택)**: 통합 카드에서 **AWS 관측소 추가**를 누르고 **관측소를 검색해 선택**하면(이름·지역·지점번호 표시) 해당 지점의 1분 실측 센서 16종이 추가됩니다. 목록은 기상청 공개 ASOS/AWS/경기도청(SG) 관측소 목록(720지점)을 내장해 별도 메타데이터 API나 추가 요청 없이 검색됩니다. 관측소는 Zone과 독립 서브엔트리라 Zone 관리와 무관하게 추가/삭제할 수 있습니다. 지점번호는 생성 후 변경할 수 없으며, 같은 API 키에 같은 지점을 중복 등록할 수 없습니다. 관측소 서브엔트리를 삭제하면 **AWS 폴링이 중단되고, 그 관측소의 엔티티·디바이스가 레지스트리에서 함께 제거됩니다**(HA가 서브엔트리 소속 레지스트리를 정리합니다). 같은 지점번호를 다시 추가하면 부모 엔트리 ID + 지점번호 기반의 **동일한 고유 ID/식별자**가 재사용됩니다.
-6. **옵션 변경**: 통합 구성요소 카드에서 `설정(Configure)`을 누르면 데이터 갱신 주기를 자유롭게 변경할 수 있습니다(예보 전용 — AWS 갱신 주기는 항상 약 5분(301초)).
-
----
-
-<a name="-자동화automation-작성-예제"></a>
-
-## 자동화 예제
-
-거주 지역에 **기상특보가 발효되었을 때 스마트폰으로 경고 푸시 알림**을 보내는 자동화 예제입니다.
-
-```yaml
-alias: "[기상] 우리 동네 특보 발효 시 스마트폰 경고"
-description: "기상청 특보 바이너리 센서가 켜지면 발효된 특보 상세 내역을 스마트폰으로 알립니다."
-trigger:
-  - platform: state
-    entity_id: binary_sensor.home_weather_warning  # 본인의 엔티티 ID에 맞게 수정하세요.
-    from: "off"
-    to: "on"
-condition: []
-action:
-  - service: notify.notify
-    data:
-      title: "⚠️ 기상청 특보 발효 경보"
-      message: >-
-        현재 지역에 {{ state_attr('binary_sensor.home_weather_warning', 'warnings_count') }}건의 기상 특보가 발효되었습니다.
-
-        세부 내역:
-        {% for w in state_attr('binary_sensor.home_weather_warning', 'active_warnings') %}
-        - {{ w.region }} {{ w.warning_name }}{{ w.level_name }} (발효시각: {{ w.effective_time }})
-        {% endfor %}
-mode: single
-```
 
 ---
 
