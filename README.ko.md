@@ -1,13 +1,13 @@
 <!-- hass-standards:header:start -->
-# KMA Weather (기상청 APIhub)
+# KMA Weather for Home Assistant
 
-기상청 APIhub의 기상 관측·예보·생활기상지수·기상특보를 제공하는 Home Assistant HACS 커스텀 통합 구성요소입니다.
+기상청 APIhub의 기상 관측·예보·생활기상지수·기상특보를 제공하는 Home Assistant 커스텀 통합입니다.
 
 [English](README.md) | **한국어**
 
 <!-- hass-standards:badges:start -->
 [![Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat)](https://github.com/eigger/hass-kma/releases)
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#-설치-방법)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#설치)
 [![Home Assistant minimum](https://img.shields.io/badge/HA-%E2%89%A5%202026.9.0-41BDF5?style=flat)](hacs.json)
 [![Tests](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/tests.yml?branch=main&style=flat&label=Tests)](https://github.com/eigger/hass-kma/actions/workflows/tests.yml)
 [![Validate](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/validate.yml?branch=main&style=flat&label=Validate)](https://github.com/eigger/hass-kma/actions/workflows/validate.yml)
@@ -16,13 +16,11 @@
 <!-- hass-standards:badges:end -->
 <!-- hass-standards:header:end -->
 
-Downloads 배지는 현재 릴리스의 첨부 asset 다운로드 합계이며, 활성 설치 수를 의미하지 않습니다.
-
 기상청 APIhub(apihub.kma.go.kr) 공식 텍스트 및 개방형 API를 연동하여 홈어시스턴트(Home Assistant)에 실시간 기상 상태, 상세 관측값, 중단기 예보, 생활기상지수·미세먼지·자외선지수·대기정체지수·꽃가루위험지수 및 재난 기상특보 경보를 제공하는 HACS 커스텀 통합 구성요소입니다.
 
 ---
 
-## 🌟 주요 기능
+## 주요 기능
 
 * **표준 날씨 엔티티 (`weather.kma_*`)**
   * 현재 날씨 상태 및 기온·습도·풍향·풍속.
@@ -64,7 +62,7 @@ Downloads 배지는 현재 릴리스의 첨부 asset 다운로드 합계이며, 
 
 ---
 
-## 📋 센서 목록
+## 센서 목록
 
 상태값이 어떻게 표현되는지 감이 오도록 **예시 값**을 함께 표시했습니다. 등급(`_grade`) 계열은 `device_class: enum`이라 홈어시스턴트 시스템 언어에 맞춰 상태값 자체가 자동 번역됩니다(예시는 한국어 기준).
 
@@ -138,7 +136,7 @@ Downloads 배지는 현재 릴리스의 첨부 asset 다운로드 합계이며, 
 
 ---
 
-## 🔍 주요 센서 상세 정보
+## 주요 센서 상세 정보
 
 ### 한 줄 기상 요약 (`one_line_summary`)
 전자라벨(ESL), E-Paper 등 제한된 공간의 디스플레이에 기상 상황을 직관적으로 노출하기 위한 텍스트 센서입니다. 홈어시스턴트 시스템 언어 설정에 맞춰 메시지가 구성됩니다.
@@ -236,9 +234,14 @@ SG는 기상청 공개 목록의 ‘경기도청’ 관측소 분류 코드입�
 
 ---
 
-## 🔑 필수 사전 작업 (기상청 API 신청)
+## 요구사항
 
-통합 구성요소를 사용하려면 **기상청 APIhub** 계정 및 활용 신청이 완료된 인증키가 필요합니다.
+- **Home Assistant:** 2026.9.0 이상.
+- **API 키:** 기상청 APIhub 계정과 필요한 API의 활용 승인을 받은 인증키.
+
+<a name="-필수-사전-작업-기상청-api-신청"></a>
+
+### APIhub 활용 신청
 
 1. [기상청 APIhub 공식 웹사이트](https://apihub.kma.go.kr/)에 회원가입 및 로그인합니다.
 2. 마이페이지 또는 API 목록에서 아래 API들을 검색하여 **활용신청**을 진행하고 승인을 받습니다:
@@ -276,27 +279,23 @@ SG는 기상청 공개 목록의 ‘경기도청’ 관측소 분류 코드입�
 
 ---
 
-<a id="설치"></a>
-## ⚙️ 설치 방법
+<a name="설치-방법"></a>
+
+<a name="-설치-방법"></a>
+
+## 설치
 
 <!-- hass-standards:installation:start -->
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=eigger&repository=hass-kma)
 <!-- hass-standards:installation:end -->
 
-### 방법 1: HACS를 통한 설치 (추천)
-1. 홈어시스턴트에서 **HACS** 메뉴로 이동합니다.
-2. **기상청 APIhub**를 검색해 다운로드합니다.
-3. 홈어시스턴트를 재부팅합니다.
+1. 위 배지를 클릭해 마켓플레이스에서 저장소를 엽니다.
+2. 저장소를 직접 추가하려면 **설정 → 마켓플레이스 → 링크에서 추가**에서 <https://github.com/eigger/hass-kma>을 입력합니다. 안내가 표시되면 GitHub 계정을 연결합니다.
+3. **설치**를 선택합니다. 재시작 안내가 표시되면 Home Assistant를 재시작합니다. 설치가 끝나면 [설정](#설정)으로 이동합니다.
 
-### 방법 2: 수동 설치
-1. 본 저장소의 `custom_components/kma` 폴더 전체를 다운로드합니다.
-2. 홈어시스턴트 설정 디렉토리 내부의 `custom_components` 폴더 아래에 `kma` 폴더를 복사합니다.
-   * 경로 구조: `<config_dir>/custom_components/kma/__init__.py`, `manifest.json` 등
-3. 홈어시스턴트를 재부팅합니다.
+<a name="설정-및-사용-방법"></a>
 
----
-
-## 🛠️ 설정 및 사용 방법
+## 설정
 
 1. 홈어시스턴트의 **설정 → 기기 및 서비스 → 통합 구성요소 추가**로 이동합니다.
 2. 검색창에 `기상청` 또는 `KMA`를 입력해 선택합니다.
@@ -307,7 +306,9 @@ SG는 기상청 공개 목록의 ‘경기도청’ 관측소 분류 코드입�
 
 ---
 
-## 🤖 자동화(Automation) 작성 예제
+<a name="자동화automation-작성-예제"></a>
+
+## 자동화 예제
 
 거주 지역에 **기상특보가 발효되었을 때 스마트폰으로 경고 푸시 알림**을 보내는 자동화 예제입니다.
 
@@ -336,7 +337,9 @@ mode: single
 
 ---
 
-## 🛠️ 향후 로드맵
+<a name="향후-로드맵"></a>
+
+## 로드맵
 
 검토했지만 아직 구현하지 않은 후보입니다.
 
@@ -346,7 +349,9 @@ mode: single
 
 ---
 
-## 📚 관련 문서
+<a name="관련-문서"></a>
+
+## 문서
 
 - [상세 사용자 가이드](docs/ko/user-guide.md)
 - [문제 해결 가이드](docs/ko/troubleshooting.md)

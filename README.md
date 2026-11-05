@@ -1,5 +1,5 @@
 <!-- hass-standards:header:start -->
-# KMA Weather (기상청 APIhub)
+# KMA Weather for Home Assistant
 
 Home Assistant custom integration for Korea Meteorological Administration (KMA) APIhub weather observations, forecasts, environmental indices and public warnings.
 
@@ -7,7 +7,7 @@ Home Assistant custom integration for Korea Meteorological Administration (KMA) 
 
 <!-- hass-standards:badges:start -->
 [![Release](https://img.shields.io/github/v/release/eigger/hass-kma?style=flat)](https://github.com/eigger/hass-kma/releases)
-[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#-installation)
+[![HACS Default](https://img.shields.io/badge/HACS-Default-41BDF5?style=flat)](#installation)
 [![Home Assistant minimum](https://img.shields.io/badge/HA-%E2%89%A5%202026.9.0-41BDF5?style=flat)](hacs.json)
 [![Tests](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/tests.yml?branch=main&style=flat&label=Tests)](https://github.com/eigger/hass-kma/actions/workflows/tests.yml)
 [![Validate](https://img.shields.io/github/actions/workflow/status/eigger/hass-kma/validate.yml?branch=main&style=flat&label=Validate)](https://github.com/eigger/hass-kma/actions/workflows/validate.yml)
@@ -16,13 +16,13 @@ Home Assistant custom integration for Korea Meteorological Administration (KMA) 
 <!-- hass-standards:badges:end -->
 <!-- hass-standards:header:end -->
 
-The Downloads badge counts GitHub release asset downloads of the current release, not active installations.
-
 Home Assistant custom integration for Korea Meteorological Administration (KMA) APIhub services (`apihub.kma.go.kr`). Delivers real-time weather observations, detailed station measurements, short- and mid-term forecasts, life weather indices (PM10, UV, atmospheric stagnation, pollen risk), severe weather advisories, and radar/satellite imagery.
 
 ---
 
-## 🌟 Key Features
+<a name="key-features"></a>
+
+## Features
 
 * **Standard Weather Entity (`weather.kma_*`)**
   * Current conditions: temperature, humidity, wind direction, wind speed, pressure, and visibility.
@@ -64,7 +64,9 @@ Home Assistant custom integration for Korea Meteorological Administration (KMA) 
 
 ---
 
-## 📋 Provided Entities & Sensors
+<a name="provided-entities--sensors"></a>
+
+## Entities and sensors
 
 | Device | Entity ID | Entity Name | Source API | Sample Value | Update Interval |
 | --- | --- | --- | --- | --- | --- |
@@ -136,7 +138,9 @@ Home Assistant custom integration for Korea Meteorological Administration (KMA) 
 
 ---
 
-## 🔍 Detailed Sensor Information
+<a name="detailed-sensor-information"></a>
+
+## Sensor details
 
 ### One-Line Weather Summary (`one_line_summary`)
 A unified text sensor formatted specifically for ESL (Electronic Shelf Labels), E-Paper displays, and dashboard subtitle badges. Formats automatically according to your Home Assistant language setting:
@@ -207,9 +211,14 @@ Supports real-time 1-minute telemetry from 720 built-in ASOS/AWS/SG stations acr
 
 ---
 
-## 🔑 Prerequisites (KMA APIhub Registration)
+## Requirements
 
-To use this integration, obtain an authentication key (**authKey**) from **KMA APIhub**:
+- **Home Assistant:** 2026.9.0 or later.
+- **API key:** A KMA APIhub account and an authKey with the required APIs approved.
+
+<a name="-prerequisites-kma-apihub-registration"></a>
+
+### APIhub access
 
 1. Register and sign in at the [KMA APIhub Portal](https://apihub.kma.go.kr/).
 2. Navigate to API Search or My Page, search for the following APIs, and click **Apply for Use (활용신청)**:
@@ -243,26 +252,21 @@ The integration automatically creates diagnostic entities under the KMA APIhub d
 
 ---
 
-<a id="installation"></a>
-## ⚙️ Installation
+<a name="-installation"></a>
+
+## Installation
 
 <!-- hass-standards:installation:start -->
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=eigger&repository=hass-kma)
 <!-- hass-standards:installation:end -->
 
-### Method 1: HACS (Recommended)
-1. In Home Assistant, open **HACS**.
-2. Search for **KMA Weather (기상청 APIhub)** and click **Download**.
-3. Restart Home Assistant.
+1. Click the badge above to open the repository in Marketplace.
+2. If you need to add it yourself, go to **Settings → Marketplace → Add from link** and enter <https://github.com/eigger/hass-kma>. Connect GitHub if prompted.
+3. Select **Install**. Restart Home Assistant if prompted, then continue to [Configuration](#configuration).
 
-### Method 2: Manual Installation
-1. Download the latest release from the [Releases](https://github.com/eigger/hass-kma/releases) page.
-2. Copy the `custom_components/kma` folder into your Home Assistant directory under `config/custom_components/`.
-3. Restart Home Assistant.
+<a name="configuration--usage"></a>
 
----
-
-## 🛠️ Configuration & Usage
+## Configuration
 
 1. In Home Assistant, go to **Settings → Devices & Services → Add Integration**.
 2. Search for **KMA** or **기상청** and select it.
@@ -273,7 +277,7 @@ The integration automatically creates diagnostic entities under the KMA APIhub d
 
 ---
 
-## 🤖 Automation Example
+## Automation example
 
 Send a smartphone alert whenever a severe weather warning is issued for your area:
 
@@ -302,7 +306,9 @@ mode: single
 
 ---
 
-## 🛠️ Future Roadmap
+<a name="future-roadmap"></a>
+
+## Roadmap
 
 1. **Marine Buoy Observations**: Fetch real-time wave height, water temperature, and pressure via `kma_buoy2.php` / `sea_obs.php`.
 2. **Marine Sector Forecasts**: +75h sea forecasts via `marine_small_zone.php` / `marine_large_zone.php`.
@@ -310,7 +316,7 @@ mode: single
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 - [User Guide](docs/user-guide.md) ([한국어](docs/ko/user-guide.md))
 - [Troubleshooting](docs/troubleshooting.md) ([한국어](docs/ko/troubleshooting.md))
